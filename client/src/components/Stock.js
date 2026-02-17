@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { stockAPI, productsAPI, locationsAPI } from '../services/api';
 import logger from '../utils/logger';
+import { useAuth } from '../context/AuthContext';
+import ExcelUpload from './ExcelUpload';
 import './Stock.css';
 
 function Stock() {
+  const { hasPermission } = useAuth();
   const [stock, setStock] = useState([]);
   const [products, setProducts] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -17,11 +20,13 @@ function Stock() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newStockFormData, setNewStockFormData] = useState({
     product: '',
+    sku: '',
     location: '',
     quantity: 0,
     minStockLevel: 0,
   });
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
+  const [showExcelUpload, setShowExcelUpload] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -145,6 +150,7 @@ function Stock() {
   const handleAddStock = () => {
     setNewStockFormData({
       product: '',
+      sku: '',
       location: '',
       quantity: 0,
       minStockLevel: 0,
@@ -154,12 +160,16 @@ function Stock() {
 
   const handleNewStockInputChange = (e) => {
     const { name, value } = e.target;
-    setNewStockFormData((prev) => ({
-      ...prev,
-      [name]: name === 'quantity' || name === 'minStockLevel' 
-        ? parseFloat(value) || 0 
-        : value,
-    }));
+    const updates = {
+      ...(name === 'quantity' || name === 'minStockLevel' 
+        ? { [name]: parseFloat(value) || 0 } 
+        : { [name]: value }),
+    };
+    if (name === 'sku') {
+      const product = products.find((p) => p.sku === value);
+      updates.product = product ? product._id : '';
+    }
+    setNewStockFormData((prev) => ({ ...prev, ...updates }));
   };
 
   const handleSaveNewStock = async () => {
@@ -204,6 +214,7 @@ function Stock() {
       setShowAddModal(false);
       setNewStockFormData({
         product: '',
+        sku: '',
         location: '',
         quantity: 0,
         minStockLevel: 0,
@@ -250,10 +261,32 @@ function Stock() {
     <div className="stock-container">
       <div className="stock-header">
         <h1>Stock Management</h1>
-        <button className="btn-primary" onClick={handleAddStock}>
-          + Add Stock
-        </button>
+        <div className="stock-header-actions">
+          {hasPermission('stock.create') && (
+            <>
+              <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
+                📥 Upload Excel
+              </button>
+              <button className="btn-primary" onClick={handleAddStock}>
+                + Add Stock
+              </button>
+            </>
+          )}
+        </div>
       </div>
+
+      {showExcelUpload && (
+        <ExcelUpload
+          moduleName="stock"
+          templateEndpoint="/stock/template"
+          onUploadComplete={() => {
+            fetchStock();
+            fetchLowStockAlerts();
+            setShowExcelUpload(false);
+          }}
+          onClose={() => setShowExcelUpload(false)}
+        />
+      )}
 
       {/* View Mode Selector */}
       <div className="view-selector">
@@ -343,7 +376,8 @@ function Stock() {
           <table className="stock-table">
             <thead>
               <tr>
-                <th>Product</th>
+                <th>Product SKU</th>
+                <th>Product Name</th>
                 <th>Location</th>
                 <th>Quantity</th>
                 <th>Available</th>
@@ -355,7 +389,7 @@ function Stock() {
             <tbody>
               {stock.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="no-data">
+                  <td colSpan="8" className="no-data">
                     No stock records found
                   </td>
                 </tr>
@@ -369,12 +403,8 @@ function Stock() {
                         : ''
                     }
                   >
-                    <td>
-                      {stockRecord.product?.title || stockRecord.product?.name || 'Unknown'}
-                      {stockRecord.product?.sku && (
-                        <span className="sku"> ({stockRecord.product.sku})</span>
-                      )}
-                    </td>
+                    <td>{stockRecord.product?.sku || '-'}</td>
+                    <td>{stockRecord.product?.title || stockRecord.product?.name || '-'}</td>
                     <td>
                       {stockRecord.location?.name || 'Unknown'}
                       {stockRecord.location?.code && (
@@ -388,12 +418,14 @@ function Stock() {
                       {new Date(stockRecord.lastUpdated).toLocaleDateString()}
                     </td>
                     <td>
-                      <button
-                        className="btn-adjust"
-                        onClick={() => handleAdjustStock(stockRecord)}
-                      >
-                        Adjust
-                      </button>
+                      {hasPermission('stock.update') && (
+                        <button
+                          className="btn-adjust"
+                          onClick={() => handleAdjustStock(stockRecord)}
+                        >
+                          Adjust
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -491,20 +523,35 @@ function Stock() {
             <h2>Add Stock</h2>
             <div className="adjust-form">
               <div className="form-group">
-                <label>Product *</label>
+                <label>Product SKU *</label>
                 <select
-                  name="product"
-                  value={newStockFormData.product}
+                  name="sku"
+                  value={newStockFormData.sku}
                   onChange={handleNewStockInputChange}
                   required
                 >
-                  <option value="">Select Product</option>
-                  {products.map((product) => (
-                    <option key={product._id} value={product._id}>
-                      {product.title || product.name} ({product.sku || 'No SKU'})
-                    </option>
-                  ))}
+                  <option value="">Select SKU</option>
+                  {products
+                    .filter((p) => p.sku && String(p.sku).trim())
+                    .map((product) => (
+                      <option key={product._id} value={product.sku}>
+                        {product.sku}
+                      </option>
+                    ))}
                 </select>
+              </div>
+              <div className="form-group">
+                <label>Product Title</label>
+                <input
+                  type="text"
+                  value={
+                    products.find((p) => p._id === newStockFormData.product)?.title ||
+                    products.find((p) => p._id === newStockFormData.product)?.name ||
+                    ''
+                  }
+                  readOnly
+                  placeholder="Selected based on SKU"
+                />
               </div>
               <div className="form-group">
                 <label>Location *</label>
@@ -550,6 +597,7 @@ function Stock() {
                     setShowAddModal(false);
                     setNewStockFormData({
                       product: '',
+                      sku: '',
                       location: '',
                       quantity: 0,
                       minStockLevel: 0,

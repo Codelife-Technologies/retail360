@@ -1,3 +1,12 @@
+.app-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-size: 1.2rem;
+  color: #666;
+}
+
 .App {
   display: flex;
   height: 100vh;
@@ -27,6 +36,32 @@
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
+}
+
+.sidebar-user {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  opacity: 0.95;
+}
+
+.sidebar-user span {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.btn-logout {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-logout:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .sidebar-nav {
@@ -61,6 +96,71 @@
   border-left: 4px solid white;
 }
 
+.nav-group {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-group:last-child {
+  border-bottom: none;
+}
+
+.nav-group-header {
+  width: 100%;
+  padding: 0.75rem 1.5rem;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.95);
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-group-header:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.nav-group-chevron {
+  display: inline-block;
+  font-size: 1.2rem;
+  line-height: 1;
+  transition: transform 0.2s;
+}
+
+.nav-group-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.nav-group-items {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-group-item {
+  padding-left: 2.5rem;
+  font-size: 0.95rem;
+  font-weight: normal;
+}
+
+.users-placeholder {
+  padding: 2rem;
+  text-align: center;
+}
+
+.users-placeholder h2 {
+  margin-bottom: 0.5rem;
+}
+
+.users-placeholder .users-subtitle {
+  color: #666;
+  font-size: 0.95rem;
+}
+
 .main-content {
   flex: 1;
   margin-left: 250px;
@@ -88,6 +188,16 @@
   
   .nav-item {
     padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .nav-group-header {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .nav-group-item {
+    padding-left: 2rem;
     font-size: 0.9rem;
   }
 }

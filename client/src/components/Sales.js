@@ -48,6 +48,30 @@ function Sales() {
     }
   }, [formData.salesChannel]);
 
+  useEffect(() => {
+    if (showModal && products.length > 0) {
+      fetchPricesForChannel(formData.salesChannel);
+    }
+  }, [showModal, formData.salesChannel, products]);
+
+  const fetchPricesForChannel = async (channelId) => {
+    try {
+      const productIds = products.map(p => p._id);
+      const salesChannel = channelId || null;
+      const response = await pricesAPI.getBulkCurrent(productIds, salesChannel);
+      const pricesMap = {};
+      const pricesData = Array.isArray(response.data) ? response.data : [];
+      pricesData.forEach(price => {
+        const prodId = price.product?._id || price.product;
+        pricesMap[prodId] = price;
+      });
+      setProductPrices(pricesMap);
+    } catch (error) {
+      console.error('Error fetching prices:', error);
+      setProductPrices({});
+    }
+  };
+
   const fetchSales = async () => {
     try {
       setLoading(true);
@@ -88,22 +112,8 @@ function Sales() {
   const fetchProducts = async () => {
     try {
       const response = await productsAPI.getAll();
-      const productsData = response.data;
+      const productsData = Array.isArray(response.data) ? response.data : response.data?.data || [];
       setProducts(productsData);
-      
-      if (productsData.length > 0) {
-        const productIds = productsData.map(p => p._id);
-        try {
-          const pricesResponse = await pricesAPI.getBulkCurrent(productIds);
-          const pricesMap = {};
-          pricesResponse.data.forEach(price => {
-            pricesMap[price.product._id || price.product] = price;
-          });
-          setProductPrices(pricesMap);
-        } catch (error) {
-          console.error('Error fetching prices:', error);
-        }
-      }
     } catch (error) {
       console.error('Error fetching products:', error);
     }

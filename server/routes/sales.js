@@ -4,6 +4,7 @@ const multer = require('multer');
 const Sale = require('../models/Sale');
 const logger = require('../utils/logger');
 const { paginate } = require('../utils/pagination');
+const { requirePermission } = require('../middleware/auth');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -20,7 +21,7 @@ const generateSalesNumber = async () => {
 };
 
 // GET all sales
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('sales.view'), async (req, res) => {
   try {
     const { salesChannel, salesLocation, paymentStatus, orderStatus, startDate, endDate, search, page, limit } = req.query;
     const query = {};
@@ -112,7 +113,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET single sale
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('sales.view'), async (req, res) => {
   try {
     const sale = await Sale.findById(req.params.id)
       .populate('salesChannel', 'name code type')
@@ -128,7 +129,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create sale
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('sales.create'), async (req, res) => {
   try {
     // Calculate item totals
     const items = req.body.items.map(item => ({
@@ -188,7 +189,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update sale
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('sales.update'), async (req, res) => {
   try {
     const existingSale = await Sale.findById(req.params.id);
     if (!existingSale) {
@@ -271,7 +272,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE sale
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('sales.delete'), async (req, res) => {
   try {
     const sale = await Sale.findByIdAndDelete(req.params.id);
     if (!sale) {
@@ -290,7 +291,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET sales summary
-router.get('/summary/stats', async (req, res) => {
+router.get('/summary/stats', requirePermission('sales.view'), async (req, res) => {
   try {
     const { startDate, endDate, salesChannel } = req.query;
     const query = {};

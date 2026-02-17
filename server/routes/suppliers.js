@@ -5,6 +5,7 @@ const Supplier = require('../models/Supplier');
 const { paginate } = require('../utils/pagination');
 const { parseExcel, validateExcelData } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
+const { requirePermission } = require('../middleware/auth');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -12,7 +13,7 @@ const upload = multer({
 });
 
 // GET all suppliers (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('suppliers.view'), async (req, res) => {
   try {
     const { search, page, limit } = req.query;
     const query = {};
@@ -41,7 +42,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET single supplier
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('suppliers.view'), async (req, res) => {
   try {
     const supplier = await Supplier.findById(req.params.id);
     if (!supplier) {
@@ -54,7 +55,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create supplier
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('suppliers.create'), async (req, res) => {
   try {
     const supplier = new Supplier(req.body);
     await supplier.save();
@@ -65,7 +66,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update supplier
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('suppliers.update'), async (req, res) => {
   try {
     const supplier = await Supplier.findByIdAndUpdate(
       req.params.id,
@@ -82,7 +83,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE supplier
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('suppliers.delete'), async (req, res) => {
   try {
     const supplier = await Supplier.findByIdAndDelete(req.params.id);
     if (!supplier) {
@@ -95,7 +96,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET Excel template
-router.get('/template', (req, res) => {
+router.get('/template', requirePermission('suppliers.view'), (req, res) => {
   try {
     const headers = [
       { key: 'name', label: 'Name *' },
@@ -115,7 +116,7 @@ router.get('/template', (req, res) => {
 });
 
 // POST import suppliers from Excel
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', requirePermission('suppliers.create'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });

@@ -7,7 +7,6 @@ const logger = require('./utils/logger');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
@@ -22,9 +21,26 @@ mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => {
+.then(async () => {
   logger.backend.info('Connected to MongoDB');
   console.log('Connected to MongoDB');
+  const { seedPermissions } = require('./utils/seedPermissions');
+  const permResult = await seedPermissions();
+  if (permResult.created > 0) {
+    console.log(`Seed: ${permResult.created} permissions created`);
+  }
+  const { seedSuperAdmin } = require('./utils/seedAdmin');
+  const result = await seedSuperAdmin();
+  if (result.skipped) {
+    console.log('Seed: users already exist, skipping');
+  } else {
+    console.log(`Seed: Super admin created - username: ${result.username}, password: ${result.password}`);
+  }
+  const { seedAmazonMarketplaces } = require('./utils/seedAmazonMarketplaces');
+  const mpResult = await seedAmazonMarketplaces();
+  if (mpResult.created > 0) {
+    console.log(`Seed: ${mpResult.created} Amazon marketplace channels created`);
+  }
 })
 .catch((error) => {
   logger.backend.error('MongoDB connection error', { error: error.message, stack: error.stack });
@@ -70,8 +86,24 @@ try {
   logger.backend.info('Subcategories routes loaded');
   const geminiRoutes = require('./routes/gemini');
   logger.backend.info('Gemini routes loaded');
+  const unitsRoutes = require('./routes/units');
+  logger.backend.info('Units routes loaded');
+  const permissionsRoutes = require('./routes/permissions');
+  logger.backend.info('Permissions routes loaded');
+  const rolesRoutes = require('./routes/roles');
+  logger.backend.info('Roles routes loaded');
+  const groupsRoutes = require('./routes/groups');
+  logger.backend.info('Groups routes loaded');
+  const usersRoutes = require('./routes/users');
+  logger.backend.info('Users routes loaded');
+  const authRoutes = require('./routes/auth');
+  logger.backend.info('Auth routes loaded');
+  const { authenticate } = require('./middleware/auth');
 
-  // API Routes
+  // Auth routes first (login, seed - no auth required)
+  app.use('/api/auth', authRoutes);
+  // Protected API routes
+  app.use('/api', authenticate);
   app.use('/api/products', productsRoutes);
   app.use('/api/suppliers', suppliersRoutes);
   app.use('/api/purchase-orders', purchaseOrdersRoutes);
@@ -90,6 +122,11 @@ try {
   app.use('/api/categories', categoriesRoutes);
   app.use('/api/subcategories', subcategoriesRoutes);
   app.use('/api/gemini', geminiRoutes);
+  app.use('/api/units', unitsRoutes);
+  app.use('/api/permissions', permissionsRoutes);
+  app.use('/api/roles', rolesRoutes);
+  app.use('/api/groups', groupsRoutes);
+  app.use('/api/users', usersRoutes);
   
   logger.backend.info('All routes loaded successfully');
   console.log('All routes loaded successfully');

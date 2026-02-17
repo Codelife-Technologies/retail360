@@ -3,6 +3,7 @@ const router = express.Router();
 const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
 const logger = require('../utils/logger');
+const { requirePermission } = require('../middleware/auth');
 
 // Helper function to build date query
 function buildDateQuery(startDate, endDate) {
@@ -105,7 +106,7 @@ function groupData(data, groupBy, dateField = 'salesDate', isSales = true) {
 }
 
 // GET sales summary
-router.get('/sales/summary', async (req, res) => {
+router.get('/sales/summary', requirePermission('reports.view'), async (req, res) => {
   try {
     const { startDate, endDate, salesChannel, salesLocation, paymentStatus, orderStatus, groupBy } = req.query;
     const query = {};
@@ -199,7 +200,7 @@ router.get('/sales/summary', async (req, res) => {
 });
 
 // GET sales detailed
-router.get('/sales/detailed', async (req, res) => {
+router.get('/sales/detailed', requirePermission('reports.view'), async (req, res) => {
   try {
     const { startDate, endDate, salesChannel, salesLocation, paymentStatus, orderStatus } = req.query;
     const query = {};
@@ -242,7 +243,7 @@ router.get('/sales/detailed', async (req, res) => {
 });
 
 // GET sales statistics
-router.get('/sales/statistics', async (req, res) => {
+router.get('/sales/statistics', requirePermission('reports.view'), async (req, res) => {
   try {
     const { startDate, endDate, salesChannel, salesLocation } = req.query;
     const query = {};
@@ -273,7 +274,7 @@ router.get('/sales/statistics', async (req, res) => {
 });
 
 // GET purchases summary
-router.get('/purchases/summary', async (req, res) => {
+router.get('/purchases/summary', requirePermission('reports.view'), async (req, res) => {
   try {
     const { startDate, endDate, supplier, location, paymentStatus, groupBy } = req.query;
     const query = {};
@@ -363,7 +364,7 @@ router.get('/purchases/summary', async (req, res) => {
 });
 
 // GET purchases detailed
-router.get('/purchases/detailed', async (req, res) => {
+router.get('/purchases/detailed', requirePermission('reports.view'), async (req, res) => {
   try {
     const { startDate, endDate, supplier, location, paymentStatus } = req.query;
     const query = {};
@@ -389,7 +390,7 @@ router.get('/purchases/detailed', async (req, res) => {
 });
 
 // GET purchases statistics
-router.get('/purchases/statistics', async (req, res) => {
+router.get('/purchases/statistics', requirePermission('reports.view'), async (req, res) => {
   try {
     const { startDate, endDate, supplier, location } = req.query;
     const query = {};
@@ -419,7 +420,7 @@ router.get('/purchases/statistics', async (req, res) => {
 });
 
 // POST export sales report (placeholder - actual export implementation would require additional libraries)
-router.post('/sales/export', async (req, res) => {
+router.post('/sales/export', requirePermission('reports.export'), async (req, res) => {
   try {
     const { format, filters, view } = req.body;
     // This is a placeholder - actual PDF/Excel export would be implemented here
@@ -431,7 +432,7 @@ router.post('/sales/export', async (req, res) => {
 });
 
 // POST export purchases report (placeholder - actual export implementation would require additional libraries)
-router.post('/purchases/export', async (req, res) => {
+router.post('/purchases/export', requirePermission('reports.export'), async (req, res) => {
   try {
     const { format, filters, view } = req.body;
     // This is a placeholder - actual PDF/Excel export would be implemented here

@@ -4,6 +4,7 @@ const multer = require('multer');
 const ShippingCharge = require('../models/ShippingCharge');
 const logger = require('../utils/logger');
 const { paginate } = require('../utils/pagination');
+const { requirePermission } = require('../middleware/auth');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -37,7 +38,7 @@ function calculateShippingCost(charge, totalWeight) {
 }
 
 // GET all charges (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('shippingCharges.view'), async (req, res) => {
   try {
     const { shipmentVendor, isActive, page, limit } = req.query;
     const query = {};
@@ -71,7 +72,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET charges by vendor
-router.get('/vendor/:vendorId', async (req, res) => {
+router.get('/vendor/:vendorId', requirePermission('shippingCharges.view'), async (req, res) => {
   try {
     const charges = await ShippingCharge.find({ 
       shipmentVendor: req.params.vendorId,
@@ -87,7 +88,7 @@ router.get('/vendor/:vendorId', async (req, res) => {
 });
 
 // GET single charge
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('shippingCharges.view'), async (req, res) => {
   try {
     const charge = await ShippingCharge.findById(req.params.id)
       .populate('shipmentVendor');
@@ -102,7 +103,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create charge
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('shippingCharges.create'), async (req, res) => {
   try {
     const charge = new ShippingCharge(req.body);
     await charge.save();
@@ -116,7 +117,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update charge
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('shippingCharges.update'), async (req, res) => {
   try {
     const charge = await ShippingCharge.findByIdAndUpdate(
       req.params.id,
@@ -135,7 +136,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE charge (soft delete)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('shippingCharges.delete'), async (req, res) => {
   try {
     const charge = await ShippingCharge.findByIdAndUpdate(
       req.params.id,
@@ -153,7 +154,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST calculate shipping cost
-router.post('/calculate', async (req, res) => {
+router.post('/calculate', requirePermission('shippingCharges.view'), async (req, res) => {
   try {
     const { shippingChargeId, totalWeight } = req.body;
     

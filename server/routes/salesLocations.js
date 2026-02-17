@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const SalesLocation = require('../models/SalesLocation');
 const { paginate } = require('../utils/pagination');
+const { requirePermission } = require('../middleware/auth');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -10,7 +11,7 @@ const upload = multer({
 });
 
 // GET all sales locations (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('salesLocations.view'), async (req, res) => {
   try {
     const { salesChannel, location, isActive, search, page, limit } = req.query;
     const query = {};
@@ -58,7 +59,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET sales locations by channel
-router.get('/channel/:channelId', async (req, res) => {
+router.get('/channel/:channelId', requirePermission('salesLocations.view'), async (req, res) => {
   try {
     const salesLocations = await SalesLocation.find({ salesChannel: req.params.channelId })
       .populate('salesChannel', 'name code')
@@ -71,7 +72,7 @@ router.get('/channel/:channelId', async (req, res) => {
 });
 
 // GET single sales location
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('salesLocations.view'), async (req, res) => {
   try {
     const salesLocation = await SalesLocation.findById(req.params.id)
       .populate('salesChannel', 'name code type')
@@ -86,7 +87,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create sales location
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('salesLocations.create'), async (req, res) => {
   try {
     const salesLocation = new SalesLocation(req.body);
     await salesLocation.save();
@@ -116,7 +117,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update sales location
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('salesLocations.update'), async (req, res) => {
   try {
     const salesLocation = await SalesLocation.findByIdAndUpdate(
       req.params.id,
@@ -151,7 +152,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE sales location (soft delete)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('salesLocations.delete'), async (req, res) => {
   try {
     const salesLocation = await SalesLocation.findByIdAndUpdate(
       req.params.id,

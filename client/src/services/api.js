@@ -9,6 +9,26 @@ const api = axios.create({
   },
 });
 
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.dispatchEvent(new CustomEvent('auth-logout'));
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Products API
 export const productsAPI = {
   getAll: (params) => api.get('/products', { params }),
@@ -86,9 +106,9 @@ export const stockAPI = {
 // Prices API
 export const pricesAPI = {
   getAll: (params) => api.get('/prices', { params }),
-  getByProduct: (productId) => api.get(`/prices/product/${productId}`),
-  getHistory: (productId) => api.get(`/prices/product/${productId}/history`),
-  getBulkCurrent: (productIds) => api.post('/prices/bulk-current', { productIds }),
+  getByProduct: (productId, params) => api.get(`/prices/product/${productId}`, { params }),
+  getHistory: (productId, params) => api.get(`/prices/product/${productId}/history`, { params }),
+  getBulkCurrent: (productIds, salesChannel) => api.post('/prices/bulk-current', { productIds, salesChannel }),
   create: (data) => api.post('/prices', data),
   update: (id, data) => api.put(`/prices/${id}`, data),
   delete: (id) => api.delete(`/prices/${id}`),
@@ -177,6 +197,15 @@ export const categoriesAPI = {
   getSubcategories: (categoryId) => api.get(`/categories/${categoryId}/subcategories`),
 };
 
+// Units API
+export const unitsAPI = {
+  getAll: (params) => api.get('/units', { params }),
+  getById: (id) => api.get(`/units/${id}`),
+  create: (data) => api.post('/units', data),
+  update: (id, data) => api.put(`/units/${id}`, data),
+  delete: (id) => api.delete(`/units/${id}`),
+};
+
 // Subcategories API
 export const subcategoriesAPI = {
   getAll: (params) => api.get('/subcategories', { params }),
@@ -230,6 +259,49 @@ export const reportsAPI = {
 // Health check
 export const healthAPI = {
   check: () => api.get('/health'),
+};
+
+// Permissions API
+export const permissionsAPI = {
+  getAll: (params) => api.get('/permissions', { params }),
+  getById: (id) => api.get(`/permissions/${id}`),
+  create: (data) => api.post('/permissions', data),
+  update: (id, data) => api.put(`/permissions/${id}`, data),
+  delete: (id) => api.delete(`/permissions/${id}`),
+};
+
+// Roles API
+export const rolesAPI = {
+  getAll: (params) => api.get('/roles', { params }),
+  getById: (id) => api.get(`/roles/${id}`),
+  create: (data) => api.post('/roles', data),
+  update: (id, data) => api.put(`/roles/${id}`, data),
+  delete: (id) => api.delete(`/roles/${id}`),
+};
+
+// Groups API
+export const groupsAPI = {
+  getAll: (params) => api.get('/groups', { params }),
+  getById: (id) => api.get(`/groups/${id}`),
+  create: (data) => api.post('/groups', data),
+  update: (id, data) => api.put(`/groups/${id}`, data),
+  delete: (id) => api.delete(`/groups/${id}`),
+};
+
+// Users API
+export const usersAPI = {
+  getAll: (params) => api.get('/users', { params }),
+  getById: (id) => api.get(`/users/${id}`),
+  create: (data) => api.post('/users', data),
+  update: (id, data) => api.put(`/users/${id}`, data),
+  delete: (id) => api.delete(`/users/${id}`),
+};
+
+// Auth API
+export const authAPI = {
+  login: (credentials) => api.post('/auth/login', credentials),
+  me: () => api.get('/auth/me'),
+  seed: () => api.post('/auth/seed'),
 };
 
 export default api;

@@ -35,9 +35,33 @@ const salesChannelSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  country: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    maxlength: 2
+  },
+  defaultCurrency: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    maxlength: 3
   }
 }, {
   timestamps: true
+});
+
+salesChannelSchema.pre('validate', function(next) {
+  if (this.type === 'marketplace') {
+    if (!this.country || !this.country.trim()) {
+      this.invalidate('country', 'Country is required for marketplace channels');
+    }
+    if (!this.defaultCurrency || !this.defaultCurrency.trim()) {
+      this.invalidate('defaultCurrency', 'Default currency is required for marketplace channels');
+    }
+  }
+  next();
 });
 
 // Indexes

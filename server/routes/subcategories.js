@@ -5,9 +5,10 @@ const Category = require('../models/Category');
 const Product = require('../models/Product');
 const logger = require('../utils/logger');
 const { paginate } = require('../utils/pagination');
+const { requirePermission } = require('../middleware/auth');
 
 // GET all subcategories (with pagination and optional category filter)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('subcategories.view'), async (req, res) => {
   try {
     const { search, category, page, limit } = req.query;
     const query = {};
@@ -41,7 +42,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET image generation prompts for a subcategory (must be before /:id route)
-router.get('/:id/image-prompts', async (req, res) => {
+router.get('/:id/image-prompts', requirePermission('subcategories.view'), async (req, res) => {
   try {
     logger.backend.info('GET image-prompts route hit', { id: req.params.id, url: req.url });
     const subcategory = await Subcategory.findById(req.params.id);
@@ -62,7 +63,7 @@ router.get('/:id/image-prompts', async (req, res) => {
 });
 
 // GET single subcategory (must be after more specific routes)
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('subcategories.view'), async (req, res) => {
   try {
     const subcategory = await Subcategory.findById(req.params.id)
       .populate('category', 'name hsnCode');
@@ -76,7 +77,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create subcategory
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('subcategories.create'), async (req, res) => {
   try {
     // Validate category exists
     const category = await Category.findById(req.body.category);
@@ -109,7 +110,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update subcategory
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('subcategories.update'), async (req, res) => {
   try {
     // If category is being updated, validate it exists
     if (req.body.category) {
@@ -140,7 +141,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // PUT update image generation prompts for a subcategory (must be before /:id route)
-router.put('/:id/image-prompts', async (req, res) => {
+router.put('/:id/image-prompts', requirePermission('subcategories.update'), async (req, res) => {
   try {
     const subcategory = await Subcategory.findById(req.params.id);
     if (!subcategory) {
@@ -190,7 +191,7 @@ router.put('/:id/image-prompts', async (req, res) => {
 });
 
 // POST add a single prompt to a subcategory
-router.post('/:id/image-prompts', async (req, res) => {
+router.post('/:id/image-prompts', requirePermission('subcategories.update'), async (req, res) => {
   try {
     const subcategory = await Subcategory.findById(req.params.id);
     if (!subcategory) {
@@ -229,7 +230,7 @@ router.post('/:id/image-prompts', async (req, res) => {
 });
 
 // DELETE a specific prompt from a subcategory (must be before /:id route)
-router.delete('/:id/image-prompts/:promptId', async (req, res) => {
+router.delete('/:id/image-prompts/:promptId', requirePermission('subcategories.update'), async (req, res) => {
   try {
     const subcategory = await Subcategory.findById(req.params.id);
     if (!subcategory) {
@@ -255,7 +256,7 @@ router.delete('/:id/image-prompts/:promptId', async (req, res) => {
 });
 
 // DELETE subcategory (must be after more specific routes)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('subcategories.delete'), async (req, res) => {
   try {
     const subcategory = await Subcategory.findById(req.params.id);
     if (!subcategory) {

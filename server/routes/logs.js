@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../utils/logger');
+const { requirePermission } = require('../middleware/auth');
 
-// POST - Log frontend error
+// POST - Log frontend error (any authenticated user can log their session errors)
 router.post('/frontend', (req, res) => {
   try {
     const { level = 'error', message, details = {} } = req.body;
@@ -31,7 +32,7 @@ router.post('/frontend', (req, res) => {
 });
 
 // GET - Get logs
-router.get('/', (req, res) => {
+router.get('/', requirePermission('logs.view'), (req, res) => {
   try {
     const { type = 'backend', lines = 100 } = req.query;
     const logs = logger.getLogs(type, parseInt(lines));
@@ -42,7 +43,7 @@ router.get('/', (req, res) => {
 });
 
 // DELETE - Clear logs
-router.delete('/', (req, res) => {
+router.delete('/', requirePermission('logs.delete'), (req, res) => {
   try {
     const { type = 'backend' } = req.query;
     logger.clearLogs(type);

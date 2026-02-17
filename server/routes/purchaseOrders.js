@@ -4,6 +4,7 @@ const multer = require('multer');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const Supplier = require('../models/Supplier');
 const { paginate } = require('../utils/pagination');
+const { requirePermission } = require('../middleware/auth');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -30,7 +31,7 @@ async function generatePONumber() {
 }
 
 // GET all purchase orders (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('purchaseOrders.view'), async (req, res) => {
   try {
     const { status, supplier, page, limit } = req.query;
     const query = {};
@@ -67,7 +68,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET single purchase order
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('purchaseOrders.view'), async (req, res) => {
   try {
     const purchaseOrder = await PurchaseOrder.findById(req.params.id)
       .populate('supplier')
@@ -82,7 +83,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create purchase order
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('purchaseOrders.create'), async (req, res) => {
   try {
     // Calculate item totals
     const items = req.body.items.map(item => ({
@@ -110,7 +111,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update purchase order
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('purchaseOrders.update'), async (req, res) => {
   try {
     // Calculate item totals if items are being updated
     if (req.body.items) {
@@ -139,7 +140,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE purchase order
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('purchaseOrders.delete'), async (req, res) => {
   try {
     const purchaseOrder = await PurchaseOrder.findByIdAndDelete(req.params.id);
     if (!purchaseOrder) {
@@ -152,7 +153,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET Excel template
-router.get('/template', (req, res) => {
+router.get('/template', requirePermission('purchaseOrders.view'), (req, res) => {
   try {
     const headers = [
       { key: 'supplier', label: 'Supplier Name *' },

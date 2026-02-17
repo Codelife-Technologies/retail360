@@ -3,9 +3,11 @@ const router = express.Router();
 const multer = require('multer');
 const Price = require('../models/Price');
 const Product = require('../models/Product');
+const SalesChannel = require('../models/SalesChannel');
 const { paginate } = require('../utils/pagination');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
+const { requirePermission } = require('../middleware/auth');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -13,9 +15,9 @@ const upload = multer({
 });
 
 // GET all prices with filters (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('prices.view'), async (req, res) => {
   try {
-    const { product, isActive, page, limit } = req.query;
+    const { product, isActive, salesChannel, page, limit } = req.query;
     const query = {};
     
     if (product) {
@@ -26,17 +28,27 @@ router.get('/', async (req, res) => {
       query.isActive = isActive === 'true';
     }
     
+    if (salesChannel !== undefined) {
+      query.salesChannel = salesChannel === '' || salesChannel === 'null' ? null : salesChannel;
+    }
+    
+    const populateOpts = [
+      { path: 'product', select: 'name title sku brandName' },
+      { path: 'salesChannel', select: 'name code country defaultCurrency' }
+    ];
+    
     if (page || limit) {
       const result = await paginate(Price, query, {
         page: page || 1,
         limit: limit || 25,
         sort: { effectiveDate: -1 },
-        populate: { path: 'product', select: 'name title sku brandName' }
+        populate: populateOpts
       });
       res.json(result);
     } else {
       const prices = await Price.find(query)
-        .populate('product', 'name title sku brandName')
+        .populate(populateOpts[0])
+        .populate(populateOpts[1])
         .sort({ effectiveDate: -1 });
       res.json(prices);
     }
@@ -45,14 +57,26 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET current active price for a product
-router.get('/product/:productId', async (req, res) => {
+// GET current active price for a product (optional ?salesChannel=id for channel-specific lookup)
+router.get('/product/:productId', requirePermission('prices.view'), async (req, res) => {
   try {
-    const price = await Price.findOne({
-      product: req.params.productId,
-      isActive: true
-    })
-      .populate('product', 'name title sku');
+    const { salesChannel: salesChannelParam } = req.query;
+    let price = null;
+    
+    if (salesChannelParam && salesChannelParam !== 'null') {
+      price = await Price.findOne({
+        product: req.params.productId,
+        salesChannel: salesChannelParam,
+        isActive: true
+      }).populate('product', 'name title sku').populate('salesChannel', 'name code country defaultCurrency');
+    }
+    if (!price) {
+      price = await Price.findOne({
+        product: req.params.productId,
+        salesChannel: null,
+        isActive: true
+      }).populate('product', 'name title sku').populate('salesChannel', 'name code country defaultCurrency');
+    }
     
     if (!price) {
       return res.status(404).json({ error: 'No active price found for this product' });
@@ -63,11 +87,17 @@ router.get('/product/:productId', async (req, res) => {
   }
 });
 
-// GET price history for a product
-router.get('/product/:productId/history', async (req, res) => {
+// GET price history for a product (optional ?salesChannel=id to filter by channel)
+router.get('/product/:productId/history', requirePermission('prices.view'), async (req, res) => {
   try {
-    const prices = await Price.find({ product: req.params.productId })
+    const { salesChannel: salesChannelParam } = req.query;
+    const query = { product: req.params.productId };
+    if (salesChannelParam !== undefined) {
+      query.salesChannel = salesChannelParam === '' || salesChannelParam === 'null' ? null : salesChannelParam;
+    }
+    const prices = await Price.find(query)
       .populate('product', 'name title sku')
+      .populate('salesChannel', 'name code country defaultCurrency')
       .sort({ effectiveDate: -1 });
     res.json(prices);
   } catch (error) {
@@ -75,19 +105,27 @@ router.get('/product/:productId/history', async (req, res) => {
   }
 });
 
-// GET current prices for multiple products
-router.post('/bulk-current', async (req, res) => {
+// GET current prices for multiple products (optional salesChannel in body for channel-specific prices)
+router.post('/bulk-current', requirePermission('prices.view'), async (req, res) => {
   try {
-    const { productIds } = req.body;
+    const { productIds, salesChannel } = req.body;
     if (!Array.isArray(productIds)) {
       return res.status(400).json({ error: 'productIds must be an array' });
     }
     
-    const prices = await Price.find({
+    const query = {
       product: { $in: productIds },
       isActive: true
-    })
-      .populate('product', 'name title sku');
+    };
+    if (salesChannel !== undefined && salesChannel !== null && salesChannel !== '') {
+      query.salesChannel = salesChannel;
+    } else {
+      query.salesChannel = null;
+    }
+    
+    const prices = await Price.find(query)
+      .populate('product', 'name title sku')
+      .populate('salesChannel', 'name code country defaultCurrency');
     
     res.json(prices);
   } catch (error) {
@@ -95,34 +133,35 @@ router.post('/bulk-current', async (req, res) => {
   }
 });
 
-// POST create new price (deactivates old active price)
-router.post('/', async (req, res) => {
+// POST create new price (deactivates old active price for same product+channel)
+router.post('/', requirePermission('prices.create'), async (req, res) => {
   try {
-    const { product, purchasePrice, salesPrice, currency, effectiveDate, notes, isActive } = req.body;
+    const { product, purchasePrice, salesPrice, mrp, currency, effectiveDate, notes, isActive, salesChannel } = req.body;
     
-    // If setting as active, deactivate old active prices
     const activeFlag = isActive !== undefined ? isActive : true;
     if (activeFlag) {
-      await Price.updateMany(
-        { product, isActive: true },
-        { isActive: false }
-      );
+      const deactivateQuery = { product, isActive: true };
+      deactivateQuery.salesChannel = salesChannel || null;
+      await Price.updateMany(deactivateQuery, { isActive: false });
     }
     
     const price = new Price({
       product,
       purchasePrice,
       salesPrice,
+      mrp: mrp != null && mrp !== '' ? parseFloat(mrp) : null,
       currency: currency || 'INR',
       effectiveDate: effectiveDate || new Date(),
       isActive: activeFlag,
-      notes
+      notes,
+      salesChannel: salesChannel || null
     });
     
     await price.save();
     
     const populatedPrice = await Price.findById(price._id)
-      .populate('product', 'name title sku');
+      .populate('product', 'name title sku')
+      .populate('salesChannel', 'name code country defaultCurrency');
     
     res.status(201).json(populatedPrice);
   } catch (error) {
@@ -137,24 +176,27 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update price
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('prices.update'), async (req, res) => {
   try {
-    const { purchasePrice, salesPrice, currency, effectiveDate, isActive, notes } = req.body;
+    const { purchasePrice, salesPrice, mrp, currency, effectiveDate, isActive, notes } = req.body;
     
-    // If setting as active, deactivate old active prices for the same product
     if (isActive === true) {
       const existingPrice = await Price.findById(req.params.id);
       if (existingPrice) {
-        await Price.updateMany(
-          { product: existingPrice.product, isActive: true, _id: { $ne: req.params.id } },
-          { isActive: false }
-        );
+        const deactivateQuery = {
+          product: existingPrice.product,
+          isActive: true,
+          _id: { $ne: req.params.id }
+        };
+        deactivateQuery.salesChannel = existingPrice.salesChannel || null;
+        await Price.updateMany(deactivateQuery, { isActive: false });
       }
     }
     
     const updateData = {};
     if (purchasePrice !== undefined) updateData.purchasePrice = purchasePrice;
     if (salesPrice !== undefined) updateData.salesPrice = salesPrice;
+    if (mrp !== undefined) updateData.mrp = mrp != null && mrp !== '' ? parseFloat(mrp) : null;
     if (currency !== undefined) updateData.currency = currency;
     if (effectiveDate !== undefined) updateData.effectiveDate = effectiveDate;
     if (isActive !== undefined) updateData.isActive = isActive;
@@ -165,7 +207,8 @@ router.put('/:id', async (req, res) => {
       updateData,
       { new: true, runValidators: true }
     )
-      .populate('product', 'name title sku');
+      .populate('product', 'name title sku')
+      .populate('salesChannel', 'name code country defaultCurrency');
     
     if (!price) {
       return res.status(404).json({ error: 'Price not found' });
@@ -185,7 +228,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE price (soft delete by setting isActive to false)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('prices.delete'), async (req, res) => {
   try {
     const price = await Price.findByIdAndUpdate(
       req.params.id,
@@ -210,7 +253,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST bulk update prices
-router.post('/bulk', async (req, res) => {
+router.post('/bulk', requirePermission('prices.update'), async (req, res) => {
   try {
     const { prices } = req.body; // Array of { product, purchasePrice, salesPrice, ... }
     
@@ -222,20 +265,20 @@ router.post('/bulk', async (req, res) => {
     
     for (const priceData of prices) {
       try {
-        // Deactivate old active prices for this product
-        await Price.updateMany(
-          { product: priceData.product, isActive: true },
-          { isActive: false }
-        );
+        const deactivateQuery = { product: priceData.product, isActive: true };
+        deactivateQuery.salesChannel = priceData.salesChannel || null;
+        await Price.updateMany(deactivateQuery, { isActive: false });
         
         const price = new Price({
           product: priceData.product,
           purchasePrice: priceData.purchasePrice,
           salesPrice: priceData.salesPrice,
+          mrp: priceData.mrp != null && priceData.mrp !== '' ? parseFloat(priceData.mrp) : null,
           currency: priceData.currency || 'INR',
           effectiveDate: priceData.effectiveDate || new Date(),
           isActive: true,
-          notes: priceData.notes
+          notes: priceData.notes,
+          salesChannel: priceData.salesChannel || null
         });
         
         await price.save();
@@ -258,12 +301,14 @@ router.post('/bulk', async (req, res) => {
 });
 
 // GET Excel template
-router.get('/template', (req, res) => {
+router.get('/template', requirePermission('prices.view'), (req, res) => {
   try {
     const headers = [
       { key: 'product', label: 'Product SKU/Name *' },
+      { key: 'salesChannel', label: 'Sales Channel (code/name, blank for Default)' },
       { key: 'purchasePrice', label: 'Purchase Price' },
       { key: 'salesPrice', label: 'Sales Price *' },
+      { key: 'mrp', label: 'MRP' },
       { key: 'currency', label: 'Currency' },
       { key: 'effectiveDate', label: 'Effective Date' },
       { key: 'isActive', label: 'Is Active' }
@@ -279,7 +324,7 @@ router.get('/template', (req, res) => {
 });
 
 // POST import prices from Excel
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', requirePermission('prices.create'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -304,8 +349,10 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
       try {
         const productSku = row['Product SKU/Name *'] || '';
+        const salesChannelCode = (row['Sales Channel (code/name, blank for Default)'] || '').trim();
         const purchasePrice = row['Purchase Price'] ? parseFloat(row['Purchase Price']) : undefined;
         const salesPrice = parseFloat(row['Sales Price *']);
+        const mrp = row['MRP'] ? parseFloat(row['MRP']) : null;
         const currency = row['Currency'] || 'INR';
         const effectiveDate = row['Effective Date'] ? new Date(row['Effective Date']) : new Date();
         const isActive = row['Is Active'] === 'true' || row['Is Active'] === true || row['Is Active'] === 'TRUE';
@@ -329,24 +376,39 @@ router.post('/import', upload.single('file'), async (req, res) => {
           continue;
         }
 
-        // If setting as active, deactivate old active prices
+        let salesChannelId = null;
+        if (salesChannelCode) {
+          const salesChannel = await SalesChannel.findOne({
+            $or: [
+              { code: { $regex: new RegExp(`^${salesChannelCode}$`, 'i') } },
+              { name: { $regex: new RegExp(salesChannelCode, 'i') } }
+            ]
+          });
+          if (!salesChannel) {
+            errors.push({ row: rowNum, field: 'salesChannel', message: `Sales channel not found: ${salesChannelCode}`, data: row });
+            failed++;
+            continue;
+          }
+          salesChannelId = salesChannel._id;
+        }
+
+        const deactivateQuery = { product: product._id, isActive: true };
+        deactivateQuery.salesChannel = salesChannelId;
         if (isActive) {
-          await Price.updateMany(
-            { product: product._id, isActive: true },
-            { isActive: false }
-          );
+          await Price.updateMany(deactivateQuery, { isActive: false });
         }
 
         const priceData = {
           product: product._id,
-          purchasePrice: purchasePrice,
+          salesChannel: salesChannelId,
+          purchasePrice: purchasePrice !== undefined ? purchasePrice : 0,
           salesPrice: salesPrice,
+          mrp: mrp != null && !isNaN(mrp) ? mrp : null,
           currency: currency,
           effectiveDate: effectiveDate,
           isActive: isActive
         };
 
-        // Create new price record
         const price = new Price(priceData);
         await price.save();
         imported++;

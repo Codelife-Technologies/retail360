@@ -4,8 +4,12 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const Product = require('../models/Product');
+const Category = require('../models/Category');
+const Subcategory = require('../models/Subcategory');
+const Unit = require('../models/Unit');
 const logger = require('../utils/logger');
 const { paginate } = require('../utils/pagination');
+const { requirePermission } = require('../middleware/auth');
 const { parseExcel, validateExcelData } = require('../utils/excelParser');
 const { generateTemplate, exportToExcel } = require('../utils/excelGenerator');
 
@@ -150,7 +154,7 @@ async function generateNextSerialNumber() {
 
 // GET all products (with pagination)
 // GET product count
-router.get('/count', async (req, res) => {
+router.get('/count', requirePermission('products.view'), async (req, res) => {
   try {
     const { search, category, subCategory, brandName } = req.query;
     const query = {};
@@ -187,7 +191,7 @@ router.get('/count', async (req, res) => {
   }
 });
 
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('products.view'), async (req, res) => {
   try {
     const { search, category, subCategory, brandName, page, limit } = req.query;
     const query = {};
@@ -242,42 +246,42 @@ router.get('/', async (req, res) => {
 });
 
 // GET Excel template (must be before /:id route)
-router.get('/template', (req, res) => {
+router.get('/template', requirePermission('products.view'), (req, res) => {
   try {
     logger.backend.info('Generating product template');
     const headers = [
-      { key: 'slno', label: 'SL No' },
       { key: 'parentSkuOrAsin', label: 'Parent SKU/ASIN' },
       { key: 'variation', label: 'Variation' },
       { key: 'sku', label: 'SKU *' },
       { key: 'ean', label: 'EAN' },
-      { key: 'category', label: 'Category' },
-      { key: 'subCategory', label: 'Sub Category' },
-      { key: 'brandName', label: 'Brand Name' },
+      { key: 'category', label: 'Category *' },
+      { key: 'subCategory', label: 'Sub Category *' },
+      { key: 'brandName', label: 'Brand Name *' },
       { key: 'title', label: 'Title' },
       { key: 'name', label: 'Name *' },
-      { key: 'colour', label: 'Colour' },
-      { key: 'material', label: 'Material' },
-      { key: 'size', label: 'Size' },
-      { key: 'hsnCode', label: 'HSN Code' },
+      { key: 'colour', label: 'Colour *' },
+      { key: 'material', label: 'Material *' },
+      { key: 'size', label: 'Size *' },
+      { key: 'hsnCode', label: 'HSN Code *' },
       { key: 'description', label: 'Description' },
-      { key: 'manufacturerName', label: 'Manufacturer Name' },
-      { key: 'contactDetails', label: 'Contact Details' },
+      { key: 'manufacturerName', label: 'Manufacturer Name *' },
+      { key: 'contactDetails', label: 'Contact Details *' },
       { key: 'bulletPoint1', label: 'Bullet Point 1' },
       { key: 'bulletPoint2', label: 'Bullet Point 2' },
       { key: 'bulletPoint3', label: 'Bullet Point 3' },
       { key: 'bulletPoint4', label: 'Bullet Point 4' },
       { key: 'bulletPoint5', label: 'Bullet Point 5' },
-      { key: 'productDimensionLength', label: 'Product Dimension Length (cm)' },
-      { key: 'productDimensionWidth', label: 'Product Dimension Width (cm)' },
-      { key: 'productDimensionHeight', label: 'Product Dimension Height (cm)' },
-      { key: 'packageDimensionLength', label: 'Package Dimension Length (cm)' },
-      { key: 'packageDimensionWidth', label: 'Package Dimension Width (cm)' },
-      { key: 'packageDimensionHeight', label: 'Package Dimension Height (cm)' },
-      { key: 'weight', label: 'Weight (kg)' },
+      { key: 'productDimensionLength', label: 'Product Dimension Length (cm) *' },
+      { key: 'productDimensionWidth', label: 'Product Dimension Width (cm) *' },
+      { key: 'productDimensionHeight', label: 'Product Dimension Height (cm) *' },
+      { key: 'packageDimensionLength', label: 'Package Dimension Length (cm) *' },
+      { key: 'packageDimensionWidth', label: 'Package Dimension Width (cm) *' },
+      { key: 'packageDimensionHeight', label: 'Package Dimension Height (cm) *' },
+      { key: 'weight', label: 'Weight (kg) *' },
+      { key: 'unit', label: 'Unit *' },
       { key: 'shape', label: 'Shape' },
       { key: 'specialFeature', label: 'Special Feature' },
-      { key: 'images', label: 'Images (comma-separated URLs)' }
+      { key: 'images', label: 'Images (comma-separated URLs) *' }
     ];
     
     logger.backend.info('Calling generateTemplate with', { headerCount: headers.length });
@@ -299,7 +303,7 @@ router.get('/template', (req, res) => {
 });
 
 // GET single product
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('products.view'), async (req, res) => {
   try {
     // Prevent matching special routes
     if (req.params.id === 'template' || req.params.id === 'import') {
@@ -319,7 +323,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST upload images for a product
-router.post('/:id/images', async (req, res) => {
+router.post('/:id/images', requirePermission('products.update'), async (req, res) => {
   try {
     const productId = req.params.id;
     const product = await Product.findById(productId);
@@ -378,7 +382,7 @@ router.post('/:id/images', async (req, res) => {
 });
 
 // POST create product
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('products.create'), async (req, res) => {
   try {
     // Check if slno is provided, if not auto-generate it
     if (!req.body.slno || req.body.slno === '' || req.body.slno === null || req.body.slno === undefined) {
@@ -415,7 +419,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update product
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('products.update'), async (req, res) => {
   try {
     const productId = req.params.id;
     const oldProduct = await Product.findById(productId);
@@ -486,7 +490,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE product
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('products.delete'), async (req, res) => {
   try {
     const product = await Product.findByIdAndDelete(req.params.id);
     if (!product) {
@@ -498,8 +502,75 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Helper: Resolve Category and Subcategory names from Excel to ObjectIds, returns hsnCode from category
+async function resolveCategoryAndSubcategory(categoryName, subCategoryName) {
+  let categoryId = null;
+  let subCategoryId = null;
+  let hsnCode = null;
+
+  const catStr = (categoryName || '').toString().trim();
+  const subCatStr = (subCategoryName || '').toString().trim();
+
+  // Resolve Category by name (if provided)
+  if (catStr) {
+    const isObjectId = /^[a-fA-F0-9]{24}$/.test(catStr);
+    if (isObjectId) {
+      const cat = await Category.findById(catStr);
+      if (cat) {
+        categoryId = cat._id;
+        hsnCode = cat.hsnCode;
+      } else return { categoryId: null, subCategoryId: null, hsnCode: null, error: `Category ID "${catStr}" not found` };
+    } else {
+      const cat = await Category.findOne({ name: { $regex: new RegExp(`^${catStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
+      if (cat) {
+        categoryId = cat._id;
+        hsnCode = cat.hsnCode;
+      } else return { categoryId: null, subCategoryId: null, hsnCode: null, error: `Category "${catStr}" not found. Create the category first or use an existing category name.` };
+    }
+  }
+
+  // Resolve Subcategory by name (requires category context)
+  if (subCatStr) {
+    const isObjectId = /^[a-fA-F0-9]{24}$/.test(subCatStr);
+    if (isObjectId) {
+      const sub = await Subcategory.findById(subCatStr).populate('category');
+      if (sub) {
+        subCategoryId = sub._id;
+        if (!categoryId) categoryId = sub.category?._id;
+      } else return { categoryId, subCategoryId, hsnCode, error: `Subcategory ID "${subCatStr}" not found` };
+    } else {
+      const query = categoryId ? { name: { $regex: new RegExp(`^${subCatStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }, category: categoryId } : { name: { $regex: new RegExp(`^${subCatStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } };
+      const sub = await Subcategory.findOne(query).populate('category');
+      if (sub) {
+        subCategoryId = sub._id;
+        if (!categoryId) categoryId = sub.category?._id;
+      } else {
+        const hint = categoryId ? ` for category` : '. Provide both Category and Sub Category, or create the subcategory first';
+        return { categoryId, subCategoryId, hsnCode, error: `Subcategory "${subCatStr}" not found${hint}` };
+      }
+    }
+  }
+
+  return { categoryId, subCategoryId, hsnCode, error: null };
+}
+
+// Helper: Extract user-friendly error message from Mongoose/validation errors
+function getReadableErrorMessage(error) {
+  if (!error) return 'Unknown error';
+  if (error.code === 11000) {
+    const field = error.keyPattern ? Object.keys(error.keyPattern)[0] : 'field';
+    return `Duplicate value: ${field} already exists`;
+  }
+  if (error.errors && typeof error.errors === 'object') {
+    const firstErr = Object.values(error.errors)[0];
+    if (firstErr && firstErr.message) return firstErr.message;
+  }
+  if (error.message) return error.message;
+  return String(error);
+}
+
 // POST import products from Excel
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', requirePermission('products.create'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -531,22 +602,50 @@ router.post('/import', upload.single('file'), async (req, res) => {
     let updated = 0;
     let failed = 0;
     const errors = [];
+    const uploadLog = [];
+
+    // Fetch all units for validation (seed defaults if empty)
+    let allUnits = await Unit.find({}).select('name').lean();
+    if (allUnits.length === 0) {
+      for (const name of ['pcs', 'kg', 'g', 'l', 'ml', 'box', 'pack', 'pair', 'dozen', 'metre']) {
+        await Unit.create({ name, code: name.toUpperCase() });
+      }
+      allUnits = await Unit.find({}).select('name').lean();
+    }
+    const validUnitNames = new Set(allUnits.map(u => u.name.toLowerCase()));
 
     // Process each row
     for (let i = 0; i < excelData.length; i++) {
       const row = excelData[i];
       const rowNum = i + 2; // +2 for header row and 0-index
+      const rowName = row['Name *'] || row['name'] || '';
+      const rowSku = row['SKU *'] || row['sku'] || '';
 
       try {
-        // Map Excel columns to product fields
+        // Validate unit (mandatory - must be before productData)
+        const unitInput = (row['Unit'] || '').toString().trim();
+        if (!unitInput) {
+          errors.push({ row: rowNum, field: 'unit', message: 'Unit is required', data: row });
+          uploadLog.push({ row: rowNum, name: rowName, sku: rowSku, action: 'failed', message: 'Unit is required' });
+          failed++;
+          continue;
+        }
+        if (!validUnitNames.has(unitInput.toLowerCase())) {
+          errors.push({ row: rowNum, field: 'unit', message: `Unit "${unitInput}" not found. Add it in Unit Master first.`, data: row });
+          uploadLog.push({ row: rowNum, name: rowName, sku: rowSku, action: 'failed', message: `Unit "${unitInput}" not found` });
+          failed++;
+          continue;
+        }
+
+        // Map Excel columns to product fields (SL No is optional - auto-generated when missing)
         const productData = {
           slno: row['SL No'] ? parseInt(row['SL No']) : undefined,
           parentSkuOrAsin: row['Parent SKU/ASIN'] || '',
           variation: row['Variation'] || '',
           sku: row['SKU *'] || '',
           ean: row['EAN'] || '',
-          category: row['Category'] || '',
-          subCategory: row['Sub Category'] || '',
+          category: (row['Category'] || '').toString().trim() || undefined,
+          subCategory: (row['Sub Category'] || '').toString().trim() || undefined,
           brandName: row['Brand Name'] || '',
           title: row['Title'] || '',
           name: row['Name *'] || '',
@@ -575,10 +674,27 @@ router.post('/import', upload.single('file'), async (req, res) => {
             height: row['Package Dimension Height (cm)'] ? parseFloat(row['Package Dimension Height (cm)']) : undefined
           },
           weight: row['Weight (kg)'] ? parseFloat(row['Weight (kg)']) : undefined,
+          unit: unitInput,
           shape: row['Shape'] || '',
           specialFeature: row['Special Feature'] || '',
           images: row['Images (comma-separated URLs)'] ? row['Images (comma-separated URLs)'].split(',').map(url => url.trim()) : []
         };
+
+        // Resolve Category and Subcategory by name to ObjectIds
+        const catInput = productData.category;
+        const subCatInput = productData.subCategory;
+        if (catInput || subCatInput) {
+          const resolved = await resolveCategoryAndSubcategory(catInput, subCatInput);
+          if (resolved.error) {
+            errors.push({ row: rowNum, field: 'category/subcategory', message: resolved.error, data: row });
+            uploadLog.push({ row: rowNum, name: rowName, sku: rowSku, action: 'failed', message: resolved.error });
+            failed++;
+            continue;
+          }
+          productData.category = resolved.categoryId || undefined;
+          productData.subCategory = resolved.subCategoryId || undefined;
+          if (resolved.hsnCode) productData.hsnCode = resolved.hsnCode;
+        }
 
         // Remove undefined values
         Object.keys(productData).forEach(key => {
@@ -594,12 +710,38 @@ router.post('/import', upload.single('file'), async (req, res) => {
         }
 
         if (!productData.name) {
-          errors.push({
-            row: rowNum,
-            field: 'name',
-            message: 'Name is required',
-            data: row
-          });
+          errors.push({ row: rowNum, field: 'name', message: 'Name is required', data: row });
+          uploadLog.push({ row: rowNum, name: rowName, sku: rowSku, action: 'failed', message: 'Name is required' });
+          failed++;
+          continue;
+        }
+
+        // Validate mandatory fields
+        const missingFields = [];
+        if (!productData.sku || !String(productData.sku).trim()) missingFields.push('SKU');
+        if (!productData.brandName || !String(productData.brandName).trim()) missingFields.push('Brand Name');
+        if (!productData.manufacturerName || !String(productData.manufacturerName).trim()) missingFields.push('Manufacturer Name');
+        if (!productData.contactDetails || !String(productData.contactDetails).trim()) missingFields.push('Contact Details');
+        if (!productData.category) missingFields.push('Category');
+        if (!productData.subCategory) missingFields.push('Sub Category');
+        if (!productData.hsnCode || !String(productData.hsnCode).trim()) missingFields.push('HSN Code');
+        if (!productData.colour || !String(productData.colour).trim()) missingFields.push('Colour');
+        if (!productData.material || !String(productData.material).trim()) missingFields.push('Material');
+        if (!productData.size || !String(productData.size).trim()) missingFields.push('Size');
+        if (productData.weight === undefined || productData.weight === null || productData.weight === '') missingFields.push('Weight');
+        const pd = productData.productDimensionCm || {};
+        const validNum = (v) => v !== undefined && v !== null && v !== '' && !isNaN(parseFloat(v));
+        if (!validNum(pd.length) || !validNum(pd.width) || !validNum(pd.height)) missingFields.push('Product Dimensions (Length, Width, Height)');
+        const pk = productData.packageDimensionCm || {};
+        if (!validNum(pk.length) || !validNum(pk.width) || !validNum(pk.height)) missingFields.push('Package Dimensions (Length, Width, Height)');
+        const imgs = productData.images || [];
+        if (!imgs.length || imgs.filter(i => i && String(i).trim()).length === 0) missingFields.push('Image');
+        if (!productData.unit || !String(productData.unit).trim()) missingFields.push('Unit');
+
+        if (missingFields.length > 0) {
+          const msg = `Required fields missing: ${missingFields.join(', ')}`;
+          errors.push({ row: rowNum, field: 'mandatory', message: msg, data: row });
+          uploadLog.push({ row: rowNum, name: rowName, sku: rowSku, action: 'failed', message: msg });
           failed++;
           continue;
         }
@@ -621,12 +763,14 @@ router.post('/import', upload.single('file'), async (req, res) => {
               message: 'Product already exists',
               data: row
             });
+            uploadLog.push({ row: rowNum, name: rowName, sku: rowSku, action: 'failed', message: 'Product already exists' });
             failed++;
             continue;
           }
           // Update existing
           await Product.findByIdAndUpdate(existingProduct._id, productData, { runValidators: true });
           updated++;
+          uploadLog.push({ row: rowNum, name: rowName, sku: rowSku, action: 'updated' });
         } else {
           if (mode === 'update') {
             errors.push({
@@ -635,31 +779,55 @@ router.post('/import', upload.single('file'), async (req, res) => {
               message: 'Product not found for update',
               data: row
             });
+            uploadLog.push({ row: rowNum, name: rowName, sku: rowSku, action: 'failed', message: 'Product not found for update' });
             failed++;
             continue;
           }
-          // Create new
+          // Create new - auto-generate SR no when missing
+          if (!productData.slno || productData.slno === '' || productData.slno === null) {
+            productData.slno = await generateNextSerialNumber();
+          }
           const product = new Product(productData);
           await product.save();
           imported++;
+          uploadLog.push({ row: rowNum, name: rowName, sku: rowSku, action: 'imported', slno: productData.slno });
         }
       } catch (error) {
+        const readableMessage = getReadableErrorMessage(error);
+        const duplicateFields = error.code === 11000 && error.keyPattern ? Object.keys(error.keyPattern).join(', ') : null;
         errors.push({
           row: rowNum,
-          field: 'general',
-          message: error.message,
+          field: error.path || 'general',
+          message: readableMessage,
+          details: duplicateFields ? `Duplicate in: ${duplicateFields}` : undefined,
           data: row
         });
+        uploadLog.push({ row: rowNum, name: rowName, sku: rowSku, action: 'failed', message: readableMessage });
         failed++;
       }
     }
+
+    // Log upload summary to backend
+    logger.backend.info('Product import completed', {
+      imported,
+      updated,
+      failed,
+      totalRows: excelData.length,
+      fileName: req.file?.originalname
+    });
+
+    // Collect failed row numbers for quick reference
+    const failedRows = uploadLog.filter(e => e.action === 'failed').map(e => e.row);
 
     res.json({
       success: true,
       imported,
       updated,
       failed,
-      errors: errors.slice(0, 100) // Limit errors to first 100
+      failedRows: [...new Set(failedRows)].sort((a, b) => a - b),
+      errors: errors.slice(0, 200),
+      uploadLog: uploadLog.slice(0, 500),
+      summary: failed > 0 ? `Import completed. ${failed} row(s) failed - check Errors section and Upload Log for details.` : 'Import completed successfully.'
     });
   } catch (error) {
     logger.backend.error('Error importing products', { error: error.message, stack: error.stack });

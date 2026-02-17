@@ -5,6 +5,7 @@ const Stock = require('../models/Stock');
 const Product = require('../models/Product');
 const Location = require('../models/Location');
 const { paginate } = require('../utils/pagination');
+const { requirePermission } = require('../middleware/auth');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
 const logger = require('../utils/logger');
@@ -15,7 +16,7 @@ const upload = multer({
 });
 
 // GET all stock with filters (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('stock.view'), async (req, res) => {
   try {
     const { product, location, page, limit } = req.query;
     const query = {};
@@ -52,9 +53,10 @@ router.get('/', async (req, res) => {
 });
 
 // GET stock by product (all locations)
-router.get('/product/:productId', async (req, res) => {
+router.get('/product/:productId', requirePermission('stock.view'), async (req, res) => {
   try {
     const stock = await Stock.find({ product: req.params.productId })
+      .populate('product', 'name title sku brandName')
       .populate('location', 'name code city')
       .sort({ location: 1 });
     res.json(stock);
@@ -64,7 +66,7 @@ router.get('/product/:productId', async (req, res) => {
 });
 
 // GET stock by location (all products)
-router.get('/location/:locationId', async (req, res) => {
+router.get('/location/:locationId', requirePermission('stock.view'), async (req, res) => {
   try {
     const stock = await Stock.find({ location: req.params.locationId })
       .populate('product', 'name title sku brandName category')
@@ -76,7 +78,7 @@ router.get('/location/:locationId', async (req, res) => {
 });
 
 // GET specific stock record (product + location)
-router.get('/:productId/:locationId', async (req, res) => {
+router.get('/:productId/:locationId', requirePermission('stock.view'), async (req, res) => {
   try {
     const stock = await Stock.findOne({
       product: req.params.productId,
@@ -95,7 +97,7 @@ router.get('/:productId/:locationId', async (req, res) => {
 });
 
 // GET low stock alerts
-router.get('/alerts/low-stock', async (req, res) => {
+router.get('/alerts/low-stock', requirePermission('stock.view'), async (req, res) => {
   try {
     // Fetch all stock records and filter in memory to handle null values safely
     const allStock = await Stock.find({})
@@ -125,7 +127,7 @@ router.get('/alerts/low-stock', async (req, res) => {
 });
 
 // POST create/update stock
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('stock.create'), async (req, res) => {
   try {
     const { product, location, quantity, minStockLevel } = req.body;
     
@@ -150,7 +152,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update stock quantity
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('stock.update'), async (req, res) => {
   try {
     const { quantity, minStockLevel, reservedQuantity } = req.body;
     const updateData = { lastUpdated: new Date() };
@@ -177,7 +179,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE stock record
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('stock.delete'), async (req, res) => {
   try {
     const stock = await Stock.findByIdAndDelete(req.params.id);
     if (!stock) {
@@ -190,10 +192,10 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET Excel template
-router.get('/template', (req, res) => {
+router.get('/template', requirePermission('stock.view'), (req, res) => {
   try {
     const headers = [
-      { key: 'product', label: 'Product SKU/Name *' },
+      { key: 'productSku', label: 'Product SKU *' },
       { key: 'location', label: 'Location Code/Name *' },
       { key: 'quantity', label: 'Quantity *' },
       { key: 'minStockLevel', label: 'Min Stock Level' }
@@ -209,7 +211,7 @@ router.get('/template', (req, res) => {
 });
 
 // POST import stock from Excel
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', requirePermission('stock.create'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -233,27 +235,22 @@ router.post('/import', upload.single('file'), async (req, res) => {
       const rowNum = i + 2;
 
       try {
-        const productSku = row['Product SKU/Name *'] || '';
+        const productSku = (row['Product SKU *'] || row['Product SKU/Name *'] || '').trim();
         const locationCode = row['Location Code/Name *'] || '';
         const quantity = parseFloat(row['Quantity *']);
         const minStockLevel = parseFloat(row['Min Stock Level']) || 0;
 
         if (!productSku || !locationCode || isNaN(quantity)) {
-          errors.push({ row: rowNum, field: 'product/location/quantity', message: 'Product, Location, and Quantity are required', data: row });
+          errors.push({ row: rowNum, field: 'product/location/quantity', message: 'Product SKU, Location, and Quantity are required', data: row });
           failed++;
           continue;
         }
 
-        // Find product by SKU or name
-        const product = await Product.findOne({
-          $or: [
-            { sku: productSku },
-            { name: productSku }
-          ]
-        });
+        // Find product by SKU only
+        const product = await Product.findOne({ sku: productSku });
 
         if (!product) {
-          errors.push({ row: rowNum, field: 'product', message: `Product not found: ${productSku}`, data: row });
+          errors.push({ row: rowNum, field: 'product', message: `Product not found for SKU: ${productSku}`, data: row });
           failed++;
           continue;
         }

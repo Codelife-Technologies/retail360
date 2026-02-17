@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { productsAPI, pricesAPI, categoriesAPI, subcategoriesAPI } from '../services/api';
+import { productsAPI, pricesAPI, categoriesAPI, subcategoriesAPI, unitsAPI } from '../services/api';
 import logger from '../utils/logger';
 import Pagination from './Pagination';
+import { useAuth } from '../context/AuthContext';
 import ExcelUpload from './ExcelUpload';
 import './Products.css';
 
 function Products() {
+  const { hasPermission } = useAuth();
   const [products, setProducts] = useState([]);
   const [productPrices, setProductPrices] = useState({}); // Map of productId -> price
   const [loading, setLoading] = useState(true);
@@ -57,12 +59,23 @@ function Products() {
   const [imagePreviews, setImagePreviews] = useState([]); // Array of preview URLs
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
+  const [units, setUnits] = useState([]);
   const [keywordInput, setKeywordInput] = useState('');
 
   useEffect(() => {
     fetchProducts();
     fetchCategories();
+    fetchUnits();
   }, []);
+
+  const fetchUnits = async () => {
+    try {
+      const response = await unitsAPI.getAll();
+      setUnits(response.data);
+    } catch (error) {
+      logger.error('Error fetching units', { error: error.message });
+    }
+  };
 
   useEffect(() => {
     // Fetch subcategories when category changes
@@ -355,6 +368,35 @@ function Products() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Validate mandatory fields
+      const missing = [];
+      if (!formData.sku?.trim()) missing.push('SKU');
+      if (!formData.brandName?.trim()) missing.push('Brand Name');
+      if (!formData.manufacturerName?.trim()) missing.push('Manufacturer Name');
+      if (!formData.contactDetails?.trim()) missing.push('Contact Details');
+      if (!formData.category) missing.push('Category');
+      if (!formData.subCategory) missing.push('Sub-Category');
+      if (!formData.colour?.trim()) missing.push('Colour');
+      if (!formData.material?.trim()) missing.push('Material');
+      if (!formData.size?.trim()) missing.push('Size');
+      if (formData.weight === '' || formData.weight === undefined || formData.weight === null) missing.push('Weight');
+      const pd = formData.productDimensionCm || {};
+      const validDim = (v) => v !== '' && v !== undefined && v !== null && !isNaN(parseFloat(v));
+      if (!validDim(pd.length) || !validDim(pd.width) || !validDim(pd.height)) missing.push('Product Dimensions');
+      const pk = formData.packageDimensionCm || {};
+      if (!validDim(pk.length) || !validDim(pk.width) || !validDim(pk.height)) missing.push('Package Dimensions');
+      const hasImages = (imagePreviews.length > 0) || (uploadedFiles.length > 0) || (formData.images?.filter(i => i?.trim()).length > 0);
+      if (!hasImages) missing.push('At least one Image');
+      if (!formData.unit?.trim()) missing.push('Unit');
+      if (missing.length > 0) {
+        alert(`Please fill required fields: ${missing.join(', ')}`);
+        return;
+      }
+
+      // Get hsnCode from selected category
+      const selectedCategory = formData.category ? categories.find(c => c._id === formData.category) : null;
+      const hsnCodeValue = selectedCategory?.hsnCode || formData.hsnCode || '';
+
       // Clean up empty values
       const submitData = {
         ...formData,
@@ -363,8 +405,7 @@ function Products() {
         // Convert category and subCategory to ObjectIds or null
         category: formData.category || null,
         subCategory: formData.subCategory || null,
-        // Remove hsnCode as it comes from category
-        hsnCode: undefined,
+        hsnCode: hsnCodeValue,
         bulletPoints: formData.bulletPoints.filter((bp) => bp.trim() !== ''),
         images: formData.images.filter((img) => img.trim() !== ''),
         keywords: formData.keywords.filter((kw) => kw.trim() !== ''),
@@ -569,12 +610,16 @@ function Products() {
       <div className="products-header">
         <h1>Products</h1>
         <div className="header-actions">
-          <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
-            📥 Upload Excel
-          </button>
-          <button className="btn-primary" onClick={openAddModal}>
-            + Add Product
-          </button>
+          {hasPermission('products.create') && (
+            <>
+              <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
+                📥 Upload Excel
+              </button>
+              <button className="btn-primary" onClick={openAddModal}>
+                + Add Product
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -627,18 +672,26 @@ function Products() {
                       }
                     </td>
                     <td>
-                      <button
-                        className="btn-edit"
-                        onClick={() => handleEdit(product)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="btn-delete"
-                        onClick={() => handleDelete(product._id)}
-                      >
-                        Delete
-                      </button>
+                      {(hasPermission('products.update') || hasPermission('products.delete')) && (
+                        <div className="action-buttons">
+                          {hasPermission('products.update') && (
+                            <button
+                              className="btn-edit"
+                              onClick={() => handleEdit(product)}
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {hasPermission('products.delete') && (
+                            <button
+                              className="btn-delete"
+                              onClick={() => handleDelete(product._id)}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -719,12 +772,13 @@ function Products() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>SKU</label>
+                    <label>SKU *</label>
                     <input
                       type="text"
                       name="sku"
                       value={formData.sku}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                   <div className="form-group">
@@ -749,12 +803,13 @@ function Products() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Brand Name</label>
+                    <label>Brand Name *</label>
                     <input
                       type="text"
                       name="brandName"
                       value={formData.brandName}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                 </div>
@@ -765,10 +820,11 @@ function Products() {
                 <h3>Classification & Codes</h3>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Category</label>
+                    <label>Category *</label>
                     <select
                       name="category"
                       value={formData.category}
+                      required
                       onChange={(e) => {
                         handleInputChange(e);
                         // Clear subcategory when category changes
@@ -784,12 +840,13 @@ function Products() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label>Sub-Category</label>
+                    <label>Sub-Category *</label>
                     <select
                       name="subCategory"
                       value={formData.subCategory}
                       onChange={handleInputChange}
                       disabled={!formData.category}
+                      required
                     >
                       <option value="">Select Sub-Category</option>
                       {subcategories.map((subcat) => (
@@ -812,21 +869,23 @@ function Products() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Manufacturer Name</label>
+                    <label>Manufacturer Name *</label>
                     <input
                       type="text"
                       name="manufacturerName"
                       value={formData.manufacturerName}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                   <div className="form-group">
-                    <label>Contact Details</label>
+                    <label>Contact Details *</label>
                     <input
                       type="text"
                       name="contactDetails"
                       value={formData.contactDetails}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                 </div>
@@ -837,30 +896,33 @@ function Products() {
                 <h3>Product Details</h3>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Colour</label>
+                    <label>Colour *</label>
                     <input
                       type="text"
                       name="colour"
                       value={formData.colour}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                   <div className="form-group">
-                    <label>Material</label>
+                    <label>Material *</label>
                     <input
                       type="text"
                       name="material"
                       value={formData.material}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                   <div className="form-group">
-                    <label>Size</label>
+                    <label>Size *</label>
                     <input
                       type="text"
                       name="size"
                       value={formData.size}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                 </div>
@@ -875,13 +937,14 @@ function Products() {
                     />
                   </div>
                   <div className="form-group">
-                    <label>Weight (grams/kg)</label>
+                    <label>Weight (grams/kg) *</label>
                     <input
                       type="number"
                       step="0.01"
                       name="weight"
                       value={formData.weight}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                   <div className="form-group">
@@ -901,65 +964,71 @@ function Products() {
                 <h3>Dimensions (in cm)</h3>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Product Length</label>
+                    <label>Product Length (cm) *</label>
                     <input
                       type="number"
                       step="0.01"
                       name="productDimensionCm.length"
                       value={formData.productDimensionCm.length}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                   <div className="form-group">
-                    <label>Product Width</label>
+                    <label>Product Width (cm) *</label>
                     <input
                       type="number"
                       step="0.01"
                       name="productDimensionCm.width"
                       value={formData.productDimensionCm.width}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                   <div className="form-group">
-                    <label>Product Height</label>
+                    <label>Product Height (cm) *</label>
                     <input
                       type="number"
                       step="0.01"
                       name="productDimensionCm.height"
                       value={formData.productDimensionCm.height}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Package Length</label>
+                    <label>Package Length (cm) *</label>
                     <input
                       type="number"
                       step="0.01"
                       name="packageDimensionCm.length"
                       value={formData.packageDimensionCm.length}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                   <div className="form-group">
-                    <label>Package Width</label>
+                    <label>Package Width (cm) *</label>
                     <input
                       type="number"
                       step="0.01"
                       name="packageDimensionCm.width"
                       value={formData.packageDimensionCm.width}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                   <div className="form-group">
-                    <label>Package Height</label>
+                    <label>Package Height (cm) *</label>
                     <input
                       type="number"
                       step="0.01"
                       name="packageDimensionCm.height"
                       value={formData.packageDimensionCm.height}
                       onChange={handleInputChange}
+                      required
                     />
                   </div>
                 </div>
@@ -983,7 +1052,7 @@ function Products() {
 
               {/* Media Section */}
               <div className="form-section">
-                <h3>Images</h3>
+                <h3>Images * (at least one required)</h3>
                 
                 {/* File Upload */}
                 <div className="form-group">
@@ -1286,13 +1355,20 @@ function Products() {
                 <h3>Unit</h3>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Unit</label>
-                    <input
-                      type="text"
+                    <label>Unit *</label>
+                    <select
                       name="unit"
                       value={formData.unit}
                       onChange={handleInputChange}
-                    />
+                      required
+                    >
+                      <option value="">Select unit...</option>
+                      {units.map((unit) => (
+                        <option key={unit._id} value={unit.name}>
+                          {unit.name}{unit.code ? ` (${unit.code})` : ''}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>

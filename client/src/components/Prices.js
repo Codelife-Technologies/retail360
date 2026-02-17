@@ -1,28 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { pricesAPI, productsAPI } from '../services/api';
+import { pricesAPI, productsAPI, salesChannelsAPI } from '../services/api';
 import './Prices.css';
 
 function Prices() {
   const [prices, setPrices] = useState([]);
   const [products, setProducts] = useState([]);
+  const [salesChannels, setSalesChannels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('all'); // 'all', 'product'
   const [selectedProduct, setSelectedProduct] = useState('');
+  const [selectedSalesChannel, setSelectedSalesChannel] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingPrice, setEditingPrice] = useState(null);
   const [formData, setFormData] = useState({
     product: '',
     purchasePrice: '',
     salesPrice: '',
+    mrp: '',
     currency: 'INR',
     effectiveDate: new Date().toISOString().split('T')[0],
     isActive: true,
     notes: '',
+    salesChannel: '',
   });
 
   useEffect(() => {
     fetchProducts();
-    fetchPrices();
+    fetchSalesChannels();
   }, []);
 
   useEffect(() => {
@@ -31,13 +35,26 @@ function Prices() {
     } else {
       fetchPrices();
     }
-  }, [viewMode, selectedProduct]);
+  }, [viewMode, selectedProduct, selectedSalesChannel]);
+
+  const fetchSalesChannels = async () => {
+    try {
+      const response = await salesChannelsAPI.getAll({ isActive: 'true' });
+      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setSalesChannels(data);
+    } catch (error) {
+      console.error('Error fetching sales channels:', error);
+    }
+  };
 
   const fetchPrices = async () => {
     try {
       setLoading(true);
-      const response = await pricesAPI.getAll({ isActive: 'true' });
-      setPrices(response.data);
+      const params = { isActive: 'true' };
+      if (selectedSalesChannel !== '') params.salesChannel = selectedSalesChannel;
+      const response = await pricesAPI.getAll(params);
+      const data = Array.isArray(response.data) ? response.data : response.data?.data || response.data;
+      setPrices(data);
     } catch (error) {
       console.error('Error fetching prices:', error);
       console.error('Error details:', {
@@ -55,7 +72,9 @@ function Prices() {
   const fetchPriceHistory = async (productId) => {
     try {
       setLoading(true);
-      const response = await pricesAPI.getHistory(productId);
+      const params = {};
+      if (selectedSalesChannel !== '') params.salesChannel = selectedSalesChannel;
+      const response = await pricesAPI.getHistory(productId, params);
       setPrices(response.data);
     } catch (error) {
       console.error('Error fetching price history:', error);
@@ -94,7 +113,7 @@ function Prices() {
       [name]:
         type === 'checkbox'
           ? checked
-          : name === 'purchasePrice' || name === 'salesPrice'
+          : name === 'purchasePrice' || name === 'salesPrice' || name === 'mrp'
           ? parseFloat(value) || ''
           : value,
     }));
@@ -134,12 +153,14 @@ function Prices() {
       product: price.product._id || price.product,
       purchasePrice: price.purchasePrice || '',
       salesPrice: price.salesPrice || '',
+      mrp: price.mrp ?? '',
       currency: price.currency || 'INR',
       effectiveDate: price.effectiveDate
         ? new Date(price.effectiveDate).toISOString().split('T')[0]
         : new Date().toISOString().split('T')[0],
       isActive: price.isActive !== undefined ? price.isActive : true,
       notes: price.notes || '',
+      salesChannel: price.salesChannel?._id || price.salesChannel || '',
     });
     setShowModal(true);
   };
@@ -172,10 +193,12 @@ function Prices() {
       product: '',
       purchasePrice: '',
       salesPrice: '',
+      mrp: '',
       currency: 'INR',
       effectiveDate: new Date().toISOString().split('T')[0],
       isActive: true,
       notes: '',
+      salesChannel: '',
     });
   };
 
@@ -220,7 +243,22 @@ function Prices() {
         </button>
       </div>
 
-      {/* Filter */}
+      {/* Filters */}
+      <div className="filter-section">
+        <label>Sales Channel:</label>
+        <select
+          value={selectedSalesChannel}
+          onChange={(e) => setSelectedSalesChannel(e.target.value)}
+        >
+          <option value="">All (incl. Default)</option>
+          <option value="null">Default only</option>
+          {salesChannels.map((ch) => (
+            <option key={ch._id} value={ch._id}>
+              {ch.name} {ch.country && `(${ch.country})`}
+            </option>
+          ))}
+        </select>
+      </div>
       {viewMode === 'product' && (
         <div className="filter-section">
           <label>Select Product:</label>
@@ -246,8 +284,10 @@ function Prices() {
             <thead>
               <tr>
                 <th>Product</th>
+                <th>Channel</th>
                 <th>Purchase Price</th>
                 <th>Sales Price</th>
+                <th>MRP</th>
                 <th>Currency</th>
                 <th>Effective Date</th>
                 <th>Status</th>
@@ -258,7 +298,7 @@ function Prices() {
             <tbody>
               {prices.length === 0 ? (
                 <tr>
-                  <td colSpan={viewMode === 'product' ? 8 : 7} className="no-data">
+                  <td colSpan={viewMode === 'product' ? 10 : 9} className="no-data">
                     No prices found
                   </td>
                 </tr>
@@ -271,8 +311,10 @@ function Prices() {
                         <span className="sku"> ({price.product.sku})</span>
                       )}
                     </td>
+                    <td>{price.salesChannel?.name || 'Default'}</td>
                     <td>{formatCurrency(price.purchasePrice)}</td>
                     <td>{formatCurrency(price.salesPrice)}</td>
+                    <td>{price.mrp != null ? formatCurrency(price.mrp) : '-'}</td>
                     <td>{price.currency}</td>
                     <td>{new Date(price.effectiveDate).toLocaleDateString()}</td>
                     <td>
@@ -360,6 +402,33 @@ function Prices() {
                     required
                   />
                 </div>
+                <div className="form-group">
+                  <label>MRP (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    name="mrp"
+                    value={formData.mrp}
+                    onChange={handleInputChange}
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Sales Channel</label>
+                <select
+                  name="salesChannel"
+                  value={formData.salesChannel}
+                  onChange={handleInputChange}
+                >
+                  <option value="">Default</option>
+                  {salesChannels.map((ch) => (
+                    <option key={ch._id} value={ch._id}>
+                      {ch.name} {ch.country && `(${ch.defaultCurrency || ch.country})`}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="form-row">
                 <div className="form-group">
@@ -370,6 +439,13 @@ function Prices() {
                     onChange={handleInputChange}
                   >
                     <option value="INR">INR (₹)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="CAD">CAD</option>
+                    <option value="AUD">AUD</option>
+                    <option value="JPY">JPY</option>
+                    <option value="MXN">MXN</option>
                   </select>
                 </div>
                 <div className="form-group">
@@ -390,7 +466,7 @@ function Prices() {
                     checked={formData.isActive}
                     onChange={handleInputChange}
                   />
-                  Active (will deactivate other active prices for this product)
+                  Active (will deactivate other active prices for this product+channel)
                 </label>
               </div>
               <div className="form-group">

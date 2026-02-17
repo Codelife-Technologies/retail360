@@ -5,6 +5,7 @@ const Purchase = require('../models/Purchase');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const Price = require('../models/Price');
 const { paginate } = require('../utils/pagination');
+const { requirePermission } = require('../middleware/auth');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -31,7 +32,7 @@ async function generatePurchaseNumber() {
 }
 
 // GET all purchases (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('purchases.view'), async (req, res) => {
   try {
     const { supplier, paymentStatus, page, limit } = req.query;
     const query = {};
@@ -72,7 +73,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET single purchase
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('purchases.view'), async (req, res) => {
   try {
     const purchase = await Purchase.findById(req.params.id)
       .populate('supplier')
@@ -89,7 +90,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create purchase
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('purchases.create'), async (req, res) => {
   try {
     // Calculate item totals
     const items = req.body.items.map(item => ({
@@ -162,7 +163,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update purchase
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('purchases.update'), async (req, res) => {
   try {
     // Calculate item totals if items are being updated
     if (req.body.items) {
@@ -193,7 +194,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE purchase
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('purchases.delete'), async (req, res) => {
   try {
     const purchase = await Purchase.findById(req.params.id);
     if (!purchase) {
@@ -220,7 +221,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET Excel template
-router.get('/template', (req, res) => {
+router.get('/template', requirePermission('purchases.view'), (req, res) => {
   try {
     const headers = [
       { key: 'supplier', label: 'Supplier Name *' },

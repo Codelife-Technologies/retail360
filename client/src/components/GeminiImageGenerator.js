@@ -19,6 +19,10 @@ function GeminiImageGenerator() {
   const [regeneratingImages, setRegeneratingImages] = useState({}); // Track regenerating state per image order
   const [selectedPrompts, setSelectedPrompts] = useState(new Set()); // Track selected prompts for generation
   const [selectedGeneratedImages, setSelectedGeneratedImages] = useState(new Set()); // Track selected generated images for bulk operations
+  const [provider, setProvider] = useState('gemini'); // AI provider: 'gemini' or 'openai'
+  const [openaiModel, setOpenaiModel] = useState('dall-e-3'); // OpenAI model: 'dall-e-2' or 'dall-e-3'
+  const [openaiSize, setOpenaiSize] = useState('1024x1024'); // Image size for OpenAI
+  const [openaiQuality, setOpenaiQuality] = useState('standard'); // Quality for OpenAI: 'standard' or 'hd'
 
   useEffect(() => {
     fetchCategories();
@@ -155,6 +159,14 @@ function GeminiImageGenerator() {
           formData.append('subcategoryId', selectedSubcategory);
           formData.append('prompt', promptObj.prompt);
           formData.append('order', promptObj.order.toString());
+          formData.append('provider', provider);
+          
+          // Add OpenAI-specific parameters if using OpenAI
+          if (provider === 'openai' || provider === 'dall-e' || provider === 'chatgpt') {
+            formData.append('model', openaiModel);
+            formData.append('size', openaiSize);
+            formData.append('quality', openaiQuality);
+          }
 
           const response = await geminiAPI.regenerateImage(formData);
           return response.data.success ? response.data.image : null;
@@ -355,6 +367,14 @@ function GeminiImageGenerator() {
       formData.append('subcategoryId', selectedSubcategory);
       formData.append('prompt', image.prompt);
       formData.append('order', image.order.toString());
+      formData.append('provider', provider);
+      
+      // Add OpenAI-specific parameters if using OpenAI
+      if (provider === 'openai' || provider === 'dall-e' || provider === 'chatgpt') {
+        formData.append('model', openaiModel);
+        formData.append('size', openaiSize);
+        formData.append('quality', openaiQuality);
+      }
 
       const response = await geminiAPI.regenerateImage(formData);
 
@@ -392,13 +412,73 @@ function GeminiImageGenerator() {
   return (
     <div className="gemini-image-generator-container">
       <div className="gemini-header">
-        <h1>Gemini Image Generator</h1>
-        <p>Generate 6-10 product images using AI based on uploaded images and subcategory prompts</p>
+        <h1>AI Image Generator</h1>
+        <p>Generate 6-10 product images using AI (Gemini or DALL-E) based on uploaded images and subcategory prompts</p>
       </div>
 
       <div className="gemini-content">
         <div className="gemini-section">
-          <h2>1. Select Category and Subcategory</h2>
+          <h2>1. Select AI Provider</h2>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Image Generation Provider *</label>
+              <select
+                value={provider}
+                onChange={(e) => setProvider(e.target.value)}
+              >
+                <option value="gemini">Google Gemini</option>
+                <option value="openai">OpenAI DALL-E (ChatGPT)</option>
+              </select>
+              <small className="form-hint">
+                {provider === 'gemini' 
+                  ? 'Uses Google Gemini for image generation' 
+                  : 'Uses OpenAI DALL-E for image generation'}
+              </small>
+            </div>
+            {(provider === 'openai' || provider === 'dall-e' || provider === 'chatgpt') && (
+              <>
+                <div className="form-group">
+                  <label>Model</label>
+                  <select
+                    value={openaiModel}
+                    onChange={(e) => setOpenaiModel(e.target.value)}
+                  >
+                    <option value="dall-e-3">DALL-E 3 (Recommended)</option>
+                    <option value="dall-e-2">DALL-E 2</option>
+                  </select>
+                </div>
+                {openaiModel === 'dall-e-3' && (
+                  <>
+                    <div className="form-group">
+                      <label>Size</label>
+                      <select
+                        value={openaiSize}
+                        onChange={(e) => setOpenaiSize(e.target.value)}
+                      >
+                        <option value="1024x1024">1024x1024 (Square)</option>
+                        <option value="1792x1024">1792x1024 (Landscape)</option>
+                        <option value="1024x1792">1024x1792 (Portrait)</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Quality</label>
+                      <select
+                        value={openaiQuality}
+                        onChange={(e) => setOpenaiQuality(e.target.value)}
+                      >
+                        <option value="standard">Standard</option>
+                        <option value="hd">HD (Higher Quality)</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="gemini-section">
+          <h2>2. Select Category and Subcategory</h2>
           <div className="form-row">
             <div className="form-group">
               <label>Category *</label>
@@ -504,7 +584,7 @@ function GeminiImageGenerator() {
         </div>
 
         <div className="gemini-section">
-          <h2>2. Upload Image</h2>
+          <h2>3. Upload Image</h2>
           <div className="form-group">
             <label>Product Image *</label>
             <input
@@ -521,7 +601,7 @@ function GeminiImageGenerator() {
         </div>
 
         <div className="gemini-section">
-          <h2>3. Generate Images</h2>
+          <h2>4. Generate Images</h2>
           <div className="generate-actions">
             <button
               className="btn-primary btn-generate"

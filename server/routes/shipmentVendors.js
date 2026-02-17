@@ -6,6 +6,7 @@ const logger = require('../utils/logger');
 const { paginate } = require('../utils/pagination');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
+const { requirePermission } = require('../middleware/auth');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -13,7 +14,7 @@ const upload = multer({
 });
 
 // GET all vendors (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('shipmentVendors.view'), async (req, res) => {
   try {
     const { isActive, serviceType, search, page, limit } = req.query;
     const query = {};
@@ -52,7 +53,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET single vendor
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('shipmentVendors.view'), async (req, res) => {
   try {
     const vendor = await ShipmentVendor.findById(req.params.id);
     if (!vendor) {
@@ -66,7 +67,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create vendor
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('shipmentVendors.create'), async (req, res) => {
   try {
     const vendor = new ShipmentVendor(req.body);
     await vendor.save();
@@ -78,7 +79,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update vendor
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('shipmentVendors.update'), async (req, res) => {
   try {
     const vendor = await ShipmentVendor.findByIdAndUpdate(
       req.params.id,
@@ -96,7 +97,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE vendor (soft delete)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('shipmentVendors.delete'), async (req, res) => {
   try {
     const vendor = await ShipmentVendor.findByIdAndUpdate(
       req.params.id,
@@ -114,7 +115,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET Excel template
-router.get('/template', (req, res) => {
+router.get('/template', requirePermission('shipmentVendors.view'), (req, res) => {
   try {
     const headers = [
       { key: 'code', label: 'Code *' },
@@ -140,7 +141,7 @@ router.get('/template', (req, res) => {
 });
 
 // POST import shipment vendors from Excel
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', requirePermission('shipmentVendors.create'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
