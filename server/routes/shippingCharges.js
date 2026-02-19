@@ -16,24 +16,18 @@ function calculateShippingCost(charge, totalWeight) {
   if (!charge || totalWeight <= 0) return 0;
   
   let calculatedCharge = 0;
-  
   if (charge.chargeType === 'perKg') {
     calculatedCharge = totalWeight * (charge.perKgRate || 0);
   } else if (charge.chargeType === 'weightRange') {
-    // Find matching weight range
     const matchingRange = charge.weightRanges.find(range => {
       const maxWeight = range.maxWeight !== null ? range.maxWeight : Infinity;
       return totalWeight >= range.minWeight && totalWeight <= maxWeight;
     });
-    
-    if (matchingRange) {
-      calculatedCharge = matchingRange.rate;
-    }
+    if (matchingRange) calculatedCharge = matchingRange.rate;
   } else if (charge.chargeType === 'flat') {
     calculatedCharge = charge.flatRate || 0;
   }
   
-  // Apply minimum charge
   return Math.max(calculatedCharge, charge.minCharge || 0);
 }
 

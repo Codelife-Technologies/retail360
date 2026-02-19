@@ -8,6 +8,7 @@ import Purchases from './components/Purchases';
 import Locations from './components/Locations';
 import Stock from './components/Stock';
 import Prices from './components/Prices';
+import PriceMasters from './components/PriceMasters';
 import SalesChannels from './components/SalesChannels';
 import SalesLocations from './components/SalesLocations';
 import Sales from './components/Sales';
@@ -38,6 +39,7 @@ const MENU_CONFIG = [
       { tab: 'suppliers', label: 'Suppliers', icon: '🏢', permission: 'suppliers.view' },
       { tab: 'locations', label: 'Locations', icon: '🏭', permission: 'locations.view' },
       { tab: 'prices', label: 'Prices', icon: '💵', permission: 'prices.view' },
+      { tab: 'price-masters', label: 'Price Master', icon: '📋', permission: 'priceMasters.view' },
       { tab: 'sales-channels', label: 'Sales Channels', icon: '📡', permission: 'salesChannels.view' },
       { tab: 'sales-locations', label: 'Sales Locations', icon: '📍', permission: 'salesLocations.view' },
       { tab: 'shipment-vendors', label: 'Shipment Vendors', icon: '🚚', permission: 'shipmentVendors.view' },
@@ -111,6 +113,7 @@ function App() {
       locations: 'locations.view',
       stock: 'stock.view',
       prices: 'prices.view',
+      'price-masters': 'priceMasters.view',
       'sales-channels': 'salesChannels.view',
       'sales-locations': 'salesLocations.view',
       sales: 'sales.view',
@@ -145,6 +148,8 @@ function App() {
         return <Stock />;
       case 'prices':
         return <Prices />;
+      case 'price-masters':
+        return <PriceMasters />;
       case 'sales-channels':
         return <SalesChannels />;
       case 'sales-locations':

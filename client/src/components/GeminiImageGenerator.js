@@ -151,17 +151,17 @@ function GeminiImageGenerator() {
         .filter(p => selectedPrompts.has(p.order))
         .sort((a, b) => a.order - b.order);
       
-      // Generate images for selected prompts only
-      const generationPromises = selectedPromptObjects.map(async (promptObj) => {
+      // Generate images sequentially (same file sent per request - parallel causes "No image file uploaded")
+      const results = [];
+      for (const promptObj of selectedPromptObjects) {
         try {
           const formData = new FormData();
           formData.append('image', selectedImage);
           formData.append('subcategoryId', selectedSubcategory);
           formData.append('prompt', promptObj.prompt);
-          formData.append('order', promptObj.order.toString());
+          formData.append('order', String(promptObj.order));
           formData.append('provider', provider);
           
-          // Add OpenAI-specific parameters if using OpenAI
           if (provider === 'openai' || provider === 'dall-e' || provider === 'chatgpt') {
             formData.append('model', openaiModel);
             formData.append('size', openaiSize);
@@ -169,19 +169,17 @@ function GeminiImageGenerator() {
           }
 
           const response = await geminiAPI.regenerateImage(formData);
-          return response.data.success ? response.data.image : null;
+          results.push(response.data.success ? response.data.image : null);
         } catch (error) {
           logger.error('Error generating image', { error: error.message, order: promptObj.order });
-          return {
+          results.push({
             order: promptObj.order,
             prompt: promptObj.prompt,
             success: false,
             error: error.response?.data?.error || error.message
-          };
+          });
         }
-      });
-
-      const results = await Promise.all(generationPromises);
+      }
       
       // Merge with existing generated images, replacing/adding new ones
       setGeneratedImages(prev => {
@@ -206,7 +204,11 @@ function GeminiImageGenerator() {
       });
 
       const successful = results.filter(r => r && r.url).length;
-      alert(`Successfully generated ${successful} out of ${results.length} selected images`);
+      const failed = results.filter(r => r && r.error);
+      const msg = failed.length > 0
+        ? `Generated ${successful} of ${results.length}. Failed: ${failed.map(f => `order ${f.order} (${f.error})`).join('; ')}`
+        : `Successfully generated ${successful} out of ${results.length} selected images`;
+      alert(msg);
     } catch (error) {
       logger.error('Error generating images', { error: error.message });
       alert(error.response?.data?.error || error.message || 'Failed to generate images');

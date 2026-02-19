@@ -99,24 +99,17 @@ shipmentSchema.pre('save', async function(next) {
       
       if (charge) {
         let calculatedCharge = 0;
-        
         if (charge.chargeType === 'perKg') {
           calculatedCharge = this.totalWeight * (charge.perKgRate || 0);
         } else if (charge.chargeType === 'weightRange') {
-          // Find matching weight range
           const matchingRange = charge.weightRanges.find(range => {
             const maxWeight = range.maxWeight !== null ? range.maxWeight : Infinity;
             return this.totalWeight >= range.minWeight && this.totalWeight <= maxWeight;
           });
-          
-          if (matchingRange) {
-            calculatedCharge = matchingRange.rate;
-          }
+          if (matchingRange) calculatedCharge = matchingRange.rate;
         } else if (charge.chargeType === 'flat') {
           calculatedCharge = charge.flatRate || 0;
         }
-        
-        // Apply minimum charge
         this.shippingCharges = Math.max(calculatedCharge, charge.minCharge || 0);
       }
     }

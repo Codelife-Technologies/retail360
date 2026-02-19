@@ -117,6 +117,17 @@ export const pricesAPI = {
   import: (formData) => api.post('/prices/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
+// Price Masters API
+export const priceMastersAPI = {
+  getAll: (params) => api.get('/price-masters', { params }),
+  getById: (id) => api.get(`/price-masters/${id}`),
+  getByLocation: (locationId) => api.get(`/price-masters/location/${locationId}`),
+  lookup: (data) => api.post('/price-masters/lookup', data),
+  create: (data) => api.post('/price-masters', data),
+  update: (id, data) => api.put(`/price-masters/${id}`, data),
+  delete: (id) => api.delete(`/price-masters/${id}`),
+};
+
 // Sales Channels API
 export const salesChannelsAPI = {
   getAll: (params) => api.get('/sales-channels', { params }),
@@ -219,26 +230,33 @@ export const subcategoriesAPI = {
   deleteImagePrompt: (id, promptId) => api.delete(`/subcategories/${id}/image-prompts/${promptId}`),
 };
 
-// Gemini API
+// Gemini API - use upload instance (no Content-Type default) so FormData is sent correctly
+const uploadApi = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 300000,
+});
+uploadApi.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+uploadApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.dispatchEvent(new CustomEvent('auth-logout'));
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const geminiAPI = {
-  generateImages: (formData) => {
-    const uploadApi = axios.create({
-      baseURL: API_BASE_URL,
-    });
-    return uploadApi.post('/gemini/generate-images', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000, // 5 minutes timeout
-    });
-  },
-  regenerateImage: (formData) => {
-    const uploadApi = axios.create({
-      baseURL: API_BASE_URL,
-    });
-    return uploadApi.post('/gemini/regenerate-image', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000, // 5 minutes timeout
-    });
-  },
+  generateImages: (formData) => uploadApi.post('/gemini/generate-images', formData),
+  regenerateImage: (formData) => uploadApi.post('/gemini/regenerate-image', formData),
 };
 
 // Reports API

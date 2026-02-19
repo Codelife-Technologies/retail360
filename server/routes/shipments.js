@@ -33,14 +33,12 @@ async function calculateShippingCostForItems(shippingChargeId, items) {
   const charge = await ShippingCharge.findById(shippingChargeId);
   if (!charge) return 0;
   
-  // Calculate total weight
   const totalWeight = items.reduce((sum, item) => {
     const itemWeight = item.weight || 0;
     return sum + (itemWeight * item.quantity);
   }, 0);
   
   let calculatedCharge = 0;
-  
   if (charge.chargeType === 'perKg') {
     calculatedCharge = totalWeight * (charge.perKgRate || 0);
   } else if (charge.chargeType === 'weightRange') {
@@ -48,10 +46,7 @@ async function calculateShippingCostForItems(shippingChargeId, items) {
       const maxWeight = range.maxWeight !== null ? range.maxWeight : Infinity;
       return totalWeight >= range.minWeight && totalWeight <= maxWeight;
     });
-    
-    if (matchingRange) {
-      calculatedCharge = matchingRange.rate;
-    }
+    if (matchingRange) calculatedCharge = matchingRange.rate;
   } else if (charge.chargeType === 'flat') {
     calculatedCharge = charge.flatRate || 0;
   }
@@ -115,7 +110,7 @@ router.get('/', requirePermission('shipments.view'), async (req, res) => {
     } else {
       const shipments = await Shipment.find(query)
         .populate('shipmentVendor', 'name code')
-        .populate('shippingCharge', 'name chargeType')
+        .populate('shippingCharge', 'name chargeType type')
         .populate('fromLocation', 'name code')
         .populate('toLocation', 'name code')
         .populate('items.product', 'name sku weight')
@@ -217,7 +212,7 @@ router.post('/', requirePermission('shipments.create'), async (req, res) => {
     
     const populatedShipment = await Shipment.findById(shipment._id)
       .populate('shipmentVendor', 'name code')
-      .populate('shippingCharge', 'name chargeType')
+      .populate('shippingCharge', 'name chargeType type')
       .populate('fromLocation', 'name code')
       .populate('toLocation', 'name code')
       .populate('items.product', 'name sku weight');
@@ -313,7 +308,7 @@ router.put('/:id', requirePermission('shipments.update'), async (req, res) => {
       { new: true, runValidators: true }
     )
       .populate('shipmentVendor', 'name code')
-      .populate('shippingCharge', 'name chargeType')
+      .populate('shippingCharge', 'name chargeType type')
       .populate('fromLocation', 'name code')
       .populate('toLocation', 'name code')
       .populate('items.product', 'name sku weight');

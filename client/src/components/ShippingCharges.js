@@ -13,6 +13,7 @@ function ShippingCharges() {
     shipmentVendor: '',
     name: '',
     description: '',
+    type: 'outward',
     chargeType: 'perKg',
     perKgRate: '',
     flatRate: '',
@@ -64,9 +65,10 @@ function ShippingCharges() {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
+    const numFields = ['perKgRate', 'flatRate', 'minCharge'];
     setFormData((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : (name === 'perKgRate' || name === 'flatRate' || name === 'minCharge') ? parseFloat(value) || '' : value,
+      [name]: type === 'checkbox' ? checked : numFields.includes(name) ? parseFloat(value) || '' : value,
     }));
   };
 
@@ -146,6 +148,7 @@ function ShippingCharges() {
       shipmentVendor: charge.shipmentVendor?._id || charge.shipmentVendor || '',
       name: charge.name || '',
       description: charge.description || '',
+      type: charge.type || 'outward',
       chargeType: charge.chargeType || 'perKg',
       perKgRate: charge.perKgRate || '',
       flatRate: charge.flatRate || '',
@@ -182,6 +185,7 @@ function ShippingCharges() {
       shipmentVendor: '',
       name: '',
       description: '',
+      type: 'outward',
       chargeType: 'perKg',
       perKgRate: '',
       flatRate: '',
@@ -217,6 +221,7 @@ function ShippingCharges() {
               <tr>
                 <th>Vendor</th>
                 <th>Name</th>
+                <th>Type</th>
                 <th>Charge Type</th>
                 <th>Rate</th>
                 <th>Min Charge</th>
@@ -227,7 +232,7 @@ function ShippingCharges() {
             <tbody>
               {charges.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="no-data">
+                  <td colSpan="8" className="no-data">
                     No shipping charges found
                   </td>
                 </tr>
@@ -236,6 +241,11 @@ function ShippingCharges() {
                   <tr key={charge._id}>
                     <td>{charge.shipmentVendor?.name || '-'}</td>
                     <td>{charge.name}</td>
+                    <td>
+                      <span className={`type-badge type-${charge.type || 'outward'}`}>
+                        {charge.type === 'inward' ? 'Inward' : 'Outward'}
+                      </span>
+                    </td>
                     <td>
                       <span className="charge-type-badge">{charge.chargeType}</span>
                     </td>
@@ -317,6 +327,18 @@ function ShippingCharges() {
                 />
               </div>
               <div className="form-row">
+                <div className="form-group">
+                  <label>Type *</label>
+                  <select
+                    name="type"
+                    value={formData.type}
+                    onChange={handleInputChange}
+                    required
+                  >
+                    <option value="outward">Outward</option>
+                    <option value="inward">Inward</option>
+                  </select>
+                </div>
                 <div className="form-group">
                   <label>Charge Type *</label>
                   <select

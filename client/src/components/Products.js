@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { productsAPI, pricesAPI, categoriesAPI, subcategoriesAPI, unitsAPI } from '../services/api';
 import logger from '../utils/logger';
 import Pagination from './Pagination';
@@ -56,6 +56,7 @@ function Products() {
     unit: 'pcs',
   });
   const [uploadedFiles, setUploadedFiles] = useState([]); // Array of File objects
+  const uploadedFilesRef = useRef([]); // Sync ref for validation (avoids stale closure when submit runs before state flush)
   const [imagePreviews, setImagePreviews] = useState([]); // Array of preview URLs
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
@@ -263,7 +264,9 @@ function Products() {
     }
     
     if (validFiles.length > 0) {
-      setUploadedFiles((prev) => [...prev, ...validFiles]);
+      const next = [...uploadedFilesRef.current, ...validFiles];
+      uploadedFilesRef.current = next;
+      setUploadedFiles(next);
       
       // Create previews
       const newPreviews = validFiles.map(file => ({
@@ -313,17 +316,21 @@ function Products() {
       if (preview && preview.preview) {
         URL.revokeObjectURL(preview.preview);
       }
+      const current = uploadedFilesRef.current.length > 0 ? uploadedFilesRef.current : uploadedFiles;
+      const next = current.filter((_, i) => i !== index);
+      uploadedFilesRef.current = next;
       setImagePreviews((prev) => prev.filter((_, i) => i !== index));
-      setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+      setUploadedFiles(next);
     }
   };
 
   const handleImageUpload = async (productId) => {
-    if (uploadedFiles.length === 0) return [];
+    const filesToUpload = uploadedFilesRef.current.length > 0 ? uploadedFilesRef.current : uploadedFiles;
+    if (filesToUpload.length === 0) return [];
     
     try {
       const uploadFormData = new FormData();
-      uploadedFiles.forEach((file) => {
+      filesToUpload.forEach((file) => {
         uploadFormData.append('images', file);
       });
       
@@ -338,6 +345,7 @@ function Products() {
         });
         
         // Clear uploaded files
+        uploadedFilesRef.current = [];
         setUploadedFiles([]);
         
         // Update previews to show uploaded images
@@ -385,7 +393,7 @@ function Products() {
       if (!validDim(pd.length) || !validDim(pd.width) || !validDim(pd.height)) missing.push('Product Dimensions');
       const pk = formData.packageDimensionCm || {};
       if (!validDim(pk.length) || !validDim(pk.width) || !validDim(pk.height)) missing.push('Package Dimensions');
-      const hasImages = (imagePreviews.length > 0) || (uploadedFiles.length > 0) || (formData.images?.filter(i => i?.trim()).length > 0);
+      const hasImages = (imagePreviews.length > 0) || (uploadedFilesRef.current.length > 0) || (formData.images?.filter(i => i?.trim()).length > 0);
       if (!hasImages) missing.push('At least one Image');
       if (!formData.unit?.trim()) missing.push('Unit');
       if (missing.length > 0) {
@@ -439,7 +447,7 @@ function Products() {
       }
       
       // Upload images if any files were selected
-      if (uploadedFiles.length > 0 && productId) {
+      if ((uploadedFilesRef.current.length > 0 || uploadedFiles.length > 0) && productId) {
         const uploadedPaths = await handleImageUpload(productId);
         // Add uploaded paths to submitData for final update
         if (uploadedPaths.length > 0) {
@@ -530,6 +538,7 @@ function Products() {
       setImagePreviews([]);
     }
     
+    uploadedFilesRef.current = [];
     setUploadedFiles([]);
     setShowModal(true);
   };
@@ -588,6 +597,7 @@ function Products() {
       keywords: [],
       unit: 'pcs',
     });
+    uploadedFilesRef.current = [];
     setUploadedFiles([]);
     setImagePreviews([]);
     setKeywordInput('');

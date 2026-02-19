@@ -350,6 +350,7 @@ function Shipments() {
               <tr>
                 <th>Shipment Number</th>
                 <th>Vendor</th>
+                <th>Direction</th>
                 <th>From Location</th>
                 <th>To Location</th>
                 <th>Items</th>
@@ -363,7 +364,7 @@ function Shipments() {
             <tbody>
               {shipments.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="no-data">
+                  <td colSpan="11" className="no-data">
                     No shipments found
                   </td>
                 </tr>
@@ -372,6 +373,11 @@ function Shipments() {
                   <tr key={shipment._id}>
                     <td>{shipment.shipmentNumber}</td>
                     <td>{shipment.shipmentVendor?.name || '-'}</td>
+                    <td>
+                      <span className={`type-badge type-${shipment.shippingCharge?.type || 'outward'}`}>
+                        {shipment.shippingCharge?.type === 'inward' ? 'Inward' : 'Outward'}
+                      </span>
+                    </td>
                     <td>{shipment.fromLocation?.name || '-'}</td>
                     <td>{shipment.toLocation?.name || '-'}</td>
                     <td>{shipment.items?.length || 0} items</td>
@@ -439,7 +445,7 @@ function Shipments() {
                     <option value="">Select Charge Structure</option>
                     {shippingCharges.map((charge) => (
                       <option key={charge._id} value={charge._id}>
-                        {charge.name}
+                        {charge.name} ({charge.type === 'inward' ? 'Inward' : 'Outward'})
                       </option>
                     ))}
                   </select>

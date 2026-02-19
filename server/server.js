@@ -64,6 +64,8 @@ try {
   logger.backend.info('Stock routes loaded');
   const pricesRoutes = require('./routes/prices');
   logger.backend.info('Prices routes loaded');
+  const priceMastersRoutes = require('./routes/priceMasters');
+  logger.backend.info('Price masters routes loaded');
   const salesChannelsRoutes = require('./routes/salesChannels');
   logger.backend.info('Sales channels routes loaded');
   const salesLocationsRoutes = require('./routes/salesLocations');
@@ -111,6 +113,7 @@ try {
   app.use('/api/locations', locationsRoutes);
   app.use('/api/stock', stockRoutes);
   app.use('/api/prices', pricesRoutes);
+  app.use('/api/price-masters', priceMastersRoutes);
   app.use('/api/sales-channels', salesChannelsRoutes);
   app.use('/api/sales-locations', salesLocationsRoutes);
   app.use('/api/sales', salesRoutes);
