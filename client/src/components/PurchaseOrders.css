@@ -18,6 +18,23 @@
   color: #333;
 }
 
+.po-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.po-filters input {
+  flex: 1;
+  min-width: 220px;
+  max-width: 480px;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
 .loading {
   padding: 2rem;
   text-align: center;
@@ -154,7 +171,62 @@
 }
 
 .modal-content.large {
-  max-width: 900px;
+  max-width: 1200px;
+}
+
+.po-form-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  background: #fafafa;
+}
+
+.po-form-section legend {
+  font-weight: 600;
+  color: #6B3894;
+  padding: 0 0.5rem;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.input-error {
+  border-color: #ef4444 !important;
+}
+
+.field-error {
+  color: #ef4444;
+  font-size: 0.75rem;
+}
+
+.po-tax-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.po-items-header-extended,
+.po-item-row-extended {
+  grid-template-columns: 2fr 0.8fr 0.6fr 0.5fr 0.8fr 0.5fr 0.5fr 0.9fr auto;
+}
+
+.po-detail-items-table {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.po-detail-items-table th,
+.po-detail-items-table td {
+  white-space: nowrap;
+}
+
+.approval-row {
+  border-top: 1px dashed #e5e7eb;
+  padding-top: 0.75rem;
+  margin-top: 0.5rem;
 }
 
 .modal-content h2 {
@@ -209,17 +281,47 @@
 }
 
 .add-item-form {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
+  display: flex;
   gap: 0.5rem;
   margin-bottom: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.add-item-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 160px;
+}
+
+.add-item-field-sm {
+  flex: 0 0 130px;
+  min-width: 110px;
+}
+
+.add-item-field label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+  font-weight: 600;
 }
 
 .add-item-form select,
 .add-item-form input {
-  padding: 0.5rem;
+  width: 100%;
+  padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.add-item-field input:disabled {
+  background: #f3f4f6;
+  font-weight: 600;
+  color: #111827;
 }
 
 .btn-add-item {
@@ -241,14 +343,39 @@
   gap: 0.5rem;
 }
 
+.items-list-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 0.8fr auto;
+  gap: 1rem;
+  padding: 0 0.75rem 0.25rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+  font-weight: 600;
+}
+
 .item-row {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr auto;
+  grid-template-columns: 2fr 1fr 1fr 1fr 0.8fr auto;
   gap: 1rem;
   padding: 0.75rem;
   background: white;
   border-radius: 6px;
   align-items: center;
+}
+
+.item-tax-rate {
+  font-size: 0.8rem;
+  color: #6B3894;
+  font-weight: 600;
+}
+
+.form-hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: #666;
+  font-size: 0.75rem;
 }
 
 .btn-remove-item {
@@ -293,5 +420,183 @@
 
 .form-actions button[type="button"]:hover {
   background: #d1d5db;
+}
+
+.po-item-thumbnail {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border, #e5e7eb);
+  background: #f3f4f6;
+  display: block;
+}
+
+.po-auto-vendor-hint {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  color: #1e40af;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.po-master-hint {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.85rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  color: #166534;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.po-create-choice-modal {
+  max-width: 640px;
+}
+
+.po-create-choice-subtitle {
+  margin: 0 0 1.25rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.po-create-choice-empty {
+  color: #6b7280;
+  margin: 0 0 1rem;
+}
+
+.po-create-choice-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.po-create-choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.po-create-choice-card:hover {
+  border-color: #6366f1;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12);
+}
+
+.po-create-choice-card strong {
+  color: #111827;
+  font-size: 1rem;
+}
+
+.po-create-choice-card span {
+  color: #6b7280;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.po-source-badge {
+  display: inline-block;
+  margin-left: 0.75rem;
+  padding: 0.25rem 0.65rem;
+  background: #f3e8ff;
+  color: #7c3aed;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.po-vendor-pending-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.po-source-badge.po-vendor-pending-badge {
+  background: #fef3c7;
+  color: #92400e;
+  border: none;
+}
+
+.po-vendor-split-summary {
+  margin-bottom: 1rem;
+}
+
+.po-vendor-info,
+.po-vendor-warning {
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+}
+
+.po-vendor-info {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.po-vendor-warning {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.po-vendor-group {
+  margin-bottom: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.po-vendor-group-unassigned {
+  border-color: #fecaca;
+}
+
+.po-vendor-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.po-vendor-group-unassigned .po-vendor-group-header {
+  background: #fef2f2;
+  border-bottom-color: #fecaca;
+}
+
+.po-vendor-group-name {
+  font-weight: 600;
+  color: #374151;
+}
+
+.po-vendor-group-count {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+@media (max-width: 640px) {
+  .po-create-choice-cards {
+    grid-template-columns: 1fr;
+  }
 }
 

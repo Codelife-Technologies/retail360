@@ -1,9 +1,246 @@
 import React, { useState, useEffect } from 'react';
-import { productsAPI, pricesAPI, categoriesAPI, subcategoriesAPI } from '../services/api';
+import { productsAPI, pricesAPI, categoriesAPI, subcategoriesAPI, suppliersAPI } from '../services/api';
 import logger from '../utils/logger';
 import Pagination from './Pagination';
 import ExcelUpload from './ExcelUpload';
+import ProductDetailsModal from './ProductDetailsModal';
+import {
+  PRODUCT_IMAGE_PLACEHOLDER,
+  getProductDisplayName,
+  getProductThumbnail,
+  normalizeProductSupplierLinks,
+} from '../utils/productDisplayUtils';
 import './Products.css';
+
+function ProductInfoCell({ product, onView }) {
+  const displayName = getProductDisplayName(product);
+  const thumbnailSrc = getProductThumbnail(product);
+  const productUrl = product.productUrl?.trim();
+  const clickable = typeof onView === 'function';
+
+  const handleView = () => {
+    if (clickable) onView(product);
+  };
+
+  const handleKeyDown = (e) => {
+    if (clickable && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      onView(product);
+    }
+  };
+
+  return (
+    <div className={`product-info-cell${clickable ? ' product-info-cell-clickable' : ''}`}>
+      <img
+        className="product-thumbnail"
+        src={thumbnailSrc || PRODUCT_IMAGE_PLACEHOLDER}
+        alt={displayName || 'Product'}
+        loading="lazy"
+        onClick={handleView}
+        onError={(e) => {
+          e.target.onerror = null;
+          e.target.src = PRODUCT_IMAGE_PLACEHOLDER;
+        }}
+      />
+      <div className="product-info-text">
+        <div className="product-title-row">
+          {displayName ? (
+            clickable ? (
+              <span
+                className="product-title-link"
+                role="button"
+                tabIndex={0}
+                onClick={handleView}
+                onKeyDown={handleKeyDown}
+                title={`View details: ${displayName}`}
+              >
+                {displayName}
+              </span>
+            ) : (
+              <span className="product-title-text">{displayName}</span>
+            )
+          ) : (
+            <span className="product-title-text product-title-empty">—</span>
+          )}
+          {productUrl && (
+            <a
+              href={productUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="product-external-link"
+              title="Open product page in new tab"
+              onClick={(e) => e.stopPropagation()}
+            >
+              ↗
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductSuppliersModal({
+  product,
+  allSuppliers,
+  supplierLinks,
+  supplierPick,
+  loading,
+  saving,
+  onSupplierPickChange,
+  onAddSupplier,
+  onRemoveSupplier,
+  onUpdateLink,
+  onSave,
+  onClose,
+}) {
+  if (!product) return null;
+
+  const displayName = getProductDisplayName(product);
+  const linkedIds = new Set(supplierLinks.map((l) => l.supplierId));
+  const availableToAdd = allSuppliers.filter((s) => !linkedIds.has(s._id));
+
+  const resolveSupplier = (link) =>
+    link.supplier || allSuppliers.find((s) => s._id === link.supplierId);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content product-suppliers-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="detail-modal-header">
+          <div>
+            <h2>Product Suppliers</h2>
+            <p className="product-suppliers-subtitle">
+              {displayName || product.sku || 'Product'} — link one or more suppliers
+            </p>
+            {product.sku && (
+              <p className="product-suppliers-product-meta">
+                Product SKU: <strong>{product.sku}</strong>
+                {product.unit && (
+                  <>
+                    {' '}
+                    · Default unit: <strong>{product.unit}</strong>
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Close
+          </button>
+        </div>
+
+        {loading ? (
+          <p className="product-suppliers-loading">Loading suppliers…</p>
+        ) : (
+          <>
+            <div className="product-suppliers-add-row">
+              <select
+                value={supplierPick}
+                onChange={(e) => onSupplierPickChange(e.target.value)}
+                disabled={availableToAdd.length === 0}
+              >
+                <option value="">
+                  {availableToAdd.length === 0 ? 'All suppliers added' : 'Select supplier to add…'}
+                </option>
+                {availableToAdd.map((supplier) => (
+                  <option key={supplier._id} value={supplier._id}>
+                    {supplier.name}
+                    {supplier.supplierCode ? ` (${supplier.supplierCode})` : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={onAddSupplier}
+                disabled={!supplierPick}
+              >
+                Add Supplier
+              </button>
+            </div>
+
+            <div className="product-suppliers-list-section">
+              <h4>Linked Suppliers ({supplierLinks.length})</h4>
+              {supplierLinks.length === 0 ? (
+                <p className="product-suppliers-empty">No suppliers linked yet.</p>
+              ) : (
+                <ul className="product-suppliers-list">
+                  {supplierLinks.map((link) => {
+                    const supplier = resolveSupplier(link);
+                    if (!supplier) return null;
+                    return (
+                      <li key={link.supplierId} className="product-supplier-chip">
+                        <div className="product-supplier-chip-info">
+                          <strong>{supplier.name}</strong>
+                          {supplier.supplierCode && (
+                            <span className="product-supplier-code">{supplier.supplierCode}</span>
+                          )}
+                          <div className="product-supplier-sku-row">
+                            <label>
+                              SKU
+                              <input
+                                type="text"
+                                value={link.sku}
+                                onChange={(e) =>
+                                  onUpdateLink(link.supplierId, 'sku', e.target.value)
+                                }
+                                placeholder={product.sku || 'SKU'}
+                              />
+                            </label>
+                            <label>
+                              Unit
+                              <input
+                                type="text"
+                                value={link.unit}
+                                onChange={(e) =>
+                                  onUpdateLink(link.supplierId, 'unit', e.target.value)
+                                }
+                                placeholder={product.unit || 'pcs'}
+                              />
+                            </label>
+                          </div>
+                          {(supplier.contactPerson || supplier.phone || supplier.email) && (
+                            <small>
+                              {[supplier.contactPerson, supplier.phone, supplier.email]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </small>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-remove-supplier"
+                          onClick={() => onRemoveSupplier(link.supplierId)}
+                          title="Remove supplier"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="form-actions">
+              <button type="button" onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={onSave}
+                disabled={saving}
+              >
+                {saving ? 'Saving…' : 'Save Suppliers'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function Products() {
   const [products, setProducts] = useState([]);
@@ -13,6 +250,7 @@ function Products() {
   const [showModal, setShowModal] = useState(false);
   const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [viewingProduct, setViewingProduct] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 25,
@@ -27,6 +265,7 @@ function Products() {
     sku: '',
     ean: '',
     title: '',
+    productUrl: '',
     brandName: '',
     // Classification & Codes
     category: '',
@@ -58,6 +297,13 @@ function Products() {
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [keywordInput, setKeywordInput] = useState('');
+  const [showSuppliersModal, setShowSuppliersModal] = useState(false);
+  const [suppliersProduct, setSuppliersProduct] = useState(null);
+  const [allSuppliers, setAllSuppliers] = useState([]);
+  const [supplierLinks, setSupplierLinks] = useState([]);
+  const [supplierPick, setSupplierPick] = useState('');
+  const [suppliersModalLoading, setSuppliersModalLoading] = useState(false);
+  const [savingSuppliers, setSavingSuppliers] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -145,6 +391,43 @@ function Products() {
 
   const handleExcelUploadComplete = (result) => {
     fetchProducts(pagination.page, pagination.limit);
+    const imported = result?.imported || 0;
+    const updated = result?.updated || 0;
+    const failed = result?.failed || 0;
+    const skipped = result?.skipped || 0;
+    const totalRows = result?.totalRows || 0;
+
+    const summary = [
+      `Total Excel rows: ${totalRows}`,
+      `New products: ${imported}`,
+      `Updated: ${updated}`,
+      `Failed: ${failed}`,
+      skipped ? `Skipped (empty rows): ${skipped}` : null,
+      result?.categoriesCreated
+        ? `Categories auto-created: ${result.categoriesCreated}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    if (result?.errorSummary && Object.keys(result.errorSummary).length > 0) {
+      const topErrors = Object.entries(result.errorSummary)
+        .slice(0, 5)
+        .map(([msg, count]) => `• ${count}× ${msg}`)
+        .join('\n');
+      alert(`${summary}\n\nTop issues:\n${topErrors}\n\nSee upload dialog for row details.`);
+    } else if (failed > 0 && imported + updated === 0) {
+      const firstError = result?.errors?.[0]?.message || 'Check column headers and required fields.';
+      alert(`${summary}\n\n${firstError}`);
+      return;
+    } else if (failed > 0 || updated > 0) {
+      alert(summary);
+    }
+
+    if (failed > 0 && imported + updated === 0) {
+      return;
+    }
+
     setShowExcelUpload(false);
   };
 
@@ -354,10 +637,15 @@ function Products() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.sku?.trim()) {
+      alert('SKU is required');
+      return;
+    }
     try {
       // Clean up empty values
       const submitData = {
         ...formData,
+        sku: formData.sku.trim(),
         // Clear parentSkuOrAsin if variation is NO
         parentSkuOrAsin: formData.variation === 'YES' ? formData.parentSkuOrAsin : '',
         // Convert category and subCategory to ObjectIds or null
@@ -438,6 +726,7 @@ function Products() {
       sku: product.sku || '',
       ean: product.ean || '',
       title: product.title || '',
+      productUrl: product.productUrl || '',
       brandName: product.brandName || '',
       category: categoryId,
       subCategory: subcategoryId,
@@ -527,6 +816,7 @@ function Products() {
       sku: '',
       ean: '',
       title: '',
+      productUrl: '',
       brandName: '',
       category: '',
       subCategory: '',
@@ -564,6 +854,103 @@ function Products() {
     setShowModal(true);
   };
 
+  const handleViewProduct = (product) => {
+    setViewingProduct(product);
+  };
+
+  const closeDetailModal = () => {
+    setViewingProduct(null);
+  };
+
+  const handleEditFromDetail = (product) => {
+    setViewingProduct(null);
+    handleEdit(product);
+  };
+
+  const handleOpenSuppliers = async (product) => {
+    setShowSuppliersModal(true);
+    setSuppliersProduct(product);
+    setSupplierPick('');
+    setSuppliersModalLoading(true);
+    try {
+      const [productRes, suppliersRes] = await Promise.all([
+        productsAPI.getById(product._id),
+        suppliersAPI.getAll(),
+      ]);
+      setSuppliersProduct(productRes.data);
+      setAllSuppliers(suppliersRes.data || []);
+      setSupplierLinks(
+        normalizeProductSupplierLinks(productRes.data, suppliersRes.data || []).map((link) => ({
+          supplierId: link.supplierId,
+          sku: link.sku,
+          unit: link.unit,
+        }))
+      );
+    } catch (error) {
+      logger.error('Error loading product suppliers', { error: error.message });
+      alert('Failed to load suppliers');
+      setShowSuppliersModal(false);
+    } finally {
+      setSuppliersModalLoading(false);
+    }
+  };
+
+  const handleAddSupplierToProduct = () => {
+    if (!supplierPick || supplierLinks.some((l) => l.supplierId === supplierPick)) return;
+    setSupplierLinks((prev) => [
+      ...prev,
+      {
+        supplierId: supplierPick,
+        sku: suppliersProduct?.sku || '',
+        unit: suppliersProduct?.unit || 'pcs',
+      },
+    ]);
+    setSupplierPick('');
+  };
+
+  const handleRemoveSupplierFromProduct = (supplierId) => {
+    setSupplierLinks((prev) => prev.filter((l) => l.supplierId !== supplierId));
+  };
+
+  const handleUpdateSupplierLink = (supplierId, field, value) => {
+    setSupplierLinks((prev) =>
+      prev.map((link) =>
+        link.supplierId === supplierId ? { ...link, [field]: value } : link
+      )
+    );
+  };
+
+  const handleSaveProductSuppliers = async () => {
+    if (!suppliersProduct?._id) return;
+    setSavingSuppliers(true);
+    try {
+      await productsAPI.updateSuppliers(
+        suppliersProduct._id,
+        supplierLinks.map((link) => ({
+          supplier: link.supplierId,
+          sku: link.sku,
+          unit: link.unit,
+        }))
+      );
+      await fetchProducts(pagination.page, pagination.limit);
+      setShowSuppliersModal(false);
+      setSuppliersProduct(null);
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to save suppliers');
+    } finally {
+      setSavingSuppliers(false);
+    }
+  };
+
+  const closeSuppliersModal = () => {
+    setShowSuppliersModal(false);
+    setSuppliersProduct(null);
+    setSupplierLinks([]);
+    setSupplierPick('');
+  };
+
+  const getSupplierCount = (product) => (product.suppliers || []).length;
+
   return (
     <div className="products-container">
       <div className="products-header">
@@ -594,8 +981,8 @@ function Products() {
           <table className="products-table">
             <thead>
               <tr>
-                <th>Title/Name</th>
                 <th>SKU</th>
+                <th>Product</th>
                 <th>Brand</th>
                 <th>Category</th>
                 <th>Sub-Category</th>
@@ -614,8 +1001,14 @@ function Products() {
               ) : (
                 products.map((product) => (
                   <tr key={product._id}>
-                    <td>{product.title || '-'}</td>
-                    <td>{product.sku || '-'}</td>
+                    <td className="product-sku-cell">
+                      <span className={`product-sku-value${product.sku ? '' : ' product-sku-empty'}`}>
+                        {product.sku || '—'}
+                      </span>
+                    </td>
+                    <td className="product-cell">
+                      <ProductInfoCell product={product} onView={handleViewProduct} />
+                    </td>
                     <td>{product.brandName || '-'}</td>
                     <td>{product.category?.name || product.category || '-'}</td>
                     <td>{product.subCategory?.name || product.subCategory || '-'}</td>
@@ -628,10 +1021,11 @@ function Products() {
                     </td>
                     <td>
                       <button
-                        className="btn-edit"
-                        onClick={() => handleEdit(product)}
+                        className="btn-suppliers"
+                        onClick={() => handleOpenSuppliers(product)}
+                        title="Manage suppliers for this product"
                       >
-                        Edit
+                        Suppliers{getSupplierCount(product) > 0 ? ` (${getSupplierCount(product)})` : ''}
                       </button>
                       <button
                         className="btn-delete"
@@ -659,6 +1053,33 @@ function Products() {
         </div>
       )}
 
+      {viewingProduct && (
+        <ProductDetailsModal
+          product={viewingProduct}
+          price={productPrices[viewingProduct._id]}
+          priceCurrency="INR"
+          onClose={closeDetailModal}
+          onEdit={handleEditFromDetail}
+        />
+      )}
+
+      {showSuppliersModal && (
+        <ProductSuppliersModal
+          product={suppliersProduct}
+          allSuppliers={allSuppliers}
+          supplierLinks={supplierLinks}
+          supplierPick={supplierPick}
+          loading={suppliersModalLoading}
+          saving={savingSuppliers}
+          onSupplierPickChange={setSupplierPick}
+          onAddSupplier={handleAddSupplierToProduct}
+          onRemoveSupplier={handleRemoveSupplierFromProduct}
+          onUpdateLink={handleUpdateSupplierLink}
+          onSave={handleSaveProductSuppliers}
+          onClose={closeSuppliersModal}
+        />
+      )}
+
       {showExcelUpload && (
         <ExcelUpload
           moduleName="products"
@@ -675,6 +1096,14 @@ function Products() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2>{editingProduct ? 'Edit Product' : 'Add Product'}</h2>
+            {editingProduct && (
+              <div className="product-detail-preview">
+                <div className="product-detail-preview-sku">
+                  SKU: {formData.sku?.trim() || '—'}
+                </div>
+                <ProductInfoCell product={{ ...editingProduct, ...formData }} />
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="product-form">
               {/* Basic Information Section */}
               <div className="form-section">
@@ -719,12 +1148,14 @@ function Products() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>SKU</label>
+                    <label>SKU *</label>
                     <input
                       type="text"
                       name="sku"
                       value={formData.sku}
                       onChange={handleInputChange}
+                      required
+                      placeholder="e.g. PROD-001"
                     />
                   </div>
                   <div className="form-group">
@@ -748,6 +1179,16 @@ function Products() {
                   </div>
                 </div>
                 <div className="form-row">
+                  <div className="form-group">
+                    <label>Product URL</label>
+                    <input
+                      type="url"
+                      name="productUrl"
+                      value={formData.productUrl}
+                      onChange={handleInputChange}
+                      placeholder="https://example.com/product-page"
+                    />
+                  </div>
                   <div className="form-group">
                     <label>Brand Name</label>
                     <input

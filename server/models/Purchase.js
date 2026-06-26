@@ -33,6 +33,10 @@ const purchaseSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'PurchaseOrder'
   },
+  goodsReceiptNote: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'GoodsReceiptNote'
+  },
   supplier: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Supplier',
@@ -54,6 +58,11 @@ const purchaseSchema = new mongoose.Schema({
     min: 0
   },
   tax: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  defaultTaxRate: {
     type: Number,
     default: 0,
     min: 0
@@ -87,6 +96,10 @@ purchaseSchema.pre('save', function(next) {
 
 // Post-save hook to update stock quantities in Stock collection
 purchaseSchema.post('save', async function() {
+  if (this.goodsReceiptNote) {
+    return;
+  }
+
   try {
     const Stock = mongoose.model('Stock');
     
@@ -109,6 +122,7 @@ purchaseSchema.post('save', async function() {
 purchaseSchema.index({ purchaseNumber: 1 });
 purchaseSchema.index({ supplier: 1 });
 purchaseSchema.index({ purchaseOrder: 1 });
+purchaseSchema.index({ goodsReceiptNote: 1 }, { unique: true, sparse: true });
 purchaseSchema.index({ purchaseDate: -1 });
 
 module.exports = mongoose.model('Purchase', purchaseSchema);

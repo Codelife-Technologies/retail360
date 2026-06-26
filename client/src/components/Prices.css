@@ -18,6 +18,65 @@
   color: #333;
 }
 
+.prices-subtitle {
+  margin: 0.35rem 0 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.prices-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.prices-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.prices-filters input {
+  flex: 1;
+  min-width: 220px;
+  max-width: 420px;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.prices-filters select {
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  min-width: 200px;
+}
+
+.vendor-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.prices-table tbody tr.no-vendor-price {
+  background: #fffbeb;
+}
+
+.btn-secondary {
+  padding: 0.75rem 1.25rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+
 .view-selector {
   display: flex;
   gap: 0.5rem;
@@ -267,5 +326,80 @@
 
 .form-actions button[type="button"]:hover {
   background: #d1d5db;
+}
+
+.prices-image-cell {
+  width: 56px;
+  padding: 0.5rem !important;
+}
+
+.prices-product-image {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  display: block;
+}
+
+.prices-product-image-form {
+  width: 72px;
+  height: 72px;
+}
+
+.prices-product-image-hero {
+  width: 120px;
+  height: 120px;
+}
+
+.prices-form-product-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.prices-form-product-preview strong {
+  display: block;
+  color: #0f172a;
+  margin-bottom: 0.25rem;
+}
+
+.prices-image-section {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.prices-image-section h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: #334155;
+}
+
+.prices-image-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.prices-gallery-thumb {
+  width: 88px;
+  height: 88px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.detail-view-modal .prices-image-section {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 

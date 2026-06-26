@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeSupplierLinks } = require('../utils/productSuppliers');
 
 const productSchema = new mongoose.Schema({
   // Basic Information
@@ -25,6 +26,10 @@ const productSchema = new mongoose.Schema({
     trim: true
   },
   title: {
+    type: String,
+    trim: true
+  },
+  productUrl: {
     type: String,
     trim: true
   },
@@ -123,7 +128,16 @@ const productSchema = new mongoose.Schema({
     type: String,
     default: 'pcs',
     trim: true
-  }
+  },
+  suppliers: [{
+    supplier: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Supplier',
+      required: true,
+    },
+    sku: { type: String, trim: true },
+    unit: { type: String, trim: true, default: 'pcs' },
+  }],
 }, {
   timestamps: true
 });
@@ -139,6 +153,29 @@ productSchema.index({ brandName: 1 });
 productSchema.index({ hsnCode: 1 });
 productSchema.index({ manufacturerName: 1 });
 productSchema.index({ keywords: 1 });
+productSchema.index({ suppliers: 1 });
+productSchema.index({ 'suppliers.supplier': 1 });
+
+function suppliersNeedMigration(suppliers) {
+  return (suppliers || []).some(
+    (entry) => entry && !entry.supplier && mongoose.Types.ObjectId.isValid(String(entry))
+  );
+}
+
+async function migrateSuppliersIfNeeded(doc) {
+  if (!doc || !suppliersNeedMigration(doc.suppliers)) return;
+  doc.suppliers = normalizeSupplierLinks(doc.suppliers, doc);
+  doc.markModified('suppliers');
+  await doc.save();
+}
+
+productSchema.post('find', async function (docs) {
+  await Promise.all((docs || []).map((doc) => migrateSuppliersIfNeeded(doc)));
+});
+
+productSchema.post('findOne', async function (doc) {
+  await migrateSuppliersIfNeeded(doc);
+});
 
 module.exports = mongoose.model('Product', productSchema);
 

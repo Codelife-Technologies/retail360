@@ -12,6 +12,29 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
+async function setHomeBranch(locationId) {
+  await Location.updateMany({ _id: { $ne: locationId } }, { $set: { isHomeBranch: false } });
+  return Location.findByIdAndUpdate(
+    locationId,
+    { isHomeBranch: true },
+    { new: true, runValidators: true }
+  );
+}
+
+// GET home branch location
+router.get('/home-branch', async (req, res) => {
+  try {
+    const location = await Location.findOne({ isHomeBranch: true });
+    if (!location) {
+      return res.status(404).json({ error: 'Home branch not set' });
+    }
+    res.json(location);
+  } catch (error) {
+    logger.backend.error('Error fetching home branch', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET all locations (with pagination)
 router.get('/', async (req, res) => {
   try {
@@ -38,15 +61,30 @@ router.get('/', async (req, res) => {
       const result = await paginate(Location, query, {
         page: page || 1,
         limit: limit || 25,
-        sort: { createdAt: -1 }
+        sort: { isHomeBranch: -1, createdAt: -1 }
       });
       res.json(result);
     } else {
-      const locations = await Location.find(query).sort({ createdAt: -1 });
+      const locations = await Location.find(query).sort({ isHomeBranch: -1, createdAt: -1 });
       res.json(locations);
     }
   } catch (error) {
     logger.backend.error('Error fetching locations', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST set location as home branch
+router.post('/:id/home-branch', async (req, res) => {
+  try {
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      return res.status(404).json({ error: 'Location not found' });
+    }
+    const updated = await setHomeBranch(location._id);
+    res.json(updated);
+  } catch (error) {
+    logger.backend.error('Error setting home branch', { error: error.message, stack: error.stack });
     res.status(500).json({ error: error.message });
   }
 });
@@ -70,8 +108,11 @@ router.post('/', async (req, res) => {
     logger.backend.info('Creating location', { body: req.body });
     const location = new Location(req.body);
     await location.save();
+    if (req.body.isHomeBranch) {
+      await setHomeBranch(location._id);
+    }
     logger.backend.info('Location created successfully', { locationId: location._id });
-    res.status(201).json(location);
+    res.status(201).json(await Location.findById(location._id));
   } catch (error) {
     logger.backend.error('Error creating location', {
       message: error.message,
@@ -98,7 +139,11 @@ router.put('/:id', async (req, res) => {
     if (!location) {
       return res.status(404).json({ error: 'Location not found' });
     }
-    res.json(location);
+    if (req.body.isHomeBranch) {
+      await setHomeBranch(location._id);
+    }
+    const refreshed = await Location.findById(location._id);
+    res.json(refreshed);
   } catch (error) {
     if (error.code === 11000) {
       res.status(400).json({ error: 'Location code already exists' });

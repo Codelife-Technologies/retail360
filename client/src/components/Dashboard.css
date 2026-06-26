@@ -28,6 +28,10 @@
   .stats-grid {
     grid-template-columns: repeat(4, 1fr);
   }
+
+  .stats-grid-procurement {
+    max-width: 1100px;
+  }
 }
 
 @media (min-width: 1280px) {
@@ -50,6 +54,16 @@
 .stat-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card-clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.stat-card-clickable:focus-visible {
+  outline: 2px solid #6B3894;
+  outline-offset: 2px;
 }
 
 .stat-card.warning {
@@ -78,6 +92,119 @@
   margin: 0.25rem 0 0 0;
   color: #666;
   font-size: 0.9rem;
+}
+
+.stat-value-text {
+  font-size: 1.35rem !important;
+}
+
+.dashboard-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.dashboard-panel {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow-x: auto;
+}
+
+.dashboard-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.dashboard-panel-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.dashboard-link-btn {
+  background: #f3f4f6;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #6B3894;
+}
+
+.dashboard-link-btn:hover {
+  background: #ede9fe;
+}
+
+.dashboard-empty {
+  margin: 0;
+  color: #9ca3af;
+  font-size: 0.9rem;
+}
+
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  min-width: 420px;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+  padding: 0.65rem 0.5rem;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+
+.dashboard-table thead {
+  background: #f9fafb;
+}
+
+.dashboard-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.dashboard-table .mono {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.dash-status {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.dash-status.status-pending,
+.dash-status.status-pending_inspection,
+.dash-status.status-draft {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.dash-status.status-approved,
+.dash-status.status-fully_received,
+.dash-status.status-po_created {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.dash-status.status-partially_received {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.dash-status.status-cancelled {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .low-stock-section {

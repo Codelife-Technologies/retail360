@@ -165,6 +165,13 @@
   color: #495057;
 }
 
+.import-mode-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #6c757d;
+  line-height: 1.4;
+}
+
 .radio-group {
   display: flex;
   gap: 20px;

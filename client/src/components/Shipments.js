@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { shipmentsAPI, shipmentVendorsAPI, shippingChargesAPI, locationsAPI, productsAPI, stockAPI } from '../services/api';
 import logger from '../utils/logger';
+import DetailModal from './DetailModal';
 import './Shipments.css';
 
 function Shipments() {
@@ -12,6 +13,7 @@ function Shipments() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingShipment, setEditingShipment] = useState(null);
+  const [viewingShipment, setViewingShipment] = useState(null);
   const [formData, setFormData] = useState({
     shipmentVendor: '',
     shippingCharge: '',
@@ -369,7 +371,11 @@ function Shipments() {
                 </tr>
               ) : (
                 shipments.map((shipment) => (
-                  <tr key={shipment._id}>
+                  <tr
+                    key={shipment._id}
+                    className="clickable-row"
+                    onClick={() => setViewingShipment(shipment)}
+                  >
                     <td>{shipment.shipmentNumber}</td>
                     <td>{shipment.shipmentVendor?.name || '-'}</td>
                     <td>{shipment.fromLocation?.name || '-'}</td>
@@ -383,7 +389,7 @@ function Shipments() {
                       </span>
                     </td>
                     <td>{new Date(shipment.shipmentDate).toLocaleDateString()}</td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <button
                         className="btn-edit"
                         onClick={() => handleEdit(shipment)}
@@ -403,6 +409,68 @@ function Shipments() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {viewingShipment && (
+        <DetailModal
+          title={`Shipment ${viewingShipment.shipmentNumber || ''}`}
+          fields={[
+            { label: 'Shipment Number', value: viewingShipment.shipmentNumber },
+            { label: 'Vendor', value: viewingShipment.shipmentVendor?.name },
+            { label: 'From Location', value: viewingShipment.fromLocation?.name },
+            { label: 'To Location', value: viewingShipment.toLocation?.name },
+            { label: 'Shipment Date', value: viewingShipment.shipmentDate ? new Date(viewingShipment.shipmentDate).toLocaleDateString() : '' },
+            { label: 'Expected Delivery', value: viewingShipment.expectedDeliveryDate ? new Date(viewingShipment.expectedDeliveryDate).toLocaleDateString() : '' },
+            { label: 'Total Weight', value: `${viewingShipment.totalWeight?.toFixed(2) || 0} kg` },
+            { label: 'Shipping Charges', value: `₹${viewingShipment.shippingCharges?.toFixed(2) || 0}` },
+            { label: 'Status', value: viewingShipment.status },
+            { label: 'Tracking Number', value: viewingShipment.trackingNumber },
+            { label: 'Notes', value: viewingShipment.notes, full: true },
+          ]}
+          onClose={() => setViewingShipment(null)}
+          onEdit={() => {
+            const shipment = viewingShipment;
+            setViewingShipment(null);
+            handleEdit(shipment);
+          }}
+          onDelete={() => {
+            const id = viewingShipment._id;
+            setViewingShipment(null);
+            handleDelete(id);
+          }}
+        >
+          {viewingShipment.items?.length > 0 && (
+            <div className="detail-view-section">
+              <h3>Items</h3>
+              <table className="detail-view-items-table">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Quantity</th>
+                    <th>Weight/Unit</th>
+                    <th>Total Weight</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {viewingShipment.items.map((item, idx) => {
+                    const product =
+                      item.product?.title ||
+                      item.product?.name ||
+                      getProductName(item.product?._id || item.product);
+                    return (
+                      <tr key={idx}>
+                        <td>{product}</td>
+                        <td>{item.quantity}</td>
+                        <td>{item.weight || 0} kg</td>
+                        <td>{((item.weight || 0) * item.quantity).toFixed(2)} kg</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </DetailModal>
       )}
 
       {showModal && (

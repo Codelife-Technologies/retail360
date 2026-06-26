@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import logger from './utils/logger';
 import Dashboard from './components/Dashboard';
 import Products from './components/Products';
 import Suppliers from './components/Suppliers';
 import PurchaseOrders from './components/PurchaseOrders';
+import PurchaseRequisite from './components/PurchaseRequisite';
+import GoodsReceiptNoteModule from './goods-receipt-note/GoodsReceiptNoteModule';
 import Purchases from './components/Purchases';
 import Locations from './components/Locations';
 import Stock from './components/Stock';
@@ -18,15 +20,33 @@ import MIS from './components/MIS';
 import Categories from './components/Categories';
 import Subcategories from './components/Subcategories';
 import GeminiImageGenerator from './components/GeminiImageGenerator';
+import ReplenishReport from './components/ReplenishReport';
+import CompanyProfile from './components/CompanyProfile';
 import './App.css';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigate={setActiveTab} />;
       case 'products':
         return <Products />;
       case 'suppliers':
@@ -44,7 +64,11 @@ function App() {
       case 'sales':
         return <Sales />;
       case 'purchase-orders':
-        return <PurchaseOrders />;
+        return <PurchaseOrders onNavigate={setActiveTab} />;
+      case 'purchase-requisite':
+        return <PurchaseRequisite onNavigate={setActiveTab} />;
+      case 'grn':
+        return <GoodsReceiptNoteModule onNavigate={setActiveTab} />;
       case 'purchases':
         return <Purchases />;
       case 'shipment-vendors':
@@ -61,6 +85,10 @@ function App() {
         return <Subcategories />;
       case 'gemini-image-generator':
         return <GeminiImageGenerator />;
+      case 'replenish-report':
+        return <ReplenishReport onNavigate={setActiveTab} />;
+      case 'company-master':
+        return <CompanyProfile />;
       default:
         return <Dashboard />;
     }
@@ -90,6 +118,12 @@ function App() {
             onClick={() => setActiveTab('suppliers')}
           >
             🏢 Suppliers
+          </button>
+          <button
+            className={activeTab === 'company-master' ? 'nav-item active' : 'nav-item'}
+            onClick={() => setActiveTab('company-master')}
+          >
+            🏛️ Company Master
           </button>
           <button
             className={activeTab === 'locations' ? 'nav-item active' : 'nav-item'}
@@ -126,6 +160,18 @@ function App() {
             onClick={() => setActiveTab('sales')}
           >
             🛒 Sales
+          </button>
+          <button
+            className={activeTab === 'grn' ? 'nav-item active' : 'nav-item'}
+            onClick={() => setActiveTab('grn')}
+          >
+            📥 Goods Receipt Note
+          </button>
+          <button
+            className={activeTab === 'purchase-requisite' ? 'nav-item active' : 'nav-item'}
+            onClick={() => setActiveTab('purchase-requisite')}
+          >
+            📝 Purchase Requisition
           </button>
           <button
             className={activeTab === 'purchase-orders' ? 'nav-item active' : 'nav-item'}
@@ -181,8 +227,22 @@ function App() {
           >
             🎨 Image Generator
           </button>
+          <button
+            className={activeTab === 'replenish-report' ? 'nav-item active' : 'nav-item'}
+            onClick={() => setActiveTab('replenish-report')}
+          >
+            🔄 Replenish Report
+          </button>
         </nav>
       </div>
+      <button
+        className="theme-toggle-floating"
+        onClick={toggleTheme}
+        title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+      >
+        {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+      </button>
       <div className="main-content">
         {renderContent()}
       </div>

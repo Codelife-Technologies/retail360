@@ -6,6 +6,11 @@
 
 .gemini-header {
   margin-bottom: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
 }
 
 .gemini-header h1 {
@@ -607,5 +612,161 @@
   .generated-images-grid {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
+}
+
+/* Gemini Token Limit Counter Styles */
+.header-title-area {
+  flex: 1;
+  min-width: 300px;
+}
+
+.gemini-token-counter {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem;
+  width: 300px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  backdrop-filter: blur(8px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-left: 4px solid #8b5cf6; /* Gemini Purple Accent */
+}
+
+.gemini-token-counter:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.1), 0 4px 6px -2px rgba(139, 92, 246, 0.05);
+  border-color: #a78bfa;
+}
+
+.token-counter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.token-counter-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.gemini-sparkle-icon {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine 2s ease-in-out infinite;
+}
+
+@keyframes shine {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
+.demo-badge {
+  background-color: #fef3c7;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.live-badge {
+  background-color: #dcfce7;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.token-counter-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.quota-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.metric-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.metric-values {
+  font-family: monospace;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.progress-bar-container {
+  height: 6px;
+  background-color: #f1f5f9;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.5s ease-out;
+}
+
+.requests-fill {
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+}
+
+.tokens-fill {
+  background: linear-gradient(90deg, #8b5cf6, #ec4899);
+}
+
+.token-counter-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f1f5f9;
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.quota-error-text {
+  color: #ef4444;
+  font-weight: 500;
+}
+
+.btn-refresh-quota {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.2rem;
+  font-size: 0.9rem;
+  line-height: 1;
+  transition: transform 0.2s ease;
+  border-radius: 4px;
+}
+
+.btn-refresh-quota:hover:not(:disabled) {
+  transform: rotate(45deg);
+  background-color: #f1f5f9;
+}
+
+.btn-refresh-quota:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 

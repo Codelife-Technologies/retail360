@@ -9,10 +9,12 @@ const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
 const logger = require('../utils/logger');
 
-const upload = multer({ 
+const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
+
+const PRODUCT_POPULATE_FIELDS = 'name title sku brandName images';
 
 // GET all stock with filters (with pagination)
 router.get('/', async (req, res) => {
@@ -34,14 +36,14 @@ router.get('/', async (req, res) => {
         limit: limit || 25,
         sort: { createdAt: -1 },
         populate: [
-          { path: 'product', select: 'name title sku brandName' },
+          { path: 'product', select: PRODUCT_POPULATE_FIELDS },
           { path: 'location', select: 'name code city' }
         ]
       });
       res.json(result);
     } else {
       const stock = await Stock.find(query)
-        .populate('product', 'name title sku brandName')
+        .populate('product', PRODUCT_POPULATE_FIELDS)
         .populate('location', 'name code city')
         .sort({ createdAt: -1 });
       res.json(stock);
@@ -55,6 +57,7 @@ router.get('/', async (req, res) => {
 router.get('/product/:productId', async (req, res) => {
   try {
     const stock = await Stock.find({ product: req.params.productId })
+      .populate('product', PRODUCT_POPULATE_FIELDS)
       .populate('location', 'name code city')
       .sort({ location: 1 });
     res.json(stock);
@@ -67,7 +70,7 @@ router.get('/product/:productId', async (req, res) => {
 router.get('/location/:locationId', async (req, res) => {
   try {
     const stock = await Stock.find({ location: req.params.locationId })
-      .populate('product', 'name title sku brandName category')
+      .populate('product', PRODUCT_POPULATE_FIELDS)
       .sort({ product: 1 });
     res.json(stock);
   } catch (error) {
@@ -99,7 +102,7 @@ router.get('/alerts/low-stock', async (req, res) => {
   try {
     // Fetch all stock records and filter in memory to handle null values safely
     const allStock = await Stock.find({})
-      .populate('product', 'name title sku brandName')
+      .populate('product', PRODUCT_POPULATE_FIELDS)
       .populate('location', 'name code city')
       .lean(); // Use lean() for better performance
     
@@ -140,7 +143,7 @@ router.post('/', async (req, res) => {
       },
       { new: true, upsert: true, runValidators: true }
     )
-      .populate('product', 'name title sku')
+      .populate('product', PRODUCT_POPULATE_FIELDS)
       .populate('location', 'name code');
     
     res.status(201).json(stock);
@@ -164,7 +167,7 @@ router.put('/:id', async (req, res) => {
       updateData,
       { new: true, runValidators: true }
     )
-      .populate('product', 'name title sku')
+      .populate('product', PRODUCT_POPULATE_FIELDS)
       .populate('location', 'name code');
     
     if (!stock) {
@@ -173,6 +176,27 @@ router.put('/:id', async (req, res) => {
     res.json(stock);
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+// DELETE all stock (optional filters: product, location) — must be before /:id
+router.delete('/all', async (req, res) => {
+  try {
+    if (req.query.confirm !== 'yes') {
+      return res.status(400).json({ error: 'Confirmation required' });
+    }
+
+    const query = {};
+    if (req.query.product) query.product = req.query.product;
+    if (req.query.location) query.location = req.query.location;
+
+    const result = await Stock.deleteMany(query);
+    res.json({
+      message: 'Stock data removed successfully',
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

@@ -4,6 +4,31 @@
   box-sizing: border-box;
 }
 
+/* ===== Theme variables ===== */
+:root {
+  --app-bg: #f5f5f5;
+  --surface: #ffffff;
+  --surface-2: #f8f9fa;
+  --surface-3: #f9fafb;
+  --text: #333333;
+  --text-muted: #666666;
+  --border: #dee2e6;
+  --border-soft: #e5e7eb;
+  --shadow: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] {
+  --app-bg: #0f1115;
+  --surface: #1a1d24;
+  --surface-2: #222732;
+  --surface-3: #20242d;
+  --text: #e6e8eb;
+  --text-muted: #9aa0aa;
+  --border: #2e333d;
+  --border-soft: #2e333d;
+  --shadow: rgba(0, 0, 0, 0.5);
+}
+
 html, body {
   height: 100%;
   width: 100%;
@@ -22,5 +47,89 @@ body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* ===== Dark theme overrides ===== */
+/* App surfaces */
+[data-theme="dark"] .App,
+[data-theme="dark"] .main-content {
+  background: var(--app-bg) !important;
+  color: var(--text);
+}
+
+/* Generic surfaces: page wrappers, cards, sections, tables, modals */
+[data-theme="dark"] [class*="container"],
+[data-theme="dark"] [class*="card"],
+[data-theme="dark"] [class*="section"],
+[data-theme="dark"] [class*="-box"],
+[data-theme="dark"] [class*="-list"],
+[data-theme="dark"] [class*="preview"],
+[data-theme="dark"] .modal-content,
+[data-theme="dark"] table {
+  background-color: var(--surface) !important;
+  color: var(--text);
+  border-color: var(--border) !important;
+}
+
+/* Secondary surfaces: table headers, hover rows, form sections */
+[data-theme="dark"] thead,
+[data-theme="dark"] th,
+[data-theme="dark"] tbody tr:hover,
+[data-theme="dark"] .form-section,
+[data-theme="dark"] [class*="-header"]:not(.sidebar-header),
+[data-theme="dark"] .product-detail-preview,
+[data-theme="dark"] .detail-hero,
+[data-theme="dark"] .detail-section {
+  background-color: var(--surface-2) !important;
+}
+
+/* Borders */
+[data-theme="dark"] td,
+[data-theme="dark"] th,
+[data-theme="dark"] tr {
+  border-color: var(--border) !important;
+}
+
+/* Text elements */
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3,
+[data-theme="dark"] h4,
+[data-theme="dark"] h5,
+[data-theme="dark"] p,
+[data-theme="dark"] label,
+[data-theme="dark"] td,
+[data-theme="dark"] th,
+[data-theme="dark"] li,
+[data-theme="dark"] .stat-info h3,
+[data-theme="dark"] .detail-field-value {
+  color: var(--text);
+}
+
+/* Muted text */
+[data-theme="dark"] .stat-info p,
+[data-theme="dark"] small,
+[data-theme="dark"] .loading,
+[data-theme="dark"] .no-data {
+  color: var(--text-muted);
+}
+
+/* Form controls */
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--surface-3) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] select option {
+  background-color: var(--surface);
+  color: var(--text);
 }
 

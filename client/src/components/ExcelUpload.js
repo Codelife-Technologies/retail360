@@ -6,7 +6,8 @@ const ExcelUpload = ({
   moduleName, 
   onUploadComplete, 
   onClose,
-  templateEndpoint 
+  templateEndpoint,
+  hideImportMode = false,
 }) => {
   const [file, setFile] = useState(null);
   const [importMode, setImportMode] = useState('both');
@@ -204,8 +205,14 @@ const ExcelUpload = ({
             </label>
           </div>
 
+          {!hideImportMode && (
           <div className="import-mode-section">
             <label>Import Mode:</label>
+            {moduleName === 'sales' && (
+              <p className="import-mode-hint">
+                Duplicates are matched by Amazon Order ID. Use Create Only to skip existing orders, or Create & Update to refresh them.
+              </p>
+            )}
             <div className="radio-group">
               <label>
                 <input
@@ -236,6 +243,7 @@ const ExcelUpload = ({
               </label>
             </div>
           </div>
+          )}
 
           {uploading && (
             <div className="upload-progress">
@@ -271,20 +279,45 @@ const ExcelUpload = ({
                   <span className="stat-label">Failed:</span>
                   <span className="stat-value">{result.failed || 0}</span>
                 </div>
+                {result.skipped > 0 && (
+                  <div className="stat-item info">
+                    <span className="stat-label">Skipped:</span>
+                    <span className="stat-value">{result.skipped}</span>
+                  </div>
+                )}
+                {result.totalRows != null && (
+                  <div className="stat-item info">
+                    <span className="stat-label">Total rows:</span>
+                    <span className="stat-value">{result.totalRows}</span>
+                  </div>
+                )}
               </div>
+
+              {result.errorSummary && Object.keys(result.errorSummary).length > 0 && (
+                <div className="errors-list">
+                  <h4>Error summary:</h4>
+                  <div className="errors-scroll">
+                    {Object.entries(result.errorSummary).map(([message, count]) => (
+                      <div key={message} className="error-item">
+                        <strong>{count}×</strong> {message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               {result.errors && result.errors.length > 0 && (
                 <div className="errors-list">
-                  <h4>Errors ({result.errors.length}):</h4>
+                  <h4>Row errors ({result.errors.length}{result.failed > result.errors.length ? '+' : ''}):</h4>
                   <div className="errors-scroll">
-                    {result.errors.slice(0, 10).map((err, index) => (
+                    {result.errors.slice(0, 25).map((err, index) => (
                       <div key={index} className="error-item">
-                        <strong>Row {err.row}:</strong> {err.field} - {err.message}
+                        <strong>Row {err.row}:</strong> {err.field} — {err.message}
                       </div>
                     ))}
-                    {result.errors.length > 10 && (
+                    {result.errors.length > 25 && (
                       <div className="more-errors">
-                        ... and {result.errors.length - 10} more errors
+                        ... and {result.errors.length - 25} more errors shown in summary
                       </div>
                     )}
                   </div>

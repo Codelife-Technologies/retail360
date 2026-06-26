@@ -16,6 +16,7 @@ export const productsAPI = {
   getById: (id) => api.get(`/products/${id}`),
   create: (data) => api.post('/products', data),
   update: (id, data) => api.put(`/products/${id}`, data),
+  updateSuppliers: (id, suppliers) => api.put(`/products/${id}/suppliers`, { suppliers }),
   delete: (id) => api.delete(`/products/${id}`),
   downloadTemplate: () => api.get('/products/template', { responseType: 'blob' }),
   import: (formData) => api.post('/products/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
@@ -33,11 +34,18 @@ export const productsAPI = {
 export const suppliersAPI = {
   getAll: (params) => api.get('/suppliers', { params }),
   getById: (id) => api.get(`/suppliers/${id}`),
+  getProducts: (id) => api.get(`/suppliers/${id}/products`),
   create: (data) => api.post('/suppliers', data),
   update: (id, data) => api.put(`/suppliers/${id}`, data),
   delete: (id) => api.delete(`/suppliers/${id}`),
   downloadTemplate: () => api.get('/suppliers/template', { responseType: 'blob' }),
   import: (formData) => api.post('/suppliers/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+};
+
+// Company master (organisation profile)
+export const companyProfileAPI = {
+  get: () => api.get('/company-profile'),
+  update: (data) => api.put('/company-profile', data),
 };
 
 // Purchase Orders API
@@ -46,7 +54,46 @@ export const purchaseOrdersAPI = {
   getById: (id) => api.get(`/purchase-orders/${id}`),
   create: (data) => api.post('/purchase-orders', data),
   update: (id, data) => api.put(`/purchase-orders/${id}`, data),
+  assignVendor: (id, data) => api.post(`/purchase-orders/${id}/assign-vendor`, data),
   delete: (id) => api.delete(`/purchase-orders/${id}`),
+};
+
+// Goods Receipt Note (GRN) API
+export const grnAPI = {
+  getDashboard: () => api.get('/grn/dashboard/stats'),
+  getAll: (params) => api.get('/grn', { params }),
+  getById: (id) => api.get(`/grn/${id}`),
+  createFromPO: (poId, data) => api.post(`/grn/from-po/${poId}`, data),
+  create: (data) => api.post('/grn', data),
+  update: (id, data) => api.put(`/grn/${id}`, data),
+  delete: (id) => api.delete(`/grn/${id}`),
+  submitInspection: (id, data) => api.post(`/grn/${id}/submit-inspection`, data),
+  close: (id, data) => api.post(`/grn/${id}/close`, data),
+  getAudit: (id) => api.get(`/grn/${id}/audit`),
+  getPdf: (id) => api.get(`/grn/${id}/pdf`, { responseType: 'text' }),
+  threeWayMatch: (id, data) => api.post(`/grn/${id}/three-way-match`, data),
+  getReports: () => api.get('/grn/reports/summary'),
+  uploadAttachment: (id, formData) =>
+    api.post(`/grn/${id}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+};
+
+export const gisAPI = {
+  getAll: (params) => api.get('/gis', { params }),
+  getById: (id) => api.get(`/gis/${id}`),
+};
+export const purchaseRequisitesAPI = {
+  getAll: (params) => api.get('/purchase-requisites', { params }),
+  getById: (id) => api.get(`/purchase-requisites/${id}`),
+  getPoDraft: (id) => api.get(`/purchase-requisites/${id}/po-draft`),
+  create: (data) => api.post('/purchase-requisites', data),
+  createFromReplenish: (data) => api.post('/purchase-requisites/from-replenish', data),
+  addItems: (id, data) => api.post(`/purchase-requisites/${id}/add-items`, data),
+  update: (id, data) => api.put(`/purchase-requisites/${id}`, data),
+  linkPo: (id, data) => api.post(`/purchase-requisites/${id}/link-po`, data),
+  approve: (id, data) => api.post(`/purchase-requisites/${id}/approve`, data),
+  delete: (id) => api.delete(`/purchase-requisites/${id}`),
 };
 
 // Purchases API
@@ -61,9 +108,11 @@ export const purchasesAPI = {
 // Locations API
 export const locationsAPI = {
   getAll: (params) => api.get('/locations', { params }),
+  getHomeBranch: () => api.get('/locations/home-branch'),
   getById: (id) => api.get(`/locations/${id}`),
   create: (data) => api.post('/locations', data),
   update: (id, data) => api.put(`/locations/${id}`, data),
+  setHomeBranch: (id) => api.post(`/locations/${id}/home-branch`),
   delete: (id) => api.delete(`/locations/${id}`),
   downloadTemplate: () => api.get('/locations/template', { responseType: 'blob' }),
   import: (formData) => api.post('/locations/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
@@ -79,6 +128,7 @@ export const stockAPI = {
   create: (data) => api.post('/stock', data),
   update: (id, data) => api.put(`/stock/${id}`, data),
   delete: (id) => api.delete(`/stock/${id}`),
+  deleteAll: (params) => api.delete('/stock/all', { params: { confirm: 'yes', ...params } }),
   downloadTemplate: () => api.get('/stock/template', { responseType: 'blob' }),
   import: (formData) => api.post('/stock/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
@@ -86,9 +136,14 @@ export const stockAPI = {
 // Prices API
 export const pricesAPI = {
   getAll: (params) => api.get('/prices', { params }),
+  getVendorCatalog: (params) => api.get('/prices/vendor-catalog', { params }),
   getByProduct: (productId) => api.get(`/prices/product/${productId}`),
   getHistory: (productId) => api.get(`/prices/product/${productId}/history`),
-  getBulkCurrent: (productIds) => api.post('/prices/bulk-current', { productIds }),
+  getBulkCurrent: (productIds, currency) =>
+    api.post('/prices/bulk-current', {
+      productIds,
+      ...(currency ? { currency } : {}),
+    }),
   create: (data) => api.post('/prices', data),
   update: (id, data) => api.put(`/prices/${id}`, data),
   delete: (id) => api.delete(`/prices/${id}`),
@@ -125,6 +180,7 @@ export const salesAPI = {
   create: (data) => api.post('/sales', data),
   update: (id, data) => api.put(`/sales/${id}`, data),
   delete: (id) => api.delete(`/sales/${id}`),
+  removeAmazonOrderDuplicates: () => api.post('/sales/remove-amazon-order-duplicates'),
   getSummary: (params) => api.get('/sales/summary/stats', { params }),
 };
 
@@ -218,6 +274,9 @@ export const reportsAPI = {
   getSalesSummary: (params) => api.get('/reports/sales/summary', { params }),
   getSalesDetailed: (params) => api.get('/reports/sales/detailed', { params }),
   getSalesStatistics: (params) => api.get('/reports/sales/statistics', { params }),
+  getSalesBySku: (params) => api.get('/reports/sales/by-sku', { params }),
+  exportSalesBySku: (params) =>
+    api.get('/reports/sales/by-sku/export', { params, responseType: 'blob' }),
   exportSales: (data) => api.post('/reports/sales/export', data),
   
   // Purchase Reports
@@ -225,6 +284,9 @@ export const reportsAPI = {
   getPurchasesDetailed: (params) => api.get('/reports/purchases/detailed', { params }),
   getPurchasesStatistics: (params) => api.get('/reports/purchases/statistics', { params }),
   exportPurchases: (data) => api.post('/reports/purchases/export', data),
+  
+  // Replenishment Reports
+  getReplenishReport: (params) => api.get('/reports/replenish', { params }),
 };
 
 // Health check

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { categoriesAPI, subcategoriesAPI } from '../services/api';
+import DetailModal from './DetailModal';
 import './Categories.css';
 
 function Categories() {
@@ -8,6 +9,7 @@ function Categories() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [viewingCategory, setViewingCategory] = useState(null);
   const [subcategoryCounts, setSubcategoryCounts] = useState({});
   const [formData, setFormData] = useState({
     name: '',
@@ -168,12 +170,16 @@ function Categories() {
                 </tr>
               ) : (
                 categories.map((category) => (
-                  <tr key={category._id}>
+                  <tr
+                    key={category._id}
+                    className="clickable-row"
+                    onClick={() => setViewingCategory(category)}
+                  >
                     <td>{category.name}</td>
                     <td>{category.hsnCode}</td>
                     <td>{category.description || '-'}</td>
                     <td>{subcategoryCounts[category._id] || 0}</td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <button
                         className="btn-edit"
                         onClick={() => handleEdit(category)}
@@ -193,6 +199,29 @@ function Categories() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {viewingCategory && (
+        <DetailModal
+          title={viewingCategory.name || 'Category Details'}
+          fields={[
+            { label: 'Name', value: viewingCategory.name },
+            { label: 'HSN Code', value: viewingCategory.hsnCode },
+            { label: 'Subcategories', value: subcategoryCounts[viewingCategory._id] || 0 },
+            { label: 'Description', value: viewingCategory.description, full: true },
+          ]}
+          onClose={() => setViewingCategory(null)}
+          onEdit={() => {
+            const category = viewingCategory;
+            setViewingCategory(null);
+            handleEdit(category);
+          }}
+          onDelete={() => {
+            const id = viewingCategory._id;
+            setViewingCategory(null);
+            handleDelete(id);
+          }}
+        />
       )}
 
       {showModal && (

@@ -11,24 +11,7 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// Helper function to generate Purchase number
-async function generatePurchaseNumber() {
-  const today = new Date();
-  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-  const prefix = `PUR-${dateStr}-`;
-  
-  const lastPurchase = await Purchase.findOne({
-    purchaseNumber: { $regex: `^${prefix}` }
-  }).sort({ purchaseNumber: -1 });
-  
-  let sequence = 1;
-  if (lastPurchase) {
-    const lastSequence = parseInt(lastPurchase.purchaseNumber.split('-')[2]);
-    sequence = lastSequence + 1;
-  }
-  
-  return `${prefix}${String(sequence).padStart(3, '0')}`;
-}
+const { generatePurchaseNumber } = require('../utils/generatePurchaseNumber');
 
 // GET all purchases (with pagination)
 router.get('/', async (req, res) => {

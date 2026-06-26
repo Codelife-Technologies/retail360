@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { subcategoriesAPI, categoriesAPI, productsAPI } from '../services/api';
+import DetailModal from './DetailModal';
 import './Subcategories.css';
 
 function Subcategories() {
@@ -10,6 +11,7 @@ function Subcategories() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingSubcategory, setEditingSubcategory] = useState(null);
+  const [viewingSubcategory, setViewingSubcategory] = useState(null);
   const [productCounts, setProductCounts] = useState({});
   const [formData, setFormData] = useState({
     name: '',
@@ -201,13 +203,17 @@ function Subcategories() {
                 </tr>
               ) : (
                 subcategories.map((subcategory) => (
-                  <tr key={subcategory._id}>
+                  <tr
+                    key={subcategory._id}
+                    className="clickable-row"
+                    onClick={() => setViewingSubcategory(subcategory)}
+                  >
                     <td>{subcategory.name}</td>
                     <td>{subcategory.category?.name || '-'}</td>
                     <td>{subcategory.category?.hsnCode || '-'}</td>
                     <td>{subcategory.description || '-'}</td>
                     <td>{productCounts[subcategory._id] || 0}</td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <button
                         className="btn-edit"
                         onClick={() => handleEdit(subcategory)}
@@ -227,6 +233,30 @@ function Subcategories() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {viewingSubcategory && (
+        <DetailModal
+          title={viewingSubcategory.name || 'Subcategory Details'}
+          fields={[
+            { label: 'Name', value: viewingSubcategory.name },
+            { label: 'Category', value: viewingSubcategory.category?.name },
+            { label: 'HSN Code', value: viewingSubcategory.category?.hsnCode },
+            { label: 'Products', value: productCounts[viewingSubcategory._id] || 0 },
+            { label: 'Description', value: viewingSubcategory.description, full: true },
+          ]}
+          onClose={() => setViewingSubcategory(null)}
+          onEdit={() => {
+            const subcategory = viewingSubcategory;
+            setViewingSubcategory(null);
+            handleEdit(subcategory);
+          }}
+          onDelete={() => {
+            const id = viewingSubcategory._id;
+            setViewingSubcategory(null);
+            handleDelete(id);
+          }}
+        />
       )}
 
       {showModal && (

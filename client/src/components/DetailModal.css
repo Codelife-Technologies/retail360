@@ -1,0 +1,127 @@
+.detail-view-modal {
+  max-width: 720px;
+}
+
+.detail-view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.detail-view-header h2 {
+  margin: 0;
+  color: var(--text, #333);
+}
+
+.detail-view-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.detail-view-delete-btn {
+  padding: 0.5rem 1rem;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.detail-view-delete-btn:hover {
+  background: #dc2626;
+}
+
+.detail-view-close-btn {
+  padding: 0.5rem 1rem;
+  background: #e5e7eb;
+  color: #333;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.detail-view-close-btn:hover {
+  background: #d1d5db;
+}
+
+.detail-view-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem 1.5rem;
+}
+
+.detail-view-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.detail-view-field-full {
+  grid-column: 1 / -1;
+}
+
+.detail-view-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #9ca3af);
+  font-weight: 600;
+}
+
+.detail-view-value {
+  color: var(--text, #333);
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.detail-view-section {
+  margin-top: 1.5rem;
+}
+
+.detail-view-section h3 {
+  margin: 0 0 0.75rem 0;
+  color: #6B3894;
+  font-size: 1rem;
+  font-weight: 600;
+  border-bottom: 2px solid #ede7f3;
+  padding-bottom: 0.4rem;
+}
+
+/* Clickable rows in list tables */
+.clickable-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.clickable-row:hover {
+  background: rgba(107, 56, 148, 0.06);
+}
+
+/* Line-item table inside detail modal */
+.detail-view-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+
+.detail-view-items-table th,
+.detail-view-items-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  font-size: 0.9rem;
+}
+
+.detail-view-items-table th {
+  color: var(--text-muted, #6b7280);
+  font-weight: 600;
+}

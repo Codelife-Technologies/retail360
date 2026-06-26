@@ -60,7 +60,7 @@ async function calculateShippingCostForItems(shippingChargeId, items) {
 // GET all shipments
 router.get('/', async (req, res) => {
   try {
-    const { fromLocation, toLocation, status, shipmentVendor, startDate, endDate, search } = req.query;
+    const { fromLocation, toLocation, status, shipmentVendor, startDate, endDate, search, page, limit } = req.query;
     const query = {};
     
     if (fromLocation) {

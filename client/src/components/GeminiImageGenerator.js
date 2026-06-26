@@ -20,6 +20,75 @@ function GeminiImageGenerator() {
   const [selectedPrompts, setSelectedPrompts] = useState(new Set()); // Track selected prompts for generation
   const [selectedGeneratedImages, setSelectedGeneratedImages] = useState(new Set()); // Track selected generated images for bulk operations
 
+  // --- GEMINI TOKEN LIMIT API INTEGRATION ---
+  // Leave this blank for the user to paste their API URL later.
+  const GEMINI_TOKEN_API_URL = ''; 
+
+  const [tokenLimit, setTokenLimit] = useState({
+    remainingTokens: 1000000,
+    totalTokens: 1000000,
+    remainingRequests: 1500,
+    totalRequests: 1500,
+    isDemo: true,
+    loading: false,
+    error: null,
+  });
+
+  const getRemainingTokens = async () => {
+    if (!GEMINI_TOKEN_API_URL) {
+      // Mock values if URL is not yet provided
+      setTokenLimit(prev => ({
+        ...prev,
+        isDemo: true,
+        loading: false,
+        error: null
+      }));
+      return;
+    }
+
+    setTokenLimit(prev => ({ ...prev, loading: true, error: null }));
+    try {
+      const response = await fetch(GEMINI_TOKEN_API_URL, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Map API response to state variables.
+      // Modify keys below as per your custom API format.
+      setTokenLimit({
+        remainingTokens: data.remainingTokens ?? 0,
+        totalTokens: data.totalTokens ?? 1000000,
+        remainingRequests: data.remainingRequests ?? 0,
+        totalRequests: data.totalRequests ?? 1500,
+        isDemo: false,
+        loading: false,
+        error: null,
+      });
+    } catch (err) {
+      logger.error('Error fetching Gemini token limit', { error: err.message });
+      setTokenLimit(prev => ({
+        ...prev,
+        loading: false,
+        error: 'Sync error',
+      }));
+    }
+  };
+
+  useEffect(() => {
+    getRemainingTokens();
+    // Auto-refresh quota every 5 minutes if API is configured
+    const interval = setInterval(getRemainingTokens, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     fetchCategories();
   }, []);
@@ -195,6 +264,13 @@ function GeminiImageGenerator() {
 
       const successful = results.filter(r => r && r.url).length;
       alert(`Successfully generated ${successful} out of ${results.length} selected images`);
+      
+      // Dynamically deduct requests/tokens based on generation attempts
+      setTokenLimit(prev => ({
+        ...prev,
+        remainingRequests: Math.max(0, prev.remainingRequests - results.length),
+        remainingTokens: Math.max(0, prev.remainingTokens - (results.length * 50000))
+      }));
     } catch (error) {
       logger.error('Error generating images', { error: error.message });
       alert(error.response?.data?.error || error.message || 'Failed to generate images');
@@ -373,6 +449,13 @@ function GeminiImageGenerator() {
           newSet.add(image.order);
           return newSet;
         });
+        
+        // Dynamically deduct quota for regeneration
+        setTokenLimit(prev => ({
+          ...prev,
+          remainingRequests: Math.max(0, prev.remainingRequests - 1),
+          remainingTokens: Math.max(0, prev.remainingTokens - 50000)
+        }));
       } else {
         alert('Failed to regenerate image: ' + (response.data.message || 'Unknown error'));
       }
@@ -392,8 +475,70 @@ function GeminiImageGenerator() {
   return (
     <div className="gemini-image-generator-container">
       <div className="gemini-header">
-        <h1>Gemini Image Generator</h1>
-        <p>Generate 6-10 product images using AI based on uploaded images and subcategory prompts</p>
+        <div className="header-title-area">
+          <h1>Gemini Image Generator</h1>
+          <p>Generate 6-10 product images using AI based on uploaded images and subcategory prompts</p>
+        </div>
+
+        <div className="gemini-token-counter">
+          <div className="token-counter-header">
+            <span className="token-counter-title">
+              <span className="gemini-sparkle-icon">✨</span> Gemini API Quota
+            </span>
+            {tokenLimit.isDemo ? (
+              <span className="badge demo-badge" title="Paste your API endpoint in GeminiImageGenerator.js to sync live data">Demo Mode</span>
+            ) : (
+              <span className="badge live-badge">Live Sync</span>
+            )}
+          </div>
+          <div className="token-counter-body">
+            <div className="quota-metric">
+              <div className="metric-label">
+                <span>Daily Requests</span>
+                <span className="metric-values">
+                  {tokenLimit.loading ? '...' : `${tokenLimit.remainingRequests.toLocaleString()} / ${tokenLimit.totalRequests.toLocaleString()}`}
+                </span>
+              </div>
+              <div className="progress-bar-container">
+                <div 
+                  className="progress-bar-fill requests-fill" 
+                  style={{ width: `${Math.max(0, Math.min(100, (tokenLimit.remainingRequests / tokenLimit.totalRequests) * 100))}%` }}
+                />
+              </div>
+            </div>
+            <div className="quota-metric">
+              <div className="metric-label">
+                <span>Daily Tokens</span>
+                <span className="metric-values">
+                  {tokenLimit.loading ? '...' : `${(tokenLimit.remainingTokens / 1000).toFixed(0)}k / ${(tokenLimit.totalTokens / 1000).toFixed(0)}k`}
+                </span>
+              </div>
+              <div className="progress-bar-container">
+                <div 
+                  className="progress-bar-fill tokens-fill" 
+                  style={{ width: `${Math.max(0, Math.min(100, (tokenLimit.remainingTokens / tokenLimit.totalTokens) * 100))}%` }}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="token-counter-footer">
+            {tokenLimit.error ? (
+              <span className="quota-error-text">{tokenLimit.error}</span>
+            ) : (
+              <span className="quota-sync-time">
+                {tokenLimit.isDemo ? 'Using local demo metrics' : 'Automatically syncs hourly'}
+              </span>
+            )}
+            <button 
+              className="btn-refresh-quota" 
+              onClick={getRemainingTokens} 
+              disabled={tokenLimit.loading}
+              title="Refresh Quota Status"
+            >
+              🔄
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="gemini-content">

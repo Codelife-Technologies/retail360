@@ -1,7 +1,63 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { stockAPI, productsAPI, locationsAPI } from '../services/api';
 import logger from '../utils/logger';
+import DetailModal from './DetailModal';
+import ExcelUpload from './ExcelUpload';
 import './Stock.css';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const UPLOADS_BASE = API_BASE_URL.replace('/api', '');
+
+const PRODUCT_IMAGE_PLACEHOLDER =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 50 50">
+      <rect width="50" height="50" fill="#e5e7eb" rx="8"/>
+      <path d="M16 32l6-8 5 6 4-5 9 11H16z" fill="#9ca3af"/>
+      <circle cx="20" cy="19" r="3" fill="#9ca3af"/>
+    </svg>`
+  );
+
+function resolveProductImageUrl(image) {
+  if (!image) return null;
+  if (image.startsWith('http://') || image.startsWith('https://')) {
+    return image;
+  }
+  if (image.startsWith('products/')) {
+    return `${UPLOADS_BASE}/uploads/${image}`;
+  }
+  return image;
+}
+
+function getProductThumbnail(product) {
+  if (!product) return null;
+  const images = product.images || [];
+  const first = images.find((img) => img && img.trim() !== '');
+  return first ? resolveProductImageUrl(first) : null;
+}
+
+function StockProductCell({ product }) {
+  const displayName = product?.title || product?.name || 'Unknown';
+  const thumbnailSrc = getProductThumbnail(product);
+
+  return (
+    <div className="stock-product-cell">
+      <img
+        className="stock-product-thumbnail"
+        src={thumbnailSrc || PRODUCT_IMAGE_PLACEHOLDER}
+        alt={displayName}
+        loading="lazy"
+        onError={(e) => {
+          e.target.onerror = null;
+          e.target.src = PRODUCT_IMAGE_PLACEHOLDER;
+        }}
+      />
+      <span className="stock-product-title" title={displayName}>
+        {displayName}
+      </span>
+    </div>
+  );
+}
 
 function Stock() {
   const [stock, setStock] = useState([]);
@@ -15,6 +71,8 @@ function Stock() {
   const [adjustingStock, setAdjustingStock] = useState(null);
   const [adjustQuantity, setAdjustQuantity] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showExcelUpload, setShowExcelUpload] = useState(false);
+  const [viewingStock, setViewingStock] = useState(null);
   const [newStockFormData, setNewStockFormData] = useState({
     product: '',
     location: '',
@@ -22,6 +80,7 @@ function Stock() {
     minStockLevel: 0,
   });
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchProducts();
@@ -136,6 +195,17 @@ function Stock() {
     }
   };
 
+  const refreshStock = () => {
+    if (viewMode === 'product' && selectedProduct) {
+      fetchStockByProduct(selectedProduct);
+    } else if (viewMode === 'location' && selectedLocation) {
+      fetchStockByLocation(selectedLocation);
+    } else {
+      fetchStock();
+    }
+    fetchLowStockAlerts();
+  };
+
   const handleAdjustStock = (stockRecord) => {
     setAdjustingStock(stockRecord);
     setAdjustQuantity(stockRecord.quantity);
@@ -208,8 +278,7 @@ function Stock() {
         quantity: 0,
         minStockLevel: 0,
       });
-      fetchStock();
-      fetchLowStockAlerts();
+      refreshStock();
       alert('Stock added successfully');
     } catch (error) {
       logger.error('Error adding stock', {
@@ -223,6 +292,78 @@ function Stock() {
     }
   };
 
+  const handleDeleteStock = async (id) => {
+    if (!window.confirm('Are you sure you want to remove this stock record?')) {
+      return;
+    }
+    try {
+      await stockAPI.delete(id);
+      refreshStock();
+    } catch (error) {
+      logger.error('Error deleting stock', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        stack: error.stack,
+        stockId: id
+      });
+      alert(error.response?.data?.error || 'Failed to delete stock');
+    }
+  };
+
+  const getClearStockLabel = () => {
+    if (viewMode === 'product' && selectedProduct) {
+      const product = products.find((p) => p._id === selectedProduct);
+      const name = product?.title || product?.name || 'selected product';
+      return `Remove stock for ${name}`;
+    }
+    if (viewMode === 'location' && selectedLocation) {
+      const location = locations.find((l) => l._id === selectedLocation);
+      const name = location?.name || 'selected location';
+      return `Remove stock at ${name}`;
+    }
+    return 'Remove all stock data';
+  };
+
+  const handleClearStockData = async () => {
+    const label = getClearStockLabel();
+    const count = stock.length;
+    if (count === 0) {
+      alert('No stock records to remove.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `${label}?\n\nThis will permanently delete ${count} stock record(s). Products and locations will not be affected.`
+    );
+    if (!confirmed) return;
+
+    const doubleConfirm = window.confirm(
+      'This cannot be undone. Type OK in the next step to proceed.\n\nClick OK to permanently remove the stock data.'
+    );
+    if (!doubleConfirm) return;
+
+    try {
+      const params = {};
+      if (viewMode === 'product' && selectedProduct) {
+        params.product = selectedProduct;
+      } else if (viewMode === 'location' && selectedLocation) {
+        params.location = selectedLocation;
+      }
+
+      const response = await stockAPI.deleteAll(params);
+      alert(`Removed ${response.data.deletedCount} stock record(s).`);
+      refreshStock();
+    } catch (error) {
+      logger.error('Error clearing stock data', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
+      alert(error.response?.data?.error || 'Failed to remove stock data');
+    }
+  };
+
   const handleSaveAdjustment = async () => {
     try {
       await stockAPI.update(adjustingStock._id, {
@@ -231,8 +372,7 @@ function Stock() {
       });
       setShowAdjustModal(false);
       setAdjustingStock(null);
-      fetchStock();
-      fetchLowStockAlerts();
+      refreshStock();
     } catch (error) {
       logger.error('Error updating stock', {
         message: error.message,
@@ -246,13 +386,71 @@ function Stock() {
     }
   };
 
+  const getAvailableUnits = (record) => {
+    if (record.availableQuantity != null) return record.availableQuantity;
+    return Math.max(0, (record.quantity || 0) - (record.reservedQuantity || 0));
+  };
+
+  const filteredStock = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return stock;
+
+    return stock.filter((record) => {
+      const product = record.product;
+      const location = record.location;
+      return (
+        (product?.title && product.title.toLowerCase().includes(term)) ||
+        (product?.name && product.name.toLowerCase().includes(term)) ||
+        (product?.sku && product.sku.toLowerCase().includes(term)) ||
+        (location?.name && location.name.toLowerCase().includes(term)) ||
+        (location?.code && location.code.toLowerCase().includes(term))
+      );
+    });
+  }, [stock, searchTerm]);
+
+  const stockSummary = useMemo(() => {
+    const recordCount = filteredStock.length;
+    const totalAvailable = filteredStock.reduce((sum, record) => sum + getAvailableUnits(record), 0);
+    const totalQuantity = filteredStock.reduce((sum, record) => sum + (record.quantity || 0), 0);
+    const totalReserved = filteredStock.reduce((sum, record) => sum + (record.reservedQuantity || 0), 0);
+    const lowStockCount = filteredStock.filter(
+      (record) => (record.quantity || 0) <= (record.minStockLevel || 0)
+    ).length;
+
+    return { recordCount, totalAvailable, totalQuantity, totalReserved, lowStockCount };
+  }, [filteredStock]);
+
+  const getSummaryScopeLabel = () => {
+    if (viewMode === 'product' && selectedProduct) {
+      const product = products.find((p) => p._id === selectedProduct);
+      return product?.title || product?.name || 'Selected product';
+    }
+    if (viewMode === 'location' && selectedLocation) {
+      const location = locations.find((l) => l._id === selectedLocation);
+      return location?.name || 'Selected location';
+    }
+    return 'All stock';
+  };
+
   return (
     <div className="stock-container">
       <div className="stock-header">
         <h1>Stock Management</h1>
-        <button className="btn-primary" onClick={handleAddStock}>
-          + Add Stock
-        </button>
+        <div className="stock-header-actions">
+          <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
+            ⬆ Upload Excel
+          </button>
+          <button
+            className="btn-danger-outline"
+            onClick={handleClearStockData}
+            title={getClearStockLabel()}
+          >
+            🗑 Remove Stock Data
+          </button>
+          <button className="btn-primary" onClick={handleAddStock}>
+            + Add Stock
+          </button>
+        </div>
       </div>
 
       {/* View Mode Selector */}
@@ -316,6 +514,56 @@ function Stock() {
         </div>
       )}
 
+      <div className="stock-search-bar">
+        <input
+          type="text"
+          placeholder="Search product, SKU, location…"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      <div className="stock-status-bar">
+        <div className="stock-status-scope">
+          <span className="stock-status-scope-label">View</span>
+          <span className="stock-status-scope-value">{getSummaryScopeLabel()}</span>
+        </div>
+        <div className="stock-status-stats">
+          <div className="stock-stat stock-stat-primary">
+            <span className="stock-stat-value">
+              {loading ? '—' : stockSummary.totalAvailable.toLocaleString()}
+            </span>
+            <span className="stock-stat-label">Total Available Units</span>
+          </div>
+          <div className="stock-stat">
+            <span className="stock-stat-value">
+              {loading ? '—' : stockSummary.recordCount.toLocaleString()}
+            </span>
+            <span className="stock-stat-label">Stock Records</span>
+          </div>
+          <div className="stock-stat">
+            <span className="stock-stat-value">
+              {loading ? '—' : stockSummary.totalQuantity.toLocaleString()}
+            </span>
+            <span className="stock-stat-label">Total On Hand</span>
+          </div>
+          {stockSummary.totalReserved > 0 && (
+            <div className="stock-stat">
+              <span className="stock-stat-value">
+                {loading ? '—' : stockSummary.totalReserved.toLocaleString()}
+              </span>
+              <span className="stock-stat-label">Reserved</span>
+            </div>
+          )}
+          <div className={`stock-stat${stockSummary.lowStockCount > 0 ? ' stock-stat-warning' : ''}`}>
+            <span className="stock-stat-value">
+              {loading ? '—' : stockSummary.lowStockCount.toLocaleString()}
+            </span>
+            <span className="stock-stat-label">Low Stock Items</span>
+          </div>
+        </div>
+      </div>
+
       {/* Low Stock Alerts */}
       {lowStockAlerts.length > 0 && (
         <div className="low-stock-alerts">
@@ -344,6 +592,7 @@ function Stock() {
             <thead>
               <tr>
                 <th>Product</th>
+                <th>SKU</th>
                 <th>Location</th>
                 <th>Quantity</th>
                 <th>Available</th>
@@ -353,27 +602,36 @@ function Stock() {
               </tr>
             </thead>
             <tbody>
-              {stock.length === 0 ? (
+              {filteredStock.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="no-data">
-                    No stock records found
+                  <td colSpan="8" className="no-data">
+                    {searchTerm.trim()
+                      ? 'No stock records match your search.'
+                      : 'No stock records found'}
                   </td>
                 </tr>
               ) : (
-                stock.map((stockRecord) => (
+                filteredStock.map((stockRecord) => (
                   <tr
                     key={stockRecord._id}
-                    className={
+                    className={`clickable-row${
                       stockRecord.quantity <= stockRecord.minStockLevel
-                        ? 'low-stock'
+                        ? ' low-stock'
                         : ''
-                    }
+                    }`}
+                    onClick={() => setViewingStock(stockRecord)}
                   >
                     <td>
-                      {stockRecord.product?.title || stockRecord.product?.name || 'Unknown'}
-                      {stockRecord.product?.sku && (
-                        <span className="sku"> ({stockRecord.product.sku})</span>
-                      )}
+                      <StockProductCell product={stockRecord.product} />
+                    </td>
+                    <td className="stock-sku-cell">
+                      <span
+                        className={`stock-sku-value${
+                          stockRecord.product?.sku ? '' : ' stock-sku-empty'
+                        }`}
+                      >
+                        {stockRecord.product?.sku || '—'}
+                      </span>
                     </td>
                     <td>
                       {stockRecord.location?.name || 'Unknown'}
@@ -387,12 +645,18 @@ function Stock() {
                     <td>
                       {new Date(stockRecord.lastUpdated).toLocaleDateString()}
                     </td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()} className="stock-actions-cell">
                       <button
                         className="btn-adjust"
                         onClick={() => handleAdjustStock(stockRecord)}
                       >
                         Adjust
+                      </button>
+                      <button
+                        className="btn-delete"
+                        onClick={() => handleDeleteStock(stockRecord._id)}
+                      >
+                        Remove
                       </button>
                     </td>
                   </tr>
@@ -401,6 +665,65 @@ function Stock() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showExcelUpload && (
+        <ExcelUpload
+          moduleName="stock"
+          templateEndpoint="/stock/template"
+          onUploadComplete={() => refreshStock()}
+          onClose={() => setShowExcelUpload(false)}
+        />
+      )}
+
+      {/* Stock Detail Modal */}
+      {viewingStock && (
+        <DetailModal
+          title={
+            viewingStock.product?.title ||
+            viewingStock.product?.name ||
+            'Stock Details'
+          }
+          headerActions={
+            getProductThumbnail(viewingStock.product) ? (
+              <img
+                className="stock-detail-thumbnail"
+                src={getProductThumbnail(viewingStock.product)}
+                alt={viewingStock.product?.title || viewingStock.product?.name || 'Product'}
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = PRODUCT_IMAGE_PLACEHOLDER;
+                }}
+              />
+            ) : null
+          }
+          fields={[
+            { label: 'Product', value: viewingStock.product?.title || viewingStock.product?.name },
+            { label: 'SKU', value: viewingStock.product?.sku || '—' },
+            { label: 'Location', value: viewingStock.location?.name },
+            { label: 'Location Code', value: viewingStock.location?.code },
+            { label: 'Quantity', value: viewingStock.quantity },
+            { label: 'Available', value: viewingStock.availableQuantity ?? viewingStock.quantity },
+            { label: 'Min Stock Level', value: viewingStock.minStockLevel },
+            {
+              label: 'Last Updated',
+              value: viewingStock.lastUpdated
+                ? new Date(viewingStock.lastUpdated).toLocaleString()
+                : '',
+            },
+          ]}
+          onClose={() => setViewingStock(null)}
+          onEdit={() => {
+            const record = viewingStock;
+            setViewingStock(null);
+            handleAdjustStock(record);
+          }}
+          onDelete={() => {
+            const id = viewingStock._id;
+            setViewingStock(null);
+            handleDeleteStock(id);
+          }}
+        />
       )}
 
       {/* Adjust Stock Modal */}

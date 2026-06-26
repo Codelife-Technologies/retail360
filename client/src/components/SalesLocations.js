@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { salesLocationsAPI, salesChannelsAPI, locationsAPI } from '../services/api';
+import DetailModal from './DetailModal';
+import ExcelUpload from './ExcelUpload';
 import './SalesLocations.css';
 
 function SalesLocations() {
@@ -9,7 +11,9 @@ function SalesLocations() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [editingLocation, setEditingLocation] = useState(null);
+  const [viewingLocation, setViewingLocation] = useState(null);
   const [formData, setFormData] = useState({
     salesChannel: '',
     location: '',
@@ -165,9 +169,14 @@ function SalesLocations() {
     <div className="sales-locations-container">
       <div className="sales-locations-header">
         <h1>Sales Locations</h1>
-        <button className="btn-primary" onClick={openAddModal}>
-          + Add Sales Location
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
+            ⬆ Upload Excel
+          </button>
+          <button className="btn-primary" onClick={openAddModal}>
+            + Add Sales Location
+          </button>
+        </div>
       </div>
 
       <div className="search-bar">
@@ -205,7 +214,11 @@ function SalesLocations() {
                 </tr>
               ) : (
                 salesLocations.map((location) => (
-                  <tr key={location._id}>
+                  <tr
+                    key={location._id}
+                    className="clickable-row"
+                    onClick={() => setViewingLocation(location)}
+                  >
                     <td>{location.code}</td>
                     <td>{location.name}</td>
                     <td>{location.salesChannel?.name || '-'}</td>
@@ -217,7 +230,7 @@ function SalesLocations() {
                         {location.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <button
                         className="btn-edit"
                         onClick={() => handleEdit(location)}
@@ -239,6 +252,47 @@ function SalesLocations() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showExcelUpload && (
+        <ExcelUpload
+          moduleName="sales-locations"
+          templateEndpoint="/sales-locations/template"
+          onUploadComplete={() => fetchSalesLocations()}
+          onClose={() => setShowExcelUpload(false)}
+        />
+      )}
+
+      {viewingLocation && (
+        <DetailModal
+          title={viewingLocation.name || 'Sales Location Details'}
+          fields={[
+            { label: 'Code', value: viewingLocation.code },
+            { label: 'Name', value: viewingLocation.name },
+            { label: 'Sales Channel', value: viewingLocation.salesChannel?.name },
+            { label: 'Warehouse Location', value: viewingLocation.location ? `${viewingLocation.location.name || ''} (${viewingLocation.location.code || ''})` : '' },
+            { label: 'Status', value: viewingLocation.isActive ? 'Active' : 'Inactive' },
+            { label: 'Address', value: viewingLocation.address, full: true },
+            { label: 'Contact Person', value: viewingLocation.contactPerson },
+            { label: 'Phone', value: viewingLocation.phone },
+            { label: 'Email', value: viewingLocation.email },
+          ]}
+          onClose={() => setViewingLocation(null)}
+          onEdit={() => {
+            const location = viewingLocation;
+            setViewingLocation(null);
+            handleEdit(location);
+          }}
+          onDelete={
+            viewingLocation.isActive
+              ? () => {
+                  const id = viewingLocation._id;
+                  setViewingLocation(null);
+                  handleDelete(id);
+                }
+              : undefined
+          }
+        />
       )}
 
       {showModal && (

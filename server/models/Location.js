@@ -50,7 +50,11 @@ const locationSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
-  }
+  },
+  isHomeBranch: {
+    type: Boolean,
+    default: false,
+  },
 }, {
   timestamps: true
 });
@@ -60,6 +64,7 @@ locationSchema.index({ code: 1 });
 locationSchema.index({ name: 1 });
 locationSchema.index({ city: 1 });
 locationSchema.index({ isActive: 1 });
+locationSchema.index({ isHomeBranch: 1 });
 
 module.exports = mongoose.model('Location', locationSchema);
 

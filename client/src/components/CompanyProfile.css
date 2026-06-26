@@ -1,0 +1,109 @@
+.company-profile-container {
+  padding: 2rem;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.company-profile-header {
+  margin-bottom: 1.5rem;
+}
+
+.company-profile-header h1 {
+  margin: 0 0 0.35rem;
+  color: #333;
+}
+
+.company-profile-subtitle {
+  margin: 0;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.company-profile-saved {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: #059669;
+}
+
+.company-profile-form {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.master-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1rem 1.25rem 1.25rem;
+  margin: 0 0 1.25rem;
+}
+
+.master-section legend {
+  padding: 0 0.5rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.company-profile-form .form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.company-profile-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.company-profile-form .form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.company-profile-form label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.company-profile-form input,
+.company-profile-form textarea {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.company-profile-form .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.5rem;
+}
+
+.company-profile-form .btn-primary {
+  padding: 0.75rem 1.5rem;
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.company-profile-form .btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.field-error {
+  color: #dc2626;
+  font-size: 0.8rem;
+}
+
+.input-error {
+  border-color: #dc2626 !important;
+}

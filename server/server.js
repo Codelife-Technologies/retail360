@@ -7,6 +7,17 @@ const logger = require('./utils/logger');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Startup environment checks
+if (!process.env.GEMINI_API_KEY) {
+  const warning =
+    'GEMINI_API_KEY is not set. Gemini image generation will fail until you add it to server/.env';
+  logger.backend.warn(warning);
+  console.warn(`\x1b[33m⚠  ${warning}\x1b[0m`);
+} else {
+  logger.backend.info('GEMINI_API_KEY detected');
+  console.log('✓ GEMINI_API_KEY detected');
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -40,6 +51,12 @@ try {
   logger.backend.info('Suppliers routes loaded');
   const purchaseOrdersRoutes = require('./routes/purchaseOrders');
   logger.backend.info('Purchase orders routes loaded');
+  const purchaseRequisitesRoutes = require('./routes/purchaseRequisites');
+  logger.backend.info('Purchase requisites routes loaded');
+  const goodsReceiptNotesRoutes = require('./routes/goodsReceiptNotes');
+  logger.backend.info('Goods receipt notes routes loaded');
+  const goodsInspectionSheetsRoutes = require('./routes/goodsInspectionSheets');
+  logger.backend.info('Goods inspection sheets routes loaded');
   const purchasesRoutes = require('./routes/purchases');
   logger.backend.info('Purchases routes loaded');
   const locationsRoutes = require('./routes/locations');
@@ -68,13 +85,16 @@ try {
   logger.backend.info('Categories routes loaded');
   const subcategoriesRoutes = require('./routes/subcategories');
   logger.backend.info('Subcategories routes loaded');
-  const geminiRoutes = require('./routes/gemini');
-  logger.backend.info('Gemini routes loaded');
+  const companyProfileRoutes = require('./routes/companyProfile');
+  logger.backend.info('Company profile routes loaded');
 
   // API Routes
   app.use('/api/products', productsRoutes);
   app.use('/api/suppliers', suppliersRoutes);
   app.use('/api/purchase-orders', purchaseOrdersRoutes);
+  app.use('/api/purchase-requisites', purchaseRequisitesRoutes);
+  app.use('/api/grn', goodsReceiptNotesRoutes);
+  app.use('/api/gis', goodsInspectionSheetsRoutes);
   app.use('/api/purchases', purchasesRoutes);
   app.use('/api/locations', locationsRoutes);
   app.use('/api/stock', stockRoutes);
@@ -89,6 +109,7 @@ try {
   app.use('/api/reports', reportsRoutes);
   app.use('/api/categories', categoriesRoutes);
   app.use('/api/subcategories', subcategoriesRoutes);
+  app.use('/api/company-profile', companyProfileRoutes);
   app.use('/api/gemini', geminiRoutes);
   
   logger.backend.info('All routes loaded successfully');

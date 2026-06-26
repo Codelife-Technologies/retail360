@@ -1,4 +1,4 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI, Modality } = require('@google/genai');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
@@ -9,7 +9,7 @@ function getGeminiClient() {
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY environment variable is not set');
   }
-  return new GoogleGenerativeAI(apiKey);
+  return new GoogleGenAI({ apiKey });
 }
 
 // Convert image file to base64
@@ -36,14 +36,20 @@ function getMimeType(filePath) {
   return mimeTypes[ext] || 'image/jpeg';
 }
 
+// Image generation model names (Gemini "nano banana" image models)
+const IMAGE_MODELS = {
+  flash: 'gemini-2.5-flash-image',
+  pro: 'gemini-2.5-flash-image-preview'
+};
+
 // Generate a single image using Gemini API
 async function generateSingleImage(imagePath, prompt, useProModel = false) {
   try {
     const genAI = getGeminiClient();
     
-    // Use image generation models: gemini-2.5-flash-image (fast) or gemini-3-pro-image-preview (pro)
-    const modelName = useProModel ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
-    const model = genAI.getGenerativeModel({ model: modelName });
+    // Image generation models ("nano banana"). The model MUST be told to return
+    // an image via responseModalities, otherwise it replies with text only.
+    const modelName = useProModel ? IMAGE_MODELS.pro : IMAGE_MODELS.flash;
     
     // Convert image to base64 for reference
     const imageBase64 = imageToBase64(imagePath);
@@ -53,40 +59,38 @@ async function generateSingleImage(imagePath, prompt, useProModel = false) {
     // The prompt should guide the model to generate an image similar to the uploaded one
     const fullPrompt = `Based on the uploaded product image, ${prompt}. Generate a high-quality product image that matches the style and quality of the reference image.`;
     
-    // For image generation with reference image, we use the Files API approach
-    // First, upload the image file, then use it in the generation request
-    // For now, we'll use inline data approach for smaller images
-    
     // Generate image using the image generation model
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          data: imageBase64,
-          mimeType: mimeType
+    const response = await genAI.models.generateContent({
+      model: modelName,
+      contents: [
+        {
+          inlineData: {
+            data: imageBase64,
+            mimeType: mimeType
+          }
+        },
+        {
+          text: fullPrompt
         }
-      },
-      {
-        text: fullPrompt
+      ],
+      config: {
+        responseModalities: [Modality.TEXT, Modality.IMAGE]
       }
-    ]);
-    
-    const response = await result.response;
+    });
     
     // Check if response contains image data
-    // Gemini image generation models return images in the response
+    // Gemini image generation models return images in the response parts
     const candidates = response.candidates;
     if (candidates && candidates.length > 0) {
       const candidate = candidates[0];
       
-      // Extract image data from response
-      // The exact structure may vary, so we need to handle different response formats
       if (candidate.content && candidate.content.parts) {
         for (const part of candidate.content.parts) {
-          if (part.inlineData) {
+          if (part.inlineData && part.inlineData.data) {
             return {
               success: true,
               imageData: part.inlineData.data,
-              mimeType: part.inlineData.mimeType,
+              mimeType: part.inlineData.mimeType || 'image/png',
               prompt: prompt
             };
           }
@@ -94,16 +98,20 @@ async function generateSingleImage(imagePath, prompt, useProModel = false) {
       }
     }
     
-    // Fallback: if no image data found, return text response
-    // This might happen if the API returns a different format
-    const text = response.text();
-    logger.backend.warn('Gemini API returned text instead of image', { prompt, text: text.substring(0, 100) });
+    // Fallback: no image data found (model returned text only)
+    let text = '';
+    try {
+      text = response.text || '';
+    } catch (textError) {
+      text = '';
+    }
+    logger.backend.warn('Gemini API returned no image data', { prompt, text: String(text).substring(0, 100) });
     
     return {
-      success: true,
+      success: false,
       text: text,
       prompt: prompt,
-      note: 'API returned text description instead of image'
+      note: 'API returned no image (text only). Check the model name and API key.'
     };
   } catch (error) {
     logger.backend.error('Error generating image with Gemini', { 

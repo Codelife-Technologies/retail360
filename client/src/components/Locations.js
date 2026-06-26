@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { locationsAPI } from '../services/api';
+import DetailModal from './DetailModal';
+import ExcelUpload from './ExcelUpload';
 import './Locations.css';
 
 function Locations() {
@@ -7,7 +9,9 @@ function Locations() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [editingLocation, setEditingLocation] = useState(null);
+  const [viewingLocation, setViewingLocation] = useState(null);
   const [formData, setFormData] = useState({
     code: '',
     name: '',
@@ -123,6 +127,17 @@ function Locations() {
     }
   };
 
+  const handleSetHomeBranch = async (location) => {
+    if (location.isHomeBranch) return;
+    try {
+      await locationsAPI.setHomeBranch(location._id);
+      fetchLocations();
+    } catch (error) {
+      console.error('Error setting home branch:', error);
+      alert(error.response?.data?.error || 'Failed to set home branch');
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       code: '',
@@ -149,9 +164,14 @@ function Locations() {
     <div className="locations-container">
       <div className="locations-header">
         <h1>Warehouses / Locations</h1>
-        <button className="btn-primary" onClick={openAddModal}>
-          + Add Location
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
+            ⬆ Upload Excel
+          </button>
+          <button className="btn-primary" onClick={openAddModal}>
+            + Add Location
+          </button>
+        </div>
       </div>
 
       <div className="search-bar">
@@ -177,19 +197,24 @@ function Locations() {
                 <th>Contact Person</th>
                 <th>Phone</th>
                 <th>Status</th>
+                <th>Branch</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {locations.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="no-data">
+                  <td colSpan="9" className="no-data">
                     No locations found
                   </td>
                 </tr>
               ) : (
                 locations.map((location) => (
-                  <tr key={location._id} className={!location.isActive ? 'inactive' : ''}>
+                  <tr
+                    key={location._id}
+                    className={`clickable-row${!location.isActive ? ' inactive' : ''}`}
+                    onClick={() => setViewingLocation(location)}
+                  >
                     <td>{location.code}</td>
                     <td>{location.name}</td>
                     <td>{location.city || '-'}</td>
@@ -202,6 +227,22 @@ function Locations() {
                       </span>
                     </td>
                     <td>
+                      {location.isHomeBranch ? (
+                        <span className="home-branch-badge">Home Branch</span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      {!location.isHomeBranch && (
+                        <button
+                          className="btn-secondary-sm"
+                          onClick={() => handleSetHomeBranch(location)}
+                          title="Set as home branch"
+                        >
+                          Set Home
+                        </button>
+                      )}
                       <button
                         className="btn-edit"
                         onClick={() => handleEdit(location)}
@@ -221,6 +262,49 @@ function Locations() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showExcelUpload && (
+        <ExcelUpload
+          moduleName="locations"
+          templateEndpoint="/locations/template"
+          onUploadComplete={() => fetchLocations()}
+          onClose={() => setShowExcelUpload(false)}
+        />
+      )}
+
+      {viewingLocation && (
+        <DetailModal
+          title={viewingLocation.name || 'Location Details'}
+          fields={[
+            { label: 'Code', value: viewingLocation.code },
+            { label: 'Name', value: viewingLocation.name },
+            { label: 'Status', value: viewingLocation.isActive ? 'Active' : 'Inactive' },
+            {
+              label: 'Branch',
+              value: viewingLocation.isHomeBranch ? 'Home Branch' : '—',
+            },
+            { label: 'Address', value: viewingLocation.address, full: true },
+            { label: 'City', value: viewingLocation.city },
+            { label: 'State', value: viewingLocation.state },
+            { label: 'Country', value: viewingLocation.country },
+            { label: 'Pincode', value: viewingLocation.pincode },
+            { label: 'Contact Person', value: viewingLocation.contactPerson },
+            { label: 'Phone', value: viewingLocation.phone },
+            { label: 'Email', value: viewingLocation.email },
+          ]}
+          onClose={() => setViewingLocation(null)}
+          onEdit={() => {
+            const location = viewingLocation;
+            setViewingLocation(null);
+            handleEdit(location);
+          }}
+          onDelete={() => {
+            const id = viewingLocation._id;
+            setViewingLocation(null);
+            handleDelete(id);
+          }}
+        />
       )}
 
       {showModal && (

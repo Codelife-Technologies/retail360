@@ -1,0 +1,98 @@
+.po-product-vendor-assign {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid #fcd34d;
+  border-radius: 10px;
+  background: #fffbeb;
+}
+
+.po-product-vendor-assign.compact {
+  margin: 0;
+  padding: 0.75rem;
+  background: #fff;
+  border-color: #e5e7eb;
+}
+
+.po-product-vendor-assign h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  color: #92400e;
+}
+
+.po-vendor-assign-hint {
+  margin: 0 0 1rem;
+  color: #6b7280;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.po-vendor-bulk-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.po-vendor-bulk-row label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.po-vendor-bulk-row select {
+  min-width: 200px;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+.po-vendor-assign-table-wrap {
+  overflow-x: auto;
+}
+
+.po-vendor-assign-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.po-vendor-assign-table th,
+.po-vendor-assign-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+.po-vendor-assign-table th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+}
+
+.po-vendor-assign-table select {
+  width: 100%;
+  min-width: 160px;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+}
+
+.po-vendor-assign-table .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.po-vendor-assign-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.po-vendor-assign-loading,
+.po-vendor-assign-empty {
+  margin: 0.5rem 0;
+  color: #6b7280;
+  font-size: 0.875rem;
+}

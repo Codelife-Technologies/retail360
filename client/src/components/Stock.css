@@ -18,6 +18,147 @@
   color: #333;
 }
 
+.stock-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.btn-danger-outline {
+  padding: 0.5rem 1rem;
+  border: 1px solid #ef4444;
+  background: white;
+  color: #dc2626;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.btn-danger-outline:hover {
+  background: #fef2f2;
+}
+
+.stock-actions-cell {
+  white-space: nowrap;
+}
+
+.btn-delete {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-left: 0.35rem;
+  background: #ef4444;
+  color: white;
+  transition: all 0.2s;
+}
+
+.btn-delete:hover {
+  background: #dc2626;
+}
+
+.stock-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, #f8f5fc 0%, #ffffff 100%);
+  border: 1px solid #e9d8f4;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(107, 56, 148, 0.08);
+}
+
+.stock-status-scope {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 140px;
+  padding-right: 1rem;
+  border-right: 1px solid #e9d8f4;
+}
+
+.stock-status-scope-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+.stock-status-scope-value {
+  margin-top: 0.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.stock-status-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.stock-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 100px;
+}
+
+.stock-stat-primary .stock-stat-value {
+  color: #6B3894;
+  font-size: 1.75rem;
+}
+
+.stock-stat-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.2;
+}
+
+.stock-stat-label {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.stock-stat-warning .stock-stat-value {
+  color: #d97706;
+}
+
+@media (max-width: 768px) {
+  .stock-status-bar {
+    flex-direction: column;
+  }
+
+  .stock-status-scope {
+    border-right: none;
+    border-bottom: 1px solid #e9d8f4;
+    padding-right: 0;
+    padding-bottom: 0.75rem;
+  }
+
+  .stock-status-stats {
+    justify-content: space-between;
+  }
+
+  .stock-stat {
+    align-items: flex-start;
+    min-width: calc(50% - 0.75rem);
+  }
+}
+
 .view-selector {
   display: flex;
   gap: 0.5rem;
@@ -62,6 +203,26 @@
   border-radius: 6px;
   font-size: 1rem;
   min-width: 300px;
+}
+
+.stock-search-bar {
+  margin-bottom: 1.5rem;
+}
+
+.stock-search-bar input {
+  width: 100%;
+  max-width: 420px;
+  padding: 0.75rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.stock-search-bar input:focus {
+  outline: none;
+  border-color: #6B3894;
+  box-shadow: 0 0 0 3px rgba(107, 56, 148, 0.12);
 }
 
 .low-stock-alerts {
@@ -146,6 +307,60 @@
 .code {
   color: #666;
   font-size: 0.85rem;
+}
+
+.stock-product-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.stock-product-thumbnail {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #f3f4f6;
+}
+
+.stock-product-title {
+  font-weight: 500;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 280px;
+}
+
+.stock-sku-cell {
+  min-width: 100px;
+  max-width: 160px;
+}
+
+.stock-sku-value {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #374151;
+  word-break: break-word;
+}
+
+.stock-sku-empty {
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.stock-detail-thumbnail {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  margin-right: 0.5rem;
 }
 
 .btn-adjust {

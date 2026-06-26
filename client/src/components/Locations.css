@@ -97,6 +97,36 @@
   color: #991b1b;
 }
 
+.home-branch-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #ede7f3;
+  color: #6B3894;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.text-muted {
+  color: #9ca3af;
+}
+
+.btn-secondary-sm {
+  padding: 0.35rem 0.65rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  font-size: 0.8rem;
+  margin-right: 0.5rem;
+}
+
+.btn-secondary-sm:hover {
+  background: #f3f4f6;
+}
+
 .btn-primary,
 .btn-edit,
 .btn-delete {

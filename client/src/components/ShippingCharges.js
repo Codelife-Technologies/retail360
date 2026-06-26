@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { shippingChargesAPI, shipmentVendorsAPI } from '../services/api';
 import logger from '../utils/logger';
+import DetailModal from './DetailModal';
 import './ShippingCharges.css';
 
 function ShippingCharges() {
@@ -9,6 +10,7 @@ function ShippingCharges() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCharge, setEditingCharge] = useState(null);
+  const [viewingCharge, setViewingCharge] = useState(null);
   const [formData, setFormData] = useState({
     shipmentVendor: '',
     name: '',
@@ -233,7 +235,11 @@ function ShippingCharges() {
                 </tr>
               ) : (
                 charges.map((charge) => (
-                  <tr key={charge._id}>
+                  <tr
+                    key={charge._id}
+                    className="clickable-row"
+                    onClick={() => setViewingCharge(charge)}
+                  >
                     <td>{charge.shipmentVendor?.name || '-'}</td>
                     <td>{charge.name}</td>
                     <td>
@@ -250,7 +256,7 @@ function ShippingCharges() {
                         {charge.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <button
                         className="btn-edit"
                         onClick={() => handleEdit(charge)}
@@ -272,6 +278,75 @@ function ShippingCharges() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {viewingCharge && (
+        <DetailModal
+          title={viewingCharge.name || 'Shipping Charge Details'}
+          fields={[
+            { label: 'Vendor', value: viewingCharge.shipmentVendor?.name },
+            { label: 'Name', value: viewingCharge.name },
+            { label: 'Charge Type', value: viewingCharge.chargeType },
+            {
+              label: 'Rate',
+              value:
+                viewingCharge.chargeType === 'perKg'
+                  ? `₹${viewingCharge.perKgRate}/kg`
+                  : viewingCharge.chargeType === 'flat'
+                  ? `₹${viewingCharge.flatRate}`
+                  : `${viewingCharge.weightRanges?.length || 0} ranges`,
+            },
+            { label: 'Min Charge', value: `₹${viewingCharge.minCharge || 0}` },
+            { label: 'Status', value: viewingCharge.isActive ? 'Active' : 'Inactive' },
+            {
+              label: 'Effective Date',
+              value: viewingCharge.effectiveDate
+                ? new Date(viewingCharge.effectiveDate).toLocaleDateString()
+                : '',
+            },
+            { label: 'Description', value: viewingCharge.description, full: true },
+          ]}
+          onClose={() => setViewingCharge(null)}
+          onEdit={() => {
+            const charge = viewingCharge;
+            setViewingCharge(null);
+            handleEdit(charge);
+          }}
+          onDelete={
+            viewingCharge.isActive
+              ? () => {
+                  const id = viewingCharge._id;
+                  setViewingCharge(null);
+                  handleDelete(id);
+                }
+              : undefined
+          }
+        >
+          {viewingCharge.chargeType === 'weightRange' &&
+            viewingCharge.weightRanges?.length > 0 && (
+              <div className="detail-view-section">
+                <h3>Weight Ranges</h3>
+                <table className="detail-view-items-table">
+                  <thead>
+                    <tr>
+                      <th>Min Weight</th>
+                      <th>Max Weight</th>
+                      <th>Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewingCharge.weightRanges.map((range, idx) => (
+                      <tr key={idx}>
+                        <td>{range.minWeight}kg</td>
+                        <td>{range.maxWeight !== null && range.maxWeight !== undefined ? `${range.maxWeight}kg` : '∞'}</td>
+                        <td>₹{range.rate}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+        </DetailModal>
       )}
 
       {showModal && (

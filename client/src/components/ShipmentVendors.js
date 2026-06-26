@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { shipmentVendorsAPI } from '../services/api';
 import logger from '../utils/logger';
+import DetailModal from './DetailModal';
 import './ShipmentVendors.css';
 
 function ShipmentVendors() {
@@ -9,6 +10,7 @@ function ShipmentVendors() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingVendor, setEditingVendor] = useState(null);
+  const [viewingVendor, setViewingVendor] = useState(null);
   const [formData, setFormData] = useState({
     code: '',
     name: '',
@@ -217,7 +219,11 @@ function ShipmentVendors() {
                 </tr>
               ) : (
                 vendors.map((vendor) => (
-                  <tr key={vendor._id}>
+                  <tr
+                    key={vendor._id}
+                    className="clickable-row"
+                    onClick={() => setViewingVendor(vendor)}
+                  >
                     <td>{vendor.code}</td>
                     <td>{vendor.name}</td>
                     <td>{vendor.contactPerson || '-'}</td>
@@ -233,7 +239,7 @@ function ShipmentVendors() {
                         {vendor.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <button
                         className="btn-edit"
                         onClick={() => handleEdit(vendor)}
@@ -255,6 +261,42 @@ function ShipmentVendors() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {viewingVendor && (
+        <DetailModal
+          title={viewingVendor.name || 'Shipment Vendor Details'}
+          fields={[
+            { label: 'Code', value: viewingVendor.code },
+            { label: 'Name', value: viewingVendor.name },
+            { label: 'Status', value: viewingVendor.isActive ? 'Active' : 'Inactive' },
+            { label: 'Contact Person', value: viewingVendor.contactPerson },
+            { label: 'Email', value: viewingVendor.email },
+            { label: 'Phone', value: viewingVendor.phone },
+            { label: 'Address', value: viewingVendor.address, full: true },
+            { label: 'City', value: viewingVendor.city },
+            { label: 'State', value: viewingVendor.state },
+            { label: 'Country', value: viewingVendor.country },
+            { label: 'Pincode', value: viewingVendor.pincode },
+            { label: 'Service Types', value: (viewingVendor.serviceTypes || []).join(', '), full: true },
+            { label: 'Notes', value: viewingVendor.notes, full: true },
+          ]}
+          onClose={() => setViewingVendor(null)}
+          onEdit={() => {
+            const vendor = viewingVendor;
+            setViewingVendor(null);
+            handleEdit(vendor);
+          }}
+          onDelete={
+            viewingVendor.isActive
+              ? () => {
+                  const id = viewingVendor._id;
+                  setViewingVendor(null);
+                  handleDelete(id);
+                }
+              : undefined
+          }
+        />
       )}
 
       {showModal && (

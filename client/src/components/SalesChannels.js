@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { salesChannelsAPI } from '../services/api';
+import DetailModal from './DetailModal';
+import ExcelUpload from './ExcelUpload';
 import './SalesChannels.css';
 
 function SalesChannels() {
@@ -7,7 +9,9 @@ function SalesChannels() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [editingChannel, setEditingChannel] = useState(null);
+  const [viewingChannel, setViewingChannel] = useState(null);
   const [formData, setFormData] = useState({
     code: '',
     name: '',
@@ -137,9 +141,14 @@ function SalesChannels() {
     <div className="sales-channels-container">
       <div className="sales-channels-header">
         <h1>Sales Channels</h1>
-        <button className="btn-primary" onClick={openAddModal}>
-          + Add Sales Channel
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
+            ⬆ Upload Excel
+          </button>
+          <button className="btn-primary" onClick={openAddModal}>
+            + Add Sales Channel
+          </button>
+        </div>
       </div>
 
       <div className="search-bar">
@@ -176,7 +185,11 @@ function SalesChannels() {
                 </tr>
               ) : (
                 salesChannels.map((channel) => (
-                  <tr key={channel._id}>
+                  <tr
+                    key={channel._id}
+                    className="clickable-row"
+                    onClick={() => setViewingChannel(channel)}
+                  >
                     <td>{channel.code}</td>
                     <td>{channel.name}</td>
                     <td>
@@ -191,7 +204,7 @@ function SalesChannels() {
                         {channel.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <button
                         className="btn-edit"
                         onClick={() => handleEdit(channel)}
@@ -213,6 +226,45 @@ function SalesChannels() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showExcelUpload && (
+        <ExcelUpload
+          moduleName="sales-channels"
+          templateEndpoint="/sales-channels/template"
+          onUploadComplete={() => fetchSalesChannels()}
+          onClose={() => setShowExcelUpload(false)}
+        />
+      )}
+
+      {viewingChannel && (
+        <DetailModal
+          title={viewingChannel.name || 'Sales Channel Details'}
+          fields={[
+            { label: 'Code', value: viewingChannel.code },
+            { label: 'Name', value: viewingChannel.name },
+            { label: 'Type', value: viewingChannel.type },
+            { label: 'Commission Rate', value: `${viewingChannel.commissionRate || 0}%` },
+            { label: 'Payment Terms', value: viewingChannel.paymentTerms },
+            { label: 'Status', value: viewingChannel.isActive ? 'Active' : 'Inactive' },
+            { label: 'Description', value: viewingChannel.description, full: true },
+          ]}
+          onClose={() => setViewingChannel(null)}
+          onEdit={() => {
+            const channel = viewingChannel;
+            setViewingChannel(null);
+            handleEdit(channel);
+          }}
+          onDelete={
+            viewingChannel.isActive
+              ? () => {
+                  const id = viewingChannel._id;
+                  setViewingChannel(null);
+                  handleDelete(id);
+                }
+              : undefined
+          }
+        />
       )}
 
       {showModal && (

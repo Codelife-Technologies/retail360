@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { purchasesAPI, suppliersAPI, productsAPI, purchaseOrdersAPI, locationsAPI, pricesAPI } from '../services/api';
+import DetailModal from './DetailModal';
+import { computeCategoryTax, getCategoryName, getTaxRateForCategory } from '../utils/taxRates';
 import './Purchases.css';
 
 function Purchases() {
@@ -12,6 +14,7 @@ function Purchases() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState(null);
+  const [viewingPurchase, setViewingPurchase] = useState(null);
   const [formData, setFormData] = useState({
     supplier: '',
     location: '',
@@ -19,6 +22,7 @@ function Purchases() {
     purchaseDate: new Date().toISOString().split('T')[0],
     items: [],
     tax: 0,
+    defaultTaxRate: 0,
     paymentStatus: 'pending',
     notes: '',
   });
@@ -136,7 +140,10 @@ function Purchases() {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === 'tax' ? parseFloat(value) || 0 : value,
+      [name]:
+        name === 'tax' || name === 'defaultTaxRate'
+          ? parseFloat(value) || 0
+          : value,
     }));
   };
 
@@ -157,6 +164,7 @@ function Purchases() {
             unitPrice: item.unitPrice,
             total: item.total,
           })),
+          defaultTaxRate: poData.defaultTaxRate || 0,
         }));
       } catch (error) {
         console.error('Error loading purchase order:', error);
@@ -201,8 +209,12 @@ function Purchases() {
     return formData.items.reduce((sum, item) => sum + item.total, 0);
   };
 
+  const calculateTax = () => {
+    return computeCategoryTax(formData.items, products, formData.defaultTaxRate);
+  };
+
   const calculateTotal = () => {
-    return calculateSubtotal() + (formData.tax || 0);
+    return calculateSubtotal() + calculateTax();
   };
 
   const handleSubmit = async (e) => {
@@ -215,6 +227,7 @@ function Purchases() {
       const data = {
         ...formData,
         subtotal: calculateSubtotal(),
+        tax: calculateTax(),
         total: calculateTotal(),
         purchaseOrder: formData.purchaseOrder || undefined,
       };
@@ -249,6 +262,7 @@ function Purchases() {
       purchaseDate: purchase.purchaseDate ? new Date(purchase.purchaseDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       items: purchase.items || [],
       tax: purchase.tax || 0,
+      defaultTaxRate: purchase.defaultTaxRate || 0,
       paymentStatus: purchase.paymentStatus || 'pending',
       notes: purchase.notes || '',
     });
@@ -283,6 +297,7 @@ function Purchases() {
       purchaseDate: new Date().toISOString().split('T')[0],
       items: [],
       tax: 0,
+      defaultTaxRate: 0,
       paymentStatus: 'pending',
       notes: '',
     });
@@ -331,7 +346,11 @@ function Purchases() {
                 </tr>
               ) : (
                 purchases.map((purchase) => (
-                  <tr key={purchase._id}>
+                  <tr
+                    key={purchase._id}
+                    className="clickable-row"
+                    onClick={() => setViewingPurchase(purchase)}
+                  >
                     <td>{purchase.purchaseNumber}</td>
                     <td>{purchase.supplier?.name || '-'}</td>
                     <td>{purchase.location?.name || '-'}</td>
@@ -344,7 +363,7 @@ function Purchases() {
                     </td>
                     <td>{purchase.items?.length || 0}</td>
                     <td>₹{purchase.total?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <button
                         className="btn-edit"
                         onClick={() => handleEdit(purchase)}
@@ -364,6 +383,69 @@ function Purchases() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {viewingPurchase && (
+        <DetailModal
+          title={`Purchase ${viewingPurchase.purchaseNumber || ''}`}
+          fields={[
+            { label: 'Purchase #', value: viewingPurchase.purchaseNumber },
+            { label: 'Supplier', value: viewingPurchase.supplier?.name },
+            { label: 'Location', value: viewingPurchase.location?.name },
+            { label: 'Purchase Date', value: viewingPurchase.purchaseDate ? new Date(viewingPurchase.purchaseDate).toLocaleDateString() : '' },
+            { label: 'PO Number', value: viewingPurchase.purchaseOrder?.poNumber },
+            { label: 'Payment Status', value: viewingPurchase.paymentStatus },
+            { label: 'Subtotal', value: `₹${(viewingPurchase.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+            { label: 'Tax', value: `₹${(viewingPurchase.tax || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+            { label: 'Total', value: `₹${(viewingPurchase.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+            { label: 'Notes', value: viewingPurchase.notes, full: true },
+          ]}
+          onClose={() => setViewingPurchase(null)}
+          onEdit={() => {
+            const purchase = viewingPurchase;
+            setViewingPurchase(null);
+            handleEdit(purchase);
+          }}
+          onDelete={() => {
+            const id = viewingPurchase._id;
+            setViewingPurchase(null);
+            handleDelete(id);
+          }}
+        >
+          {viewingPurchase.items?.length > 0 && (
+            <div className="detail-view-section">
+              <h3>Items</h3>
+              <table className="detail-view-items-table">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Quantity</th>
+                    <th>Unit Price</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {viewingPurchase.items.map((item, idx) => {
+                    const product =
+                      item.product?.title ||
+                      item.product?.name ||
+                      products.find((p) => p._id === (item.product?._id || item.product))?.title ||
+                      products.find((p) => p._id === (item.product?._id || item.product))?.name ||
+                      'Unknown';
+                    return (
+                      <tr key={idx}>
+                        <td>{product}</td>
+                        <td>{item.quantity}</td>
+                        <td>₹{(item.unitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td>₹{(item.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </DetailModal>
       )}
 
       {showModal && (
@@ -502,12 +584,17 @@ function Purchases() {
                 <div className="items-list">
                   {formData.items.map((item, index) => {
                     const product = products.find((p) => p._id === item.product);
+                    const itemRate = getTaxRateForCategory(
+                      getCategoryName(product),
+                      formData.defaultTaxRate
+                    );
                     return (
                       <div key={index} className="item-row">
                         <span>{product?.title || product?.name || 'Unknown'}</span>
                         <span>Qty: {item.quantity}</span>
                         <span>₹{item.unitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         <span>₹{item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        <span className="item-tax-rate">Tax {itemRate}%</span>
                         <button
                           type="button"
                           onClick={() => handleRemoveItem(index)}
@@ -523,14 +610,26 @@ function Purchases() {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Tax</label>
+                  <label>Default Tax Rate (%)</label>
                   <input
                     type="number"
                     step="0.01"
-                    name="tax"
-                    value={formData.tax}
+                    name="defaultTaxRate"
+                    value={formData.defaultTaxRate}
                     onChange={handleInputChange}
                     min="0"
+                  />
+                  <small className="form-hint">
+                    Brass/Copper 12%, Gemstone 5% applied automatically. This
+                    rate is used for other categories.
+                  </small>
+                </div>
+                <div className="form-group">
+                  <label>Tax (auto)</label>
+                  <input
+                    type="text"
+                    value={`₹${calculateTax().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    disabled
                   />
                 </div>
                 <div className="form-group">

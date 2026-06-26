@@ -3,6 +3,57 @@ const router = express.Router();
 const multer = require('multer');
 const Price = require('../models/Price');
 const Product = require('../models/Product');
+const Supplier = require('../models/Supplier');
+const PurchaseOrder = require('../models/PurchaseOrder');
+
+const PRODUCT_POPULATE = { path: 'product', select: 'name title sku brandName' };
+const SUPPLIER_POPULATE = { path: 'supplier', select: 'name supplierCode contactPerson' };
+
+function buildActivePriceQuery(product, supplier, currency, excludeId) {
+  const query = {
+    product,
+    isActive: true,
+    currency: (currency || 'INR').toUpperCase(),
+  };
+  if (supplier) {
+    query.supplier = supplier;
+  } else {
+    query.$or = [{ supplier: null }, { supplier: { $exists: false } }];
+  }
+  if (excludeId) {
+    query._id = { $ne: excludeId };
+  }
+  return query;
+}
+
+async function deactivateActivePrices({ product, supplier, currency, excludeId }) {
+  await Price.updateMany(buildActivePriceQuery(product, supplier, currency, excludeId), {
+    isActive: false,
+  });
+}
+
+async function getLatestPoVendorPriceMap() {
+  const rows = await PurchaseOrder.aggregate([
+    { $match: { supplier: { $exists: true, $ne: null } } },
+    { $sort: { orderDate: -1, createdAt: -1 } },
+    { $unwind: '$items' },
+    {
+      $group: {
+        _id: { product: '$items.product', supplier: '$supplier' },
+        unitPrice: { $first: '$items.unitPrice' },
+        currency: { $first: '$currency' },
+        poNumber: { $first: '$poNumber' },
+        orderDate: { $first: '$orderDate' },
+      },
+    },
+  ]);
+
+  const map = new Map();
+  for (const row of rows) {
+    map.set(`${row._id.product}-${row._id.supplier}`, row);
+  }
+  return map;
+}
 const { paginate } = require('../utils/pagination');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
@@ -15,11 +66,15 @@ const upload = multer({
 // GET all prices with filters (with pagination)
 router.get('/', async (req, res) => {
   try {
-    const { product, isActive, page, limit } = req.query;
+    const { product, supplier, isActive, page, limit } = req.query;
     const query = {};
     
     if (product) {
       query.product = product;
+    }
+
+    if (supplier) {
+      query.supplier = supplier;
     }
     
     if (isActive !== undefined) {
@@ -31,15 +86,122 @@ router.get('/', async (req, res) => {
         page: page || 1,
         limit: limit || 25,
         sort: { effectiveDate: -1 },
-        populate: { path: 'product', select: 'name title sku brandName' }
+        populate: [PRODUCT_POPULATE, SUPPLIER_POPULATE],
       });
       res.json(result);
     } else {
       const prices = await Price.find(query)
-        .populate('product', 'name title sku brandName')
+        .populate(PRODUCT_POPULATE)
+        .populate(SUPPLIER_POPULATE)
         .sort({ effectiveDate: -1 });
       res.json(prices);
     }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET vendor catalog — every product–vendor link with quoted price
+router.get('/vendor-catalog', async (req, res) => {
+  try {
+    const { supplier: supplierFilter, search } = req.query;
+    const searchTerm = search?.trim().toLowerCase() || '';
+
+    const [products, vendorPrices, poPriceMap] = await Promise.all([
+      Product.find({ 'suppliers.0': { $exists: true } })
+        .populate('suppliers.supplier', 'name supplierCode contactPerson')
+        .select('name title sku suppliers unit images')
+        .lean(),
+      Price.find({ supplier: { $ne: null } })
+        .populate(SUPPLIER_POPULATE)
+        .sort({ effectiveDate: -1 })
+        .lean(),
+      getLatestPoVendorPriceMap(),
+    ]);
+
+    const activeVendorPriceMap = new Map();
+    const latestVendorPriceMap = new Map();
+    for (const price of vendorPrices) {
+      const key = `${price.product}-${price.supplier?._id || price.supplier}`;
+      if (!latestVendorPriceMap.has(key)) {
+        latestVendorPriceMap.set(key, price);
+      }
+      if (price.isActive && !activeVendorPriceMap.has(key)) {
+        activeVendorPriceMap.set(key, price);
+      }
+    }
+
+    const rows = [];
+
+    for (const product of products) {
+      for (const link of product.suppliers || []) {
+        const supplierDoc = link.supplier;
+        const supplierId = supplierDoc?._id || link.supplier;
+        if (!supplierId) continue;
+
+        if (supplierFilter && String(supplierId) !== String(supplierFilter)) {
+          continue;
+        }
+
+        const vendorName = supplierDoc?.name || 'Unknown vendor';
+        const productTitle = product.title || product.name || 'Unknown product';
+        const productSku = product.sku || '';
+
+        if (searchTerm) {
+          const haystack = `${productTitle} ${productSku} ${vendorName}`.toLowerCase();
+          if (!haystack.includes(searchTerm)) continue;
+        }
+
+        const key = `${product._id}-${supplierId}`;
+        const activePrice = activeVendorPriceMap.get(key);
+        const latestPrice = latestVendorPriceMap.get(key);
+        const poPrice = poPriceMap.get(key);
+
+        const purchasePrice =
+          activePrice?.purchasePrice ??
+          latestPrice?.purchasePrice ??
+          poPrice?.unitPrice ??
+          null;
+
+        let priceSource = null;
+        if (activePrice?.purchasePrice != null) priceSource = 'price_master';
+        else if (poPrice?.unitPrice != null) priceSource = 'purchase_order';
+
+        rows.push({
+          rowKey: key,
+          priceId: activePrice?._id || latestPrice?._id || null,
+          product: {
+            _id: product._id,
+            title: productTitle,
+            name: product.name,
+            sku: productSku,
+            images: product.images || [],
+          },
+          supplier: {
+            _id: supplierId,
+            name: vendorName,
+            supplierCode: supplierDoc?.supplierCode,
+          },
+          vendorSku: link.sku || '',
+          vendorUnit: link.unit || product.unit || 'pcs',
+          purchasePrice,
+          effectiveDate: activePrice?.effectiveDate || latestPrice?.effectiveDate || poPrice?.orderDate,
+          isActive: activePrice?.isActive ?? false,
+          hasPriceRecord: Boolean(activePrice || latestPrice),
+          priceSource,
+          poNumber: poPrice?.poNumber,
+          notes: activePrice?.notes || latestPrice?.notes || '',
+        });
+      }
+    }
+
+    rows.sort((a, b) => {
+      const vendorCmp = (a.supplier?.name || '').localeCompare(b.supplier?.name || '');
+      if (vendorCmp !== 0) return vendorCmp;
+      return (a.product?.title || '').localeCompare(b.product?.title || '');
+    });
+
+    res.json(rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -50,9 +212,10 @@ router.get('/product/:productId', async (req, res) => {
   try {
     const price = await Price.findOne({
       product: req.params.productId,
-      isActive: true
+      isActive: true,
+      $or: [{ supplier: null }, { supplier: { $exists: false } }],
     })
-      .populate('product', 'name title sku');
+      .populate(PRODUCT_POPULATE);
     
     if (!price) {
       return res.status(404).json({ error: 'No active price found for this product' });
@@ -67,7 +230,8 @@ router.get('/product/:productId', async (req, res) => {
 router.get('/product/:productId/history', async (req, res) => {
   try {
     const prices = await Price.find({ product: req.params.productId })
-      .populate('product', 'name title sku')
+      .populate(PRODUCT_POPULATE)
+      .populate(SUPPLIER_POPULATE)
       .sort({ effectiveDate: -1 });
     res.json(prices);
   } catch (error) {
@@ -78,16 +242,22 @@ router.get('/product/:productId/history', async (req, res) => {
 // GET current prices for multiple products
 router.post('/bulk-current', async (req, res) => {
   try {
-    const { productIds } = req.body;
+    const { productIds, currency } = req.body;
     if (!Array.isArray(productIds)) {
       return res.status(400).json({ error: 'productIds must be an array' });
     }
-    
-    const prices = await Price.find({
+
+    const query = {
       product: { $in: productIds },
-      isActive: true
-    })
-      .populate('product', 'name title sku');
+      isActive: true,
+      $or: [{ supplier: null }, { supplier: { $exists: false } }],
+    };
+    if (currency) {
+      query.currency = currency.toUpperCase();
+    }
+    
+    const prices = await Price.find(query)
+      .populate(PRODUCT_POPULATE);
     
     res.json(prices);
   } catch (error) {
@@ -98,21 +268,22 @@ router.post('/bulk-current', async (req, res) => {
 // POST create new price (deactivates old active price)
 router.post('/', async (req, res) => {
   try {
-    const { product, purchasePrice, salesPrice, currency, effectiveDate, notes, isActive } = req.body;
+    const { product, supplier, purchasePrice, salesPrice, currency, effectiveDate, notes, isActive } = req.body;
     
-    // If setting as active, deactivate old active prices
     const activeFlag = isActive !== undefined ? isActive : true;
     if (activeFlag) {
-      await Price.updateMany(
-        { product, isActive: true },
-        { isActive: false }
-      );
+      await deactivateActivePrices({
+        product,
+        supplier: supplier || null,
+        currency: currency || 'INR',
+      });
     }
     
     const price = new Price({
       product,
+      supplier: supplier || undefined,
       purchasePrice,
-      salesPrice,
+      salesPrice: salesPrice ?? purchasePrice ?? 0,
       currency: currency || 'INR',
       effectiveDate: effectiveDate || new Date(),
       isActive: activeFlag,
@@ -122,7 +293,8 @@ router.post('/', async (req, res) => {
     await price.save();
     
     const populatedPrice = await Price.findById(price._id)
-      .populate('product', 'name title sku');
+      .populate(PRODUCT_POPULATE)
+      .populate(SUPPLIER_POPULATE);
     
     res.status(201).json(populatedPrice);
   } catch (error) {
@@ -139,17 +311,20 @@ router.post('/', async (req, res) => {
 // PUT update price
 router.put('/:id', async (req, res) => {
   try {
-    const { purchasePrice, salesPrice, currency, effectiveDate, isActive, notes } = req.body;
+    const { purchasePrice, salesPrice, currency, effectiveDate, isActive, notes, supplier } = req.body;
     
-    // If setting as active, deactivate old active prices for the same product
+    const existingPrice = await Price.findById(req.params.id);
+    if (!existingPrice) {
+      return res.status(404).json({ error: 'Price not found' });
+    }
+
     if (isActive === true) {
-      const existingPrice = await Price.findById(req.params.id);
-      if (existingPrice) {
-        await Price.updateMany(
-          { product: existingPrice.product, isActive: true, _id: { $ne: req.params.id } },
-          { isActive: false }
-        );
-      }
+      await deactivateActivePrices({
+        product: existingPrice.product,
+        supplier: supplier !== undefined ? supplier : existingPrice.supplier,
+        currency: currency || existingPrice.currency,
+        excludeId: req.params.id,
+      });
     }
     
     const updateData = {};
@@ -159,13 +334,15 @@ router.put('/:id', async (req, res) => {
     if (effectiveDate !== undefined) updateData.effectiveDate = effectiveDate;
     if (isActive !== undefined) updateData.isActive = isActive;
     if (notes !== undefined) updateData.notes = notes;
+    if (supplier !== undefined) updateData.supplier = supplier || undefined;
     
     const price = await Price.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true, runValidators: true }
     )
-      .populate('product', 'name title sku');
+      .populate(PRODUCT_POPULATE)
+      .populate(SUPPLIER_POPULATE);
     
     if (!price) {
       return res.status(404).json({ error: 'Price not found' });
@@ -223,13 +400,15 @@ router.post('/bulk', async (req, res) => {
     for (const priceData of prices) {
       try {
         // Deactivate old active prices for this product
-        await Price.updateMany(
-          { product: priceData.product, isActive: true },
-          { isActive: false }
-        );
+        await deactivateActivePrices({
+          product: priceData.product,
+          supplier: priceData.supplier || null,
+          currency: priceData.currency || 'INR',
+        });
         
         const price = new Price({
           product: priceData.product,
+          supplier: priceData.supplier || undefined,
           purchasePrice: priceData.purchasePrice,
           salesPrice: priceData.salesPrice,
           currency: priceData.currency || 'INR',
@@ -262,9 +441,8 @@ router.get('/template', (req, res) => {
   try {
     const headers = [
       { key: 'product', label: 'Product SKU/Name *' },
-      { key: 'purchasePrice', label: 'Purchase Price' },
-      { key: 'salesPrice', label: 'Sales Price *' },
-      { key: 'currency', label: 'Currency' },
+      { key: 'vendor', label: 'Vendor Name' },
+      { key: 'purchasePrice', label: 'Vendor Price *' },
       { key: 'effectiveDate', label: 'Effective Date' },
       { key: 'isActive', label: 'Is Active' }
     ];
@@ -304,14 +482,20 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
       try {
         const productSku = row['Product SKU/Name *'] || '';
-        const purchasePrice = row['Purchase Price'] ? parseFloat(row['Purchase Price']) : undefined;
-        const salesPrice = parseFloat(row['Sales Price *']);
+        const vendorName = (row['Vendor Name'] || '').trim();
+        const purchasePrice = row['Vendor Price *'] != null && row['Vendor Price *'] !== ''
+          ? parseFloat(row['Vendor Price *'])
+          : row['Vendor Price (Purchase)'] != null && row['Vendor Price (Purchase)'] !== ''
+            ? parseFloat(row['Vendor Price (Purchase)'])
+            : row['Purchase Price'] != null && row['Purchase Price'] !== ''
+              ? parseFloat(row['Purchase Price'])
+              : undefined;
         const currency = row['Currency'] || 'INR';
         const effectiveDate = row['Effective Date'] ? new Date(row['Effective Date']) : new Date();
         const isActive = row['Is Active'] === 'true' || row['Is Active'] === true || row['Is Active'] === 'TRUE';
 
-        if (!productSku || isNaN(salesPrice)) {
-          errors.push({ row: rowNum, field: 'product/salesPrice', message: 'Product and Sales Price are required', data: row });
+        if (!productSku || purchasePrice == null || isNaN(purchasePrice)) {
+          errors.push({ row: rowNum, field: 'product/purchasePrice', message: 'Product and Vendor Price are required', data: row });
           failed++;
           continue;
         }
@@ -329,18 +513,32 @@ router.post('/import', upload.single('file'), async (req, res) => {
           continue;
         }
 
-        // If setting as active, deactivate old active prices
+        let supplierId;
+        if (vendorName) {
+          const supplier = await Supplier.findOne({
+            name: { $regex: new RegExp(`^${vendorName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+          });
+          if (!supplier) {
+            errors.push({ row: rowNum, field: 'vendor', message: `Vendor not found: ${vendorName}`, data: row });
+            failed++;
+            continue;
+          }
+          supplierId = supplier._id;
+        }
+
         if (isActive) {
-          await Price.updateMany(
-            { product: product._id, isActive: true },
-            { isActive: false }
-          );
+          await deactivateActivePrices({
+            product: product._id,
+            supplier: supplierId || null,
+            currency,
+          });
         }
 
         const priceData = {
           product: product._id,
-          purchasePrice: purchasePrice,
-          salesPrice: salesPrice,
+          supplier: supplierId,
+          purchasePrice,
+          salesPrice: purchasePrice,
           currency: currency,
           effectiveDate: effectiveDate,
           isActive: isActive

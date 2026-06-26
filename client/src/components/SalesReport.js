@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { reportsAPI, salesChannelsAPI, salesLocationsAPI } from '../services/api';
+import { formatMoney } from '../utils/locationCurrency';
 import logger from '../utils/logger';
 import './SalesReport.css';
+
+const formatAed = (amount) => formatMoney(amount, 'AED');
 
 function SalesReport() {
   const [view, setView] = useState('summary'); // 'summary' or 'detailed'
@@ -248,11 +251,11 @@ function SalesReport() {
             </div>
             <div className="stat-card">
               <h3>Total Revenue</h3>
-              <p className="stat-value">₹{summaryData.totalRevenue.toFixed(2)}</p>
+              <p className="stat-value">{formatAed(summaryData.totalRevenue)}</p>
             </div>
             <div className="stat-card">
               <h3>Average Order Value</h3>
-              <p className="stat-value">₹{summaryData.averageOrderValue.toFixed(2)}</p>
+              <p className="stat-value">{formatAed(summaryData.averageOrderValue)}</p>
             </div>
             <div className="stat-card">
               <h3>Total Items Sold</h3>
@@ -277,7 +280,7 @@ function SalesReport() {
                     <tr key={idx}>
                       <td>{group.group}</td>
                       <td>{group.count}</td>
-                      <td>₹{group.revenue.toFixed(2)}</td>
+                      <td>{formatAed(group.revenue)}</td>
                       <td>{group.itemsSold}</td>
                     </tr>
                   ))}
@@ -294,7 +297,7 @@ function SalesReport() {
                   <ul>
                     {summaryData.statistics.topProducts.slice(0, 5).map((item, idx) => (
                       <li key={idx}>
-                        {item.product?.name || 'Unknown'}: ₹{item.revenue.toFixed(2)} ({item.quantity} units)
+                        {item.product?.name || 'Unknown'}: {formatAed(item.revenue)} ({item.quantity} units)
                       </li>
                     ))}
                   </ul>
@@ -304,7 +307,7 @@ function SalesReport() {
                   <ul>
                     {summaryData.statistics.topChannels.slice(0, 5).map((item, idx) => (
                       <li key={idx}>
-                        {item.channel?.name || 'Unknown'}: ₹{item.revenue.toFixed(2)} ({item.count} orders)
+                        {item.channel?.name || 'Unknown'}: {formatAed(item.revenue)} ({item.count} orders)
                       </li>
                     ))}
                   </ul>
@@ -360,10 +363,10 @@ function SalesReport() {
                   <td>{sale.salesLocation?.name || '-'}</td>
                   <td>{sale.customer?.name || '-'}</td>
                   <td>{sale.items.length} items</td>
-                  <td>₹{sale.subtotal.toFixed(2)}</td>
-                  <td>₹{sale.discount.toFixed(2)}</td>
-                  <td>₹{sale.tax.toFixed(2)}</td>
-                  <td>₹{sale.total.toFixed(2)}</td>
+                  <td>{formatAed(sale.subtotal)}</td>
+                  <td>{formatAed(sale.discount)}</td>
+                  <td>{formatAed(sale.tax)}</td>
+                  <td>{formatAed(sale.total)}</td>
                   <td>
                     <span className={`status-badge status-${sale.paymentStatus}`}>
                       {sale.paymentStatus}
