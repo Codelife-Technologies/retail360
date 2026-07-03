@@ -5,7 +5,25 @@ const fs = require('fs');
 const path = require('path');
 const Subcategory = require('../models/Subcategory');
 const logger = require('../utils/logger');
-const { generateMultipleImages, generateSingleImage, saveGeneratedImage } = require('../utils/geminiImageGenerator');
+const { 
+  generateMultipleImages: generateMultipleImagesGemini, 
+  generateSingleImage: generateSingleImageGemini, 
+  saveGeneratedImage: saveGeneratedImageGemini 
+} = require('../utils/geminiImageGenerator');
+const { requirePermission } = require('../middleware/auth');
+// Lazy-load openaiImageGenerator to avoid blocking server startup if OpenAI package has dependency issues
+let openaiImageGenerator = null;
+function getOpenAIImageGenerator() {
+  if (!openaiImageGenerator) {
+    try {
+      openaiImageGenerator = require('../utils/openaiImageGenerator');
+    } catch (err) {
+      logger.backend.error('OpenAI image generator not available', { error: err.message });
+      throw new Error('OpenAI image generation is not available. The OpenAI package may need to be reinstalled: npm install openai');
+    }
+  }
+  return openaiImageGenerator;
+}
 
 // Configure multer for temporary file storage
 const upload = multer({
@@ -30,9 +48,36 @@ function ensureDirectoryExists(dirPath) {
   }
 }
 
+// Helper function to get the appropriate generator functions based on provider
+function getGeneratorFunctions(provider) {
+  const normalizedProvider = (provider || 'gemini').toLowerCase();
+  
+  if (normalizedProvider === 'openai' || normalizedProvider === 'dall-e' || normalizedProvider === 'chatgpt') {
+    const {
+      generateMultipleImages: generateMultipleImagesOpenAI,
+      generateSingleImage: generateSingleImageOpenAI,
+      saveGeneratedImage: saveGeneratedImageOpenAI
+    } = getOpenAIImageGenerator();
+    return {
+      generateSingleImage: generateSingleImageOpenAI,
+      generateMultipleImages: generateMultipleImagesOpenAI,
+      saveGeneratedImage: saveGeneratedImageOpenAI,
+      uploadDir: 'openai-generated'
+    };
+  } else {
+    // Default to Gemini
+    return {
+      generateSingleImage: generateSingleImageGemini,
+      generateMultipleImages: generateMultipleImagesGemini,
+      saveGeneratedImage: saveGeneratedImageGemini,
+      uploadDir: 'gemini-generated'
+    };
+  }
+}
+
 // POST /api/gemini/regenerate-image
 // Regenerate a single image using the same prompt (must be before /generate-images)
-router.post('/regenerate-image', upload.single('image'), async (req, res) => {
+router.post('/regenerate-image', requirePermission('gemini.generate'), upload.single('image'), async (req, res) => {
   let tempImagePath = null;
   
   try {
@@ -43,7 +88,7 @@ router.post('/regenerate-image', upload.single('image'), async (req, res) => {
       return res.status(400).json({ error: 'No image file uploaded' });
     }
     
-    const { subcategoryId, prompt, order } = req.body;
+    const { subcategoryId, prompt, order, provider, model, size, quality } = req.body;
     
     if (!subcategoryId) {
       return res.status(400).json({ error: 'Subcategory ID is required' });
@@ -65,14 +110,29 @@ router.post('/regenerate-image', upload.single('image'), async (req, res) => {
       return res.status(404).json({ error: 'Subcategory not found' });
     }
     
+    // Get generator functions based on provider
+    const generators = getGeneratorFunctions(provider);
+    
     logger.backend.info('Regenerating single image', { 
       subcategoryId, 
       order,
+      provider: provider || 'gemini',
       imagePath: tempImagePath 
     });
     
-    // Generate single image
-    const result = await generateSingleImage(tempImagePath, prompt);
+    // Generate single image with provider-specific options
+    let result;
+    if (provider && (provider.toLowerCase() === 'openai' || provider.toLowerCase() === 'dall-e' || provider.toLowerCase() === 'chatgpt')) {
+      result = await generators.generateSingleImage(
+        tempImagePath, 
+        prompt, 
+        model || 'dall-e-3', 
+        size || '1024x1024', 
+        quality || 'standard'
+      );
+    } else {
+      result = await generators.generateSingleImage(tempImagePath, prompt);
+    }
     
     if (!result.success || !result.imageData) {
       return res.status(500).json({ 
@@ -82,7 +142,7 @@ router.post('/regenerate-image', upload.single('image'), async (req, res) => {
     }
     
     // Create output directory for generated images
-    const outputDir = path.join(__dirname, '..', 'uploads', 'gemini-generated', subcategoryId);
+    const outputDir = path.join(__dirname, '..', 'uploads', generators.uploadDir, subcategoryId);
     ensureDirectoryExists(outputDir);
     
     // Create filename based on order and timestamp
@@ -92,13 +152,14 @@ router.post('/regenerate-image', upload.single('image'), async (req, res) => {
     const outputPath = path.join(outputDir, filename);
     
     // Save the image
-    saveGeneratedImage(result.imageData, outputPath, `order_${order}`);
+    generators.saveGeneratedImage(result.imageData, outputPath, `order_${order}`);
     
     // Create relative URL path
-    const relativePath = `gemini-generated/${subcategoryId}/${filename}`;
+    const relativePath = `${generators.uploadDir}/${subcategoryId}/${filename}`;
     
     logger.backend.info('Image regenerated and saved', { 
       order,
+      provider: provider || 'gemini',
       path: relativePath 
     });
     
@@ -113,7 +174,8 @@ router.post('/regenerate-image', upload.single('image'), async (req, res) => {
         order: parseInt(order),
         prompt: prompt,
         url: `/uploads/${relativePath}`,
-        path: relativePath
+        path: relativePath,
+        provider: provider || 'gemini'
       }
     });
     
@@ -131,7 +193,8 @@ router.post('/regenerate-image', upload.single('image'), async (req, res) => {
       error: error.message, 
       stack: error.stack,
       subcategoryId: req.body.subcategoryId,
-      order: req.body.order
+      order: req.body.order,
+      provider: req.body.provider
     });
     
     res.status(500).json({ 
@@ -143,7 +206,7 @@ router.post('/regenerate-image', upload.single('image'), async (req, res) => {
 
 // POST /api/gemini/generate-images
 // Generate 6-10 images based on uploaded image and subcategory prompts
-router.post('/generate-images', upload.single('image'), async (req, res) => {
+router.post('/generate-images', requirePermission('gemini.generate'), upload.single('image'), async (req, res) => {
   let tempImagePath = null;
   
   try {
@@ -152,7 +215,7 @@ router.post('/generate-images', upload.single('image'), async (req, res) => {
       return res.status(400).json({ error: 'No image file uploaded' });
     }
     
-    const { subcategoryId } = req.body;
+    const { subcategoryId, provider, model, size, quality } = req.body;
     if (!subcategoryId) {
       return res.status(400).json({ error: 'Subcategory ID is required' });
     }
@@ -181,17 +244,32 @@ router.post('/generate-images', upload.single('image'), async (req, res) => {
     // Sort prompts by order
     const sortedPrompts = [...prompts].sort((a, b) => a.order - b.order);
     
+    // Get generator functions based on provider
+    const generators = getGeneratorFunctions(provider);
+    
     logger.backend.info('Starting image generation', { 
       subcategoryId, 
       promptCount: sortedPrompts.length,
+      provider: provider || 'gemini',
       imagePath: tempImagePath 
     });
     
-    // Generate images using the utility
-    const generationResults = await generateMultipleImages(tempImagePath, sortedPrompts);
+    // Generate images using the appropriate utility
+    let generationResults;
+    if (provider && (provider.toLowerCase() === 'openai' || provider.toLowerCase() === 'dall-e' || provider.toLowerCase() === 'chatgpt')) {
+      generationResults = await generators.generateMultipleImages(
+        tempImagePath, 
+        sortedPrompts, 
+        model || 'dall-e-3', 
+        size || '1024x1024', 
+        quality || 'standard'
+      );
+    } else {
+      generationResults = await generators.generateMultipleImages(tempImagePath, sortedPrompts);
+    }
     
     // Create output directory for generated images
-    const outputDir = path.join(__dirname, '..', 'uploads', 'gemini-generated', subcategoryId);
+    const outputDir = path.join(__dirname, '..', 'uploads', generators.uploadDir, subcategoryId);
     ensureDirectoryExists(outputDir);
     
     // Save generated images and collect URLs
@@ -209,20 +287,22 @@ router.post('/generate-images', upload.single('image'), async (req, res) => {
           const outputPath = path.join(outputDir, filename);
           
           // Save the image
-          saveGeneratedImage(result.data.imageData, outputPath, `order_${result.order}`);
+          generators.saveGeneratedImage(result.data.imageData, outputPath, `order_${result.order}`);
           
           // Create relative URL path
-          const relativePath = `gemini-generated/${subcategoryId}/${filename}`;
+          const relativePath = `${generators.uploadDir}/${subcategoryId}/${filename}`;
           
           savedImages.push({
             order: result.order,
             prompt: result.prompt,
             url: `/uploads/${relativePath}`,
-            path: relativePath
+            path: relativePath,
+            provider: provider || 'gemini'
           });
           
           logger.backend.info('Image generated and saved', { 
             order: result.order,
+            provider: provider || 'gemini',
             path: relativePath 
           });
         } catch (saveError) {
@@ -261,14 +341,16 @@ router.post('/generate-images', upload.single('image'), async (req, res) => {
     const successfulImages = savedImages.filter(img => img.url);
     
     if (successfulImages.length === 0) {
+      const providerName = provider || 'Gemini';
       return res.status(500).json({ 
-        error: 'Failed to generate any images. Please check your Gemini API configuration and prompts.',
+        error: `Failed to generate any images. Please check your ${providerName} API configuration and prompts.`,
         details: savedImages
       });
     }
     
     logger.backend.info('Image generation completed', { 
       subcategoryId,
+      provider: provider || 'gemini',
       total: savedImages.length,
       successful: successfulImages.length 
     });
@@ -276,6 +358,7 @@ router.post('/generate-images', upload.single('image'), async (req, res) => {
     res.json({
       success: true,
       images: savedImages,
+      provider: provider || 'gemini',
       message: `Successfully generated ${successfulImages.length} out of ${savedImages.length} images`
     });
     
@@ -292,7 +375,8 @@ router.post('/generate-images', upload.single('image'), async (req, res) => {
     logger.backend.error('Error generating images', { 
       error: error.message, 
       stack: error.stack,
-      subcategoryId: req.body.subcategoryId 
+      subcategoryId: req.body.subcategoryId,
+      provider: req.body.provider
     });
     
     res.status(500).json({ 

@@ -6,6 +6,7 @@ const logger = require('../utils/logger');
 const { paginate } = require('../utils/pagination');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
+const { requirePermission } = require('../middleware/auth');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -36,7 +37,7 @@ router.get('/home-branch', async (req, res) => {
 });
 
 // GET all locations (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('locations.view'), async (req, res) => {
   try {
     const { search, city, isActive, page, limit } = req.query;
     const query = {};
@@ -90,7 +91,7 @@ router.post('/:id/home-branch', async (req, res) => {
 });
 
 // GET single location
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('locations.view'), async (req, res) => {
   try {
     const location = await Location.findById(req.params.id);
     if (!location) {
@@ -103,7 +104,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create location
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('locations.create'), async (req, res) => {
   try {
     logger.backend.info('Creating location', { body: req.body });
     const location = new Location(req.body);
@@ -129,7 +130,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update location
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('locations.update'), async (req, res) => {
   try {
     const location = await Location.findByIdAndUpdate(
       req.params.id,
@@ -154,7 +155,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE location
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('locations.delete'), async (req, res) => {
   try {
     const location = await Location.findByIdAndDelete(req.params.id);
     if (!location) {
@@ -167,7 +168,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET Excel template
-router.get('/template', (req, res) => {
+router.get('/template', requirePermission('locations.view'), (req, res) => {
   try {
     const headers = [
       { key: 'code', label: 'Code *' },
@@ -193,7 +194,7 @@ router.get('/template', (req, res) => {
 });
 
 // POST import locations from Excel
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', requirePermission('locations.create'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });

@@ -5,6 +5,7 @@ const SalesChannel = require('../models/SalesChannel');
 const { paginate } = require('../utils/pagination');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
+const { requirePermission } = require('../middleware/auth');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -12,7 +13,7 @@ const upload = multer({
 });
 
 // GET all sales channels (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('salesChannels.view'), async (req, res) => {
   try {
     const { isActive, type, search, page, limit } = req.query;
     const query = {};
@@ -50,7 +51,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET single sales channel
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('salesChannels.view'), async (req, res) => {
   try {
     const salesChannel = await SalesChannel.findById(req.params.id);
     if (!salesChannel) {
@@ -63,7 +64,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create sales channel
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('salesChannels.create'), async (req, res) => {
   try {
     const salesChannel = new SalesChannel(req.body);
     await salesChannel.save();
@@ -84,7 +85,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update sales channel
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('salesChannels.update'), async (req, res) => {
   try {
     const salesChannel = await SalesChannel.findByIdAndUpdate(
       req.params.id,
@@ -112,7 +113,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE sales channel (soft delete)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('salesChannels.delete'), async (req, res) => {
   try {
     const salesChannel = await SalesChannel.findByIdAndUpdate(
       req.params.id,
@@ -135,7 +136,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET Excel template
-router.get('/template', (req, res) => {
+router.get('/template', requirePermission('salesChannels.view'), (req, res) => {
   try {
     const headers = [
       { key: 'code', label: 'Code *' },
@@ -157,7 +158,7 @@ router.get('/template', (req, res) => {
 });
 
 // POST import sales channels from Excel
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', requirePermission('salesChannels.create'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });

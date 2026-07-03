@@ -17,6 +17,7 @@ const productSchema = new mongoose.Schema({
   },
   sku: {
     type: String,
+    required: true,
     unique: true,
     trim: true,
     sparse: true
@@ -39,43 +40,51 @@ const productSchema = new mongoose.Schema({
   },
   brandName: {
     type: String,
+    required: true,
     trim: true
   },
   
   // Classification & Codes
   category: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Category'
+    ref: 'Category',
+    required: true
   },
   subCategory: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Subcategory'
+    ref: 'Subcategory',
+    required: true
   },
-  // Keep hsnCode for backward compatibility during migration (will be removed later)
   hsnCode: {
     type: String,
+    required: true,
     trim: true
   },
   manufacturerName: {
     type: String,
+    required: true,
     trim: true
   },
   contactDetails: {
     type: String,
+    required: true,
     trim: true
   },
   
   // Product Details
   colour: {
     type: String,
+    required: true,
     trim: true
   },
   material: {
     type: String,
+    required: true,
     trim: true
   },
   size: {
     type: String,
+    required: true,
     trim: true
   },
   shape: {
@@ -84,6 +93,7 @@ const productSchema = new mongoose.Schema({
   },
   weight: {
     type: Number,
+    required: true,
     min: 0
   },
   specialFeature: {
@@ -93,14 +103,14 @@ const productSchema = new mongoose.Schema({
   
   // Dimensions
   productDimensionCm: {
-    length: { type: Number, min: 0 },
-    width: { type: Number, min: 0 },
-    height: { type: Number, min: 0 }
+    length: { type: Number, required: true, min: 0 },
+    width: { type: Number, required: true, min: 0 },
+    height: { type: Number, required: true, min: 0 }
   },
   packageDimensionCm: {
-    length: { type: Number, min: 0 },
-    width: { type: Number, min: 0 },
-    height: { type: Number, min: 0 }
+    length: { type: Number, required: true, min: 0 },
+    width: { type: Number, required: true, min: 0 },
+    height: { type: Number, required: true, min: 0 }
   },
   
   // Marketing
@@ -109,12 +119,20 @@ const productSchema = new mongoose.Schema({
     trim: true
   }],
   
-  // Media
-  images: [{
-    type: String,
-    trim: true
-  }],
-  
+  // Media - at least one image required
+  images: {
+    type: [{
+      type: String,
+      trim: true
+    }],
+    validate: {
+      validator: function(v) {
+        return v && Array.isArray(v) && v.filter(i => i && String(i).trim()).length > 0;
+      },
+      message: 'At least one image is required'
+    }
+  },
+
   // Existing Fields
   description: {
     type: String,
@@ -126,6 +144,7 @@ const productSchema = new mongoose.Schema({
   }],
   unit: {
     type: String,
+    required: true,
     default: 'pcs',
     trim: true
   },

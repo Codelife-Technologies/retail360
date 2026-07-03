@@ -4,6 +4,8 @@ const Shipment = require('../models/Shipment');
 const Stock = require('../models/Stock');
 const ShippingCharge = require('../models/ShippingCharge');
 const logger = require('../utils/logger');
+const { paginate } = require('../utils/pagination');
+const { requirePermission } = require('../middleware/auth');
 
 // Helper function to generate shipment number
 async function generateShipmentNumber() {
@@ -31,14 +33,12 @@ async function calculateShippingCostForItems(shippingChargeId, items) {
   const charge = await ShippingCharge.findById(shippingChargeId);
   if (!charge) return 0;
   
-  // Calculate total weight
   const totalWeight = items.reduce((sum, item) => {
     const itemWeight = item.weight || 0;
     return sum + (itemWeight * item.quantity);
   }, 0);
   
   let calculatedCharge = 0;
-  
   if (charge.chargeType === 'perKg') {
     calculatedCharge = totalWeight * (charge.perKgRate || 0);
   } else if (charge.chargeType === 'weightRange') {
@@ -46,10 +46,7 @@ async function calculateShippingCostForItems(shippingChargeId, items) {
       const maxWeight = range.maxWeight !== null ? range.maxWeight : Infinity;
       return totalWeight >= range.minWeight && totalWeight <= maxWeight;
     });
-    
-    if (matchingRange) {
-      calculatedCharge = matchingRange.rate;
-    }
+    if (matchingRange) calculatedCharge = matchingRange.rate;
   } else if (charge.chargeType === 'flat') {
     calculatedCharge = charge.flatRate || 0;
   }
@@ -58,7 +55,7 @@ async function calculateShippingCostForItems(shippingChargeId, items) {
 }
 
 // GET all shipments
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('shipments.view'), async (req, res) => {
   try {
     const { fromLocation, toLocation, status, shipmentVendor, startDate, endDate, search, page, limit } = req.query;
     const query = {};
@@ -113,7 +110,7 @@ router.get('/', async (req, res) => {
     } else {
       const shipments = await Shipment.find(query)
         .populate('shipmentVendor', 'name code')
-        .populate('shippingCharge', 'name chargeType')
+        .populate('shippingCharge', 'name chargeType type')
         .populate('fromLocation', 'name code')
         .populate('toLocation', 'name code')
         .populate('items.product', 'name sku weight')
@@ -127,7 +124,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET single shipment
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('shipments.view'), async (req, res) => {
   try {
     const shipment = await Shipment.findById(req.params.id)
       .populate('shipmentVendor')
@@ -146,7 +143,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create shipment
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('shipments.create'), async (req, res) => {
   try {
     const { items, fromLocation, toLocation } = req.body;
     
@@ -215,7 +212,7 @@ router.post('/', async (req, res) => {
     
     const populatedShipment = await Shipment.findById(shipment._id)
       .populate('shipmentVendor', 'name code')
-      .populate('shippingCharge', 'name chargeType')
+      .populate('shippingCharge', 'name chargeType type')
       .populate('fromLocation', 'name code')
       .populate('toLocation', 'name code')
       .populate('items.product', 'name sku weight');
@@ -228,7 +225,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update shipment
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('shipments.update'), async (req, res) => {
   try {
     const shipment = await Shipment.findById(req.params.id);
     if (!shipment) {
@@ -311,7 +308,7 @@ router.put('/:id', async (req, res) => {
       { new: true, runValidators: true }
     )
       .populate('shipmentVendor', 'name code')
-      .populate('shippingCharge', 'name chargeType')
+      .populate('shippingCharge', 'name chargeType type')
       .populate('fromLocation', 'name code')
       .populate('toLocation', 'name code')
       .populate('items.product', 'name sku weight');
@@ -324,7 +321,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE shipment
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('shipments.delete'), async (req, res) => {
   try {
     const shipment = await Shipment.findById(req.params.id);
     if (!shipment) {
@@ -367,7 +364,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST calculate charges
-router.post('/calculate-charges', async (req, res) => {
+router.post('/calculate-charges', requirePermission('shipments.view'), async (req, res) => {
   try {
     const { shippingChargeId, items } = req.body;
     

@@ -33,6 +33,11 @@ const shippingChargeSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  type: {
+    type: String,
+    enum: ['inward', 'outward'],
+    default: 'outward'
+  },
   chargeType: {
     type: String,
     enum: ['perKg', 'weightRange', 'flat'],
@@ -69,6 +74,7 @@ const shippingChargeSchema = new mongoose.Schema({
 
 // Indexes for faster searches
 shippingChargeSchema.index({ shipmentVendor: 1 });
+shippingChargeSchema.index({ type: 1 });
 shippingChargeSchema.index({ isActive: 1 });
 shippingChargeSchema.index({ effectiveDate: -1 });
 

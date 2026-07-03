@@ -273,6 +273,12 @@
   background: #6B3894;
 }
 
+.action-buttons {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
 .btn-edit {
   background: #10b981;
   color: white;

@@ -82,5 +82,29 @@ function exportToExcel(data, headers) {
   return buffer;
 }
 
-module.exports = { generateTemplate, exportToExcel };
+/**
+ * Build an .xlsx buffer from an array of plain objects (column order follows first row keys).
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {string} sheetName
+ * @returns {Buffer}
+ */
+function exportJsonRowsToExcelBuffer(rows, sheetName = 'Report') {
+  const workbook = XLSX.utils.book_new();
+  const safeName = String(sheetName).replace(/[\\/?*[\]:]/g, '').slice(0, 31) || 'Report';
+
+  if (!rows || rows.length === 0) {
+    const worksheet = XLSX.utils.aoa_to_sheet([['No data']]);
+    worksheet['!cols'] = [{ wch: 20 }];
+    XLSX.utils.book_append_sheet(workbook, worksheet, safeName);
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  }
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const colCount = Object.keys(rows[0]).length;
+  worksheet['!cols'] = Array(Math.max(colCount, 1)).fill({ wch: 22 });
+  XLSX.utils.book_append_sheet(workbook, worksheet, safeName);
+  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+}
+
+module.exports = { generateTemplate, exportToExcel, exportJsonRowsToExcelBuffer };
 

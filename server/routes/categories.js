@@ -5,9 +5,10 @@ const Subcategory = require('../models/Subcategory');
 const Product = require('../models/Product');
 const logger = require('../utils/logger');
 const { paginate } = require('../utils/pagination');
+const { requirePermission } = require('../middleware/auth');
 
 // GET all categories (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('categories.view'), async (req, res) => {
   try {
     const { search, page, limit } = req.query;
     const query = {};
@@ -37,7 +38,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET subcategories for a category (must come before /:id route)
-router.get('/:id/subcategories', async (req, res) => {
+router.get('/:id/subcategories', requirePermission('categories.view'), async (req, res) => {
   try {
     const subcategories = await Subcategory.find({ category: req.params.id }).sort({ name: 1 });
     res.json(subcategories);
@@ -48,7 +49,7 @@ router.get('/:id/subcategories', async (req, res) => {
 });
 
 // GET single category
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('categories.view'), async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
     if (!category) {
@@ -61,7 +62,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create category
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('categories.create'), async (req, res) => {
   try {
     logger.backend.info('Creating category', { body: req.body });
     const category = new Category(req.body);
@@ -85,7 +86,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update category
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('categories.update'), async (req, res) => {
   try {
     const category = await Category.findByIdAndUpdate(
       req.params.id,
@@ -108,7 +109,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE category
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('categories.delete'), async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
     if (!category) {

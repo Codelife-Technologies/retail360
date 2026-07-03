@@ -1,0 +1,216 @@
+.um-container {
+  padding: 2rem;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.um-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.um-header h1 {
+  margin: 0;
+  color: #333;
+}
+
+.search-bar {
+  margin-bottom: 1.5rem;
+}
+
+.search-bar input {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.loading {
+  padding: 2rem;
+  text-align: center;
+  color: #666;
+}
+
+.um-table-container {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.um-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.um-table thead {
+  background: #f8f9fa;
+}
+
+.um-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.um-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.um-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.no-data {
+  text-align: center;
+  color: #666;
+  padding: 2rem !important;
+}
+
+.um-container .btn-primary,
+.um-container .btn-edit,
+.um-container .btn-delete {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-right: 0.5rem;
+  transition: all 0.2s;
+}
+
+.um-container .btn-primary {
+  background: #6B3894;
+  color: white;
+}
+
+.um-container .btn-primary:hover {
+  background: #5a2d7a;
+}
+
+.um-container .btn-edit {
+  background: #10b981;
+  color: white;
+}
+
+.um-container .btn-edit:hover {
+  background: #059669;
+}
+
+.um-container .btn-delete {
+  background: #ef4444;
+  color: white;
+}
+
+.um-container .btn-delete:hover {
+  background: #dc2626;
+}
+
+.um-container .modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.um-container .modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 600px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.um-container .modal-content h2 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: #333;
+}
+
+.um-container .form-group {
+  margin-bottom: 1rem;
+}
+
+.um-container .form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #333;
+  font-weight: 500;
+}
+
+.um-container .form-group input,
+.um-container .form-group textarea,
+.um-container .form-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.um-container .form-group textarea {
+  resize: vertical;
+}
+
+.um-container .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.um-container .form-actions button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.um-container .form-actions button[type="button"] {
+  background: #e5e7eb;
+  color: #333;
+}
+
+.um-container .form-actions button[type="button"]:hover {
+  background: #d1d5db;
+}
+
+.multiselect-box {
+  max-height: 120px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.5rem;
+  background: #f9fafb;
+}
+
+.multiselect-box label {
+  display: block;
+  padding: 0.35rem 0;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+.multiselect-box input {
+  margin-right: 0.5rem;
+  width: auto;
+}
