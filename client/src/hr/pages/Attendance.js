@@ -30,6 +30,9 @@ const emptyForm = () => ({
 
 function Attendance() {
   const [viewMode, setViewMode] = useState('daily');
+  const [canManageAll, setCanManageAll] = useState(false);
+  const [linkedEmployeeId, setLinkedEmployeeId] = useState(null);
+  const [accessLoaded, setAccessLoaded] = useState(false);
   const [records, setRecords] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [summary, setSummary] = useState({ present: 0, absent: 0, late: 0, leave: 0 });
@@ -51,11 +54,12 @@ function Attendance() {
   const [formData, setFormData] = useState(emptyForm());
 
   const fetchRecords = useCallback(async () => {
+    if (!accessLoaded) return;
     try {
       setLoading(true);
       const params = {
-        search: searchTerm,
-        employee: filters.employee,
+        search: canManageAll ? searchTerm : '',
+        employee: canManageAll ? filters.employee : linkedEmployeeId || undefined,
         status: filters.status,
         page,
         limit: 20,
@@ -86,7 +90,7 @@ function Attendance() {
           const trendRes = await hrAttendanceAPI.getTrend({
             month: filters.month,
             year: filters.year,
-            employee: filters.employee || undefined,
+            employee: canManageAll ? (filters.employee || undefined) : linkedEmployeeId || undefined,
           });
           setMonthlyTrend(trendRes.data?.trend || []);
         } catch (trendErr) {
@@ -108,15 +112,35 @@ function Attendance() {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, filters, page, viewMode]);
+  }, [searchTerm, filters, page, viewMode, canManageAll, linkedEmployeeId, accessLoaded]);
+
+  useEffect(() => {
+    hrAttendanceAPI
+      .getContext()
+      .then((res) => {
+        setCanManageAll(Boolean(res.data?.canManageAll));
+        setLinkedEmployeeId(res.data?.linkedEmployeeId || null);
+      })
+      .catch(() => {
+        setCanManageAll(false);
+        setLinkedEmployeeId(null);
+      })
+      .finally(() => setAccessLoaded(true));
+  }, []);
 
   useEffect(() => {
     fetchRecords();
   }, [fetchRecords]);
 
   useEffect(() => {
-    hrEmployeesAPI.getAll({ status: 'Active' }).then((res) => setEmployees(extractList(res))).catch(() => {});
-  }, []);
+    if (canManageAll) {
+      hrEmployeesAPI.getAll({ status: 'Active' }).then((res) => setEmployees(extractList(res))).catch(() => {});
+    } else if (linkedEmployeeId) {
+      hrEmployeesAPI.getById(linkedEmployeeId).then((res) => setEmployees([res.data])).catch(() => setEmployees([]));
+    } else {
+      setEmployees([]);
+    }
+  }, [canManageAll, linkedEmployeeId]);
 
   const openAdd = () => {
     setEditingRecord(null);
@@ -169,16 +193,42 @@ function Attendance() {
 
   const hasTrendActivity = monthlyTrend.some((day) => day.present + day.absent + day.leave > 0);
 
+  if (!accessLoaded) {
+    return <div className="hr-page"><div className="hr-loading">Loading attendance...</div></div>;
+  }
+
+  if (!canManageAll && !linkedEmployeeId) {
+    return (
+      <div className="hr-page">
+        <header className="hr-page-header">
+          <div>
+            <h1>My Attendance</h1>
+            <p className="hr-page-subtitle">Your attendance records</p>
+          </div>
+        </header>
+        <p className="hr-empty">
+          No employee profile is linked to your login account. Ask HR to use the same email on your employee record as your user account.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="hr-page">
       <header className="hr-page-header">
         <div>
-          <h1>Attendance Management</h1>
-          <p className="hr-page-subtitle">Track daily and monthly employee attendance</p>
+          <h1>{canManageAll ? 'Attendance Management' : 'My Attendance'}</h1>
+          <p className="hr-page-subtitle">
+            {canManageAll
+              ? 'Track daily and monthly employee attendance'
+              : 'View your daily and monthly attendance records'}
+          </p>
         </div>
-        <button type="button" className="hr-btn hr-btn-primary" onClick={openAdd}>
-          + Mark Attendance
-        </button>
+        {canManageAll && (
+          <button type="button" className="hr-btn hr-btn-primary" onClick={openAdd}>
+            + Mark Attendance
+          </button>
+        )}
       </header>
 
       <div className="hr-view-tabs">
@@ -244,13 +294,15 @@ function Attendance() {
       )}
 
       <div className="hr-filters-row">
-        <input
-          type="text"
-          className="hr-search-input"
-          placeholder="Search employee..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+        {canManageAll && (
+          <input
+            type="text"
+            className="hr-search-input"
+            placeholder="Search employee..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        )}
         {viewMode === 'daily' ? (
           <input
             type="date"
@@ -281,16 +333,18 @@ function Attendance() {
             />
           </>
         )}
-        <select
-          className="hr-filter-select"
-          value={filters.employee}
-          onChange={(e) => setFilters((f) => ({ ...f, employee: e.target.value }))}
-        >
-          <option value="">All Employees</option>
-          {employees.map((emp) => (
-            <option key={emp._id} value={emp._id}>{employeeName(emp)} ({emp.employeeId})</option>
-          ))}
-        </select>
+        {canManageAll && (
+          <select
+            className="hr-filter-select"
+            value={filters.employee}
+            onChange={(e) => setFilters((f) => ({ ...f, employee: e.target.value }))}
+          >
+            <option value="">All Employees</option>
+            {employees.map((emp) => (
+              <option key={emp._id} value={emp._id}>{employeeName(emp)} ({emp.employeeId})</option>
+            ))}
+          </select>
+        )}
         <select
           className="hr-filter-select"
           value={filters.status}
@@ -314,12 +368,12 @@ function Attendance() {
                 <th>Check Out</th>
                 <th>Working Hours</th>
                 <th>Status</th>
-                <th>Actions</th>
+                {canManageAll && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {records.length === 0 ? (
-                <tr><td colSpan={7} className="hr-empty">No attendance records found</td></tr>
+                <tr><td colSpan={canManageAll ? 7 : 6} className="hr-empty">No attendance records found</td></tr>
               ) : (
                 records.map((row) => (
                   <tr key={row._id}>
@@ -334,12 +388,14 @@ function Attendance() {
                     <td>{row.checkOut || '—'}</td>
                     <td>{row.workingHours ?? '—'}</td>
                     <td><HrStatusBadge status={row.status} /></td>
-                    <td>
-                      <div className="hr-actions-cell">
-                        <button type="button" className="hr-btn hr-btn-secondary hr-btn-sm" onClick={() => openEdit(row)}>Edit</button>
-                        <button type="button" className="hr-btn hr-btn-danger hr-btn-sm" onClick={() => handleDelete(row)}>Delete</button>
-                      </div>
-                    </td>
+                    {canManageAll && (
+                      <td>
+                        <div className="hr-actions-cell">
+                          <button type="button" className="hr-btn hr-btn-secondary hr-btn-sm" onClick={() => openEdit(row)}>Edit</button>
+                          <button type="button" className="hr-btn hr-btn-danger hr-btn-sm" onClick={() => handleDelete(row)}>Delete</button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -349,7 +405,7 @@ function Attendance() {
         </div>
       )}
 
-      {showModal && (
+      {showModal && canManageAll && (
         <div className="hr-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="hr-modal" onClick={(e) => e.stopPropagation()}>
             <div className="hr-modal-header">

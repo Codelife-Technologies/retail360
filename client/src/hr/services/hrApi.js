@@ -14,6 +14,7 @@ export const hrEmployeesAPI = {
 };
 
 export const hrAttendanceAPI = {
+  getContext: () => api.get('/hr/attendance/context'),
   getAll: (params) => api.get('/hr/attendance', { params }),
   getSummary: (params) => api.get('/hr/attendance/summary', { params }),
   getTrend: (params) => api.get('/hr/attendance/trend', { params }),

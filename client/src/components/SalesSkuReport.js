@@ -4,6 +4,7 @@ import { formatMoney } from '../utils/locationCurrency';
 import { getCatalogSku } from '../utils/productDisplayUtils';
 import SalesMonthlyTrendCharts from './SalesMonthlyTrendCharts';
 import SaleDetailsModal from './SaleDetailsModal';
+import ExcelUpload from './ExcelUpload';
 import './SalesSkuReport.css';
 
 const formatAed = (amount) => formatMoney(amount, 'AED');
@@ -57,6 +58,7 @@ function SalesSkuReport({ onClose }) {
   const [monthlyTrend, setMonthlyTrend] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [viewingSale, setViewingSale] = useState(null);
   const [viewingSaleLoading, setViewingSaleLoading] = useState(false);
 
@@ -168,29 +170,84 @@ function SalesSkuReport({ onClose }) {
   };
 
   const handleExport = async () => {
-    if (!isSkuView) {
-      alert('Excel export is available for the By SKU view');
+    const hasData = isSkuView ? skuRows.length > 0 || orderRows.length > 0 : orderRows.length > 0;
+    if (!hasData) {
+      alert('No data to export for the selected filters');
       return;
     }
     try {
       setExporting(true);
       const params = { ...appliedFilters };
+      delete params.view;
       if (!params.search) delete params.search;
-      const response = await reportsAPI.exportSalesBySku(params);
+
+      let response;
+      let filename;
+      if (isSkuView) {
+        response = await reportsAPI.exportSalesBySku(params);
+        filename = `sales_report_${appliedFilters.endDate}.xlsx`;
+      } else {
+        const orderParams = { ...params };
+        delete orderParams.sortBy;
+        delete orderParams.sortDir;
+        response = await reportsAPI.exportSalesDetailed(orderParams);
+        filename = `sales_report_by_sale_${appliedFilters.endDate}.xlsx`;
+      }
+
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `sales_by_sku_${appliedFilters.endDate}.xlsx`);
+      link.setAttribute('download', filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error exporting sales report:', error);
-      alert('Failed to export report');
+      alert(error.response?.data?.error || 'Failed to export report');
     } finally {
       setExporting(false);
     }
+  };
+
+  const handleExcelUploadComplete = (result) => {
+    fetchReport();
+
+    const imported = result?.imported || 0;
+    const updated = result?.updated || 0;
+    const failed = result?.failed || 0;
+    const skipped = result?.skipped || 0;
+    const totalRows = result?.totalRows || 0;
+
+    const summary = [
+      `Total Excel rows: ${totalRows}`,
+      `New sales: ${imported}`,
+      `Updated: ${updated}`,
+      `Failed: ${failed}`,
+      skipped ? `Skipped: ${skipped}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    if (result?.errors?.length > 0 && (failed > 0 || skipped > 0)) {
+      const topErrors = result.errors
+        .slice(0, 5)
+        .map((err) => `• Row ${err.row}: ${err.message}`)
+        .join('\n');
+      alert(`${summary}\n\nTop issues:\n${topErrors}\n\nSee upload dialog for full details.`);
+    } else if (failed > 0 && imported + updated === 0) {
+      const firstError = result?.errors?.[0]?.message || 'Check column headers and required fields.';
+      alert(`${summary}\n\n${firstError}`);
+      return;
+    } else if (failed > 0 || updated > 0 || imported > 0) {
+      alert(summary);
+    }
+
+    if (failed > 0 && imported + updated === 0) {
+      return;
+    }
+
+    setShowExcelUpload(false);
   };
 
   const sortDirLabel = (sortBy = appliedFilters.sortBy, sortDir = appliedFilters.sortDir) => {
@@ -205,6 +262,7 @@ function SalesSkuReport({ onClose }) {
 
   const hasSkuRows = skuRows.length > 0;
   const hasOrderRows = orderRows.length > 0;
+  const canExport = isSkuView ? hasSkuRows || hasOrderRows : hasOrderRows;
 
   const getProductSku = (item) => {
     const sku = getCatalogSku(item.product) || item.sku;
@@ -306,8 +364,17 @@ function SalesSkuReport({ onClose }) {
           <button
             type="button"
             className="btn-secondary"
-            disabled={exporting || !isSkuView || skuRows.length === 0}
+            onClick={() => setShowExcelUpload(true)}
+            title="Import sales from Excel template"
+          >
+            ⬆ Import Excel
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={exporting || !canExport}
             onClick={handleExport}
+            title={isSkuView ? 'Download Excel with By SKU and Sales Detail sheets' : 'Download Excel with sales orders'}
           >
             {exporting ? 'Exporting…' : 'Export Excel'}
           </button>
@@ -533,6 +600,15 @@ function SalesSkuReport({ onClose }) {
           sale={viewingSale}
           loading={viewingSaleLoading}
           onClose={closeSaleDetail}
+        />
+      )}
+
+      {showExcelUpload && (
+        <ExcelUpload
+          moduleName="sales"
+          templateEndpoint="/sales/template"
+          onUploadComplete={handleExcelUploadComplete}
+          onClose={() => setShowExcelUpload(false)}
         />
       )}
     </div>

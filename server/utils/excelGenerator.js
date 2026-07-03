@@ -106,5 +106,33 @@ function exportJsonRowsToExcelBuffer(rows, sheetName = 'Report') {
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 }
 
-module.exports = { generateTemplate, exportToExcel, exportJsonRowsToExcelBuffer };
+/**
+ * Export multiple sheets to one Excel workbook.
+ * @param {Array<{ name: string, headers: Array, data: Array }>} sheets
+ * @returns {Buffer}
+ */
+function exportMultiSheetExcel(sheets) {
+  const workbook = XLSX.utils.book_new();
+
+  (sheets || []).forEach((sheet) => {
+    const headers = sheet.headers || [];
+    const headerRow = headers.map((h) => h.label || h.key);
+    const dataRows = (sheet.data || []).map((item) =>
+      headers.map((h) => {
+        const value = item[h.key];
+        if (value === null || value === undefined) return '';
+        if (typeof value === 'object') return JSON.stringify(value);
+        return value.toString();
+      })
+    );
+    const worksheet = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
+    worksheet['!cols'] = headers.map(() => ({ wch: 20 }));
+    const safeName = String(sheet.name || 'Sheet').replace(/[\\/?*[\]:]/g, '').slice(0, 31) || 'Sheet';
+    XLSX.utils.book_append_sheet(workbook, worksheet, safeName);
+  });
+
+  return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+}
+
+module.exports = { generateTemplate, exportToExcel, exportJsonRowsToExcelBuffer, exportMultiSheetExcel };
 

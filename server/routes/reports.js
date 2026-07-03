@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
 const logger = require('../utils/logger');
-const { exportToExcel } = require('../utils/excelGenerator');
+const { exportToExcel, exportMultiSheetExcel } = require('../utils/excelGenerator');
 
 // Helper function to build date query
 function buildDateQuery(startDate, endDate) {
@@ -639,6 +639,49 @@ async function fetchSalesDetailedReport(filters = {}) {
   return { summary, rows: sales };
 }
 
+const SALES_ORDER_EXPORT_HEADERS = [
+  { key: 'productSkus', label: 'Product SKU' },
+  { key: 'amazonOrderId', label: 'Amazon Order ID' },
+  { key: 'saleDate', label: 'Sale Date' },
+  { key: 'channel', label: 'Channel' },
+  { key: 'items', label: 'Items' },
+  { key: 'subtotal', label: 'Subtotal' },
+  { key: 'total', label: 'Total' },
+  { key: 'paymentStatus', label: 'Payment Status' },
+  { key: 'orderStatus', label: 'Order Status' },
+];
+
+const SALES_SKU_EXPORT_HEADERS = [
+  { key: 'sku', label: 'SKU' },
+  { key: 'productName', label: 'Product Name' },
+  { key: 'category', label: 'Category' },
+  { key: 'subCategory', label: 'Sub Category' },
+  { key: 'hsnCode', label: 'HSN Code' },
+  { key: 'totalQuantity', label: 'Qty Sold' },
+  { key: 'averageUnitPrice', label: 'Avg Unit Price' },
+  { key: 'totalRevenue', label: 'Line Revenue' },
+  { key: 'orderCount', label: 'Order Count' },
+];
+
+function mapSalesToExportRows(sales) {
+  return sales.map((sale) => {
+    const skus = (sale.items || [])
+      .map((item) => item.product?.sku || item.sku || '')
+      .filter(Boolean);
+    return {
+      productSkus: [...new Set(skus)].join(', '),
+      amazonOrderId: sale.amazonOrderId || '',
+      saleDate: sale.salesDate ? new Date(sale.salesDate).toISOString().slice(0, 10) : '',
+      channel: sale.salesChannel?.name || '',
+      items: sale.items?.length || 0,
+      subtotal: sale.subtotal ?? '',
+      total: sale.total ?? '',
+      paymentStatus: sale.paymentStatus || '',
+      orderStatus: sale.orderStatus || '',
+    };
+  });
+}
+
 async function aggregateSalesBySku(filters = {}) {
   const saleMatch = buildSaleFilterQuery(filters);
   const { search, sortBy = 'revenue', sortDir = 'desc' } = filters;
@@ -824,29 +867,48 @@ router.get('/sales/by-sku', async (req, res) => {
   }
 });
 
-// GET export sales by SKU as Excel
+// GET export sales by SKU as Excel (includes sales detail sheet)
 router.get('/sales/by-sku/export', async (req, res) => {
   try {
-    const { rows } = await aggregateSalesBySku(req.query);
-    const headers = [
-      { key: 'sku', label: 'SKU' },
-      { key: 'productName', label: 'Product Name' },
-      { key: 'category', label: 'Category' },
-      { key: 'subCategory', label: 'Sub Category' },
-      { key: 'hsnCode', label: 'HSN Code' },
-      { key: 'totalQuantity', label: 'Qty Sold' },
-      { key: 'averageUnitPrice', label: 'Avg Unit Price' },
-      { key: 'totalRevenue', label: 'Total Revenue' },
-      { key: 'orderCount', label: 'Order Count' },
-    ];
+    const exportFilters = { ...req.query };
+    delete exportFilters.view;
+    const { rows } = await aggregateSalesBySku(exportFilters);
+    const detailFilters = { ...exportFilters };
+    delete detailFilters.search;
+    delete detailFilters.sortBy;
+    delete detailFilters.sortDir;
+    const { rows: sales } = await fetchSalesDetailedReport(detailFilters);
+    const orderRows = mapSalesToExportRows(sales);
 
-    const buffer = exportToExcel(rows, headers);
-    const filename = `sales_by_sku_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const buffer = exportMultiSheetExcel([
+      { name: 'By SKU', headers: SALES_SKU_EXPORT_HEADERS, data: rows },
+      { name: 'Sales Detail', headers: SALES_ORDER_EXPORT_HEADERS, data: orderRows },
+    ]);
+    const filename = `sales_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
     res.send(buffer);
   } catch (error) {
     logger.backend.error('Error exporting sales by SKU', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET export sales by order as Excel
+router.get('/sales/detailed/export', async (req, res) => {
+  try {
+    const exportFilters = { ...req.query };
+    delete exportFilters.view;
+    delete exportFilters.search;
+    const { rows: sales } = await fetchSalesDetailedReport(exportFilters);
+    const orderRows = mapSalesToExportRows(sales);
+    const buffer = exportToExcel(orderRows, SALES_ORDER_EXPORT_HEADERS);
+    const filename = `sales_report_by_sale_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(buffer);
+  } catch (error) {
+    logger.backend.error('Error exporting sales detailed', { error: error.message, stack: error.stack });
     res.status(500).json({ error: error.message });
   }
 });

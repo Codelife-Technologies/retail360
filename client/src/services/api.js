@@ -298,6 +298,8 @@ export const reportsAPI = {
   getSalesBySku: (params) => api.get('/reports/sales/by-sku', { params }),
   exportSalesBySku: (params) =>
     api.get('/reports/sales/by-sku/export', { params, responseType: 'blob' }),
+  exportSalesDetailed: (params) =>
+    api.get('/reports/sales/detailed/export', { params, responseType: 'blob' }),
   exportSales: (data) => api.post('/reports/sales/export', data),
   
   // Purchase Reports
