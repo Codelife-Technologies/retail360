@@ -62,7 +62,7 @@ router.get('/', async (req, res) => {
     } else {
       const salesLocations = await SalesLocation.find(query)
         .populate('salesChannel', 'name code type')
-        .populate('location', 'name code city')
+        .populate('location', 'name code city country')
         .sort({ createdAt: -1 });
       res.json(salesLocations);
     }
@@ -76,7 +76,7 @@ router.get('/channel/:channelId', async (req, res) => {
   try {
     const salesLocations = await SalesLocation.find({ salesChannel: req.params.channelId })
       .populate('salesChannel', 'name code')
-      .populate('location', 'name code city')
+      .populate('location', 'name code city country')
       .sort({ name: 1 });
     res.json(salesLocations);
   } catch (error) {

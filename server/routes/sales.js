@@ -7,6 +7,7 @@ const { paginate } = require('../utils/pagination');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
 const { computeCategoryTax } = require('../utils/taxRates');
+const { isUaeSalesLocation } = require('../utils/locationCurrency');
 const { deductSaleStockItems, restoreSaleStockItems } = require('../utils/saleStockUtils');
 
 const SALES_CURRENCY = 'AED';
@@ -19,8 +20,23 @@ const upload = multer({
 const SALES_LOCATION_POPULATE = {
   path: 'salesLocation',
   select: 'name code',
-  populate: { path: 'location', select: 'name code city' },
+  populate: { path: 'location', select: 'name code city country' },
 };
+
+async function loadProductsForItems(items) {
+  const Product = require('../models/Product');
+  const ids = items.map((item) => item.product?._id || item.product).filter(Boolean);
+  if (ids.length === 0) return [];
+  return Product.find({ _id: { $in: ids } }).populate('category', 'name');
+}
+
+function computeSaleTax(salesLocation, items, productDocs, { defaultTaxRate = 0, taxOverride } = {}) {
+  if (isUaeSalesLocation(salesLocation)) return 0;
+  if (taxOverride !== undefined && taxOverride !== null && String(taxOverride).trim() !== '') {
+    return parseFloat(taxOverride) || 0;
+  }
+  return computeCategoryTax(items, productDocs, defaultTaxRate);
+}
 
 function resolveMongoSalesSort(sortBy = 'salesDate', sortDir = 'desc') {
   const dir = sortDir === 'asc' ? 1 : -1;
@@ -93,7 +109,7 @@ async function buildSalePayloadFromImportGroup(entries) {
 
   const salesLocation = await SalesLocation.findOne({ code: locationCode }).populate(
     'location',
-    'name code city'
+    'name code city country'
   );
   if (!salesLocation) {
     throw new Error(`Sales Location code '${locationCode}' not found`);
@@ -138,7 +154,8 @@ async function buildSalePayloadFromImportGroup(entries) {
     taxCell !== undefined && taxCell !== null && String(taxCell).trim() !== '';
   const tax = taxProvided
     ? parseFloat(taxCell) || 0
-    : computeCategoryTax(items, productDocs, defaultTaxRate);
+    : computeSaleTax(salesLocation, items, productDocs, { defaultTaxRate });
+  const taxFinal = isUaeSalesLocation(salesLocation) ? 0 : tax;
   const currency = SALES_CURRENCY;
   const salesDate = first['Sales Date (YYYY-MM-DD)']
     ? new Date(first['Sales Date (YYYY-MM-DD)'])
@@ -161,8 +178,8 @@ async function buildSalePayloadFromImportGroup(entries) {
     subtotal,
     discount,
     defaultTaxRate,
-    tax,
-    total: subtotal - discount + tax,
+    tax: taxFinal,
+    total: subtotal - discount + taxFinal,
     paymentStatus: (first['Payment Status (pending/paid/partial)'] || 'pending')
       .toString()
       .trim()
@@ -524,15 +541,33 @@ router.post('/', async (req, res) => {
     
     const SalesLocation = require('../models/SalesLocation');
     
-    const salesLocation = await SalesLocation.findById(req.body.salesLocation).populate('location');
+    const salesLocation = await SalesLocation.findById(req.body.salesLocation).populate(
+      'location',
+      'name code city country'
+    );
     if (!salesLocation || !salesLocation.location) {
       return res.status(400).json({ error: 'Invalid sales location' });
     }
+
+    const productDocs = await loadProductsForItems(items);
+    const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+    const discount = parseFloat(req.body.discount) || 0;
+    const defaultTaxRate = parseFloat(req.body.defaultTaxRate) || 0;
+    const tax = computeSaleTax(salesLocation, items, productDocs, {
+      defaultTaxRate,
+      taxOverride: req.body.tax,
+    });
+    const total = subtotal - discount + tax;
 
     const saleData = {
       ...req.body,
       items,
       currency: SALES_CURRENCY,
+      subtotal,
+      discount,
+      defaultTaxRate,
+      tax,
+      total,
       salesNumber: await generateSalesNumber(req.body.salesDate),
     };
     
@@ -569,10 +604,18 @@ router.put('/:id', async (req, res) => {
     }
     
     // If items are being updated, handle stock adjustments
+    const locationId = req.body.salesLocation || existingSale.salesLocation;
+    const SalesLocation = require('../models/SalesLocation');
+    const salesLocation = await SalesLocation.findById(locationId).populate(
+      'location',
+      'name code city country'
+    );
+
+    if (!salesLocation?.location) {
+      return res.status(400).json({ error: 'Invalid sales location' });
+    }
+
     if (req.body.items) {
-      const SalesLocation = require('../models/SalesLocation');
-      
-      const salesLocation = await SalesLocation.findById(existingSale.salesLocation).populate('location');
       const warehouseLocation = salesLocation.location._id || salesLocation.location;
       
       await restoreSaleStockItems(existingSale.items, warehouseLocation);
@@ -586,10 +629,33 @@ router.put('/:id', async (req, res) => {
       
       req.body.items = newItems;
     }
-    
+
+    const items = req.body.items || existingSale.items;
+    const productDocs = await loadProductsForItems(items);
+    const subtotal = items.reduce((sum, item) => sum + (item.total || 0), 0);
+    const discount =
+      req.body.discount !== undefined ? parseFloat(req.body.discount) || 0 : existingSale.discount || 0;
+    const defaultTaxRate =
+      req.body.defaultTaxRate !== undefined
+        ? parseFloat(req.body.defaultTaxRate) || 0
+        : existingSale.defaultTaxRate || 0;
+    const tax = computeSaleTax(salesLocation, items, productDocs, {
+      defaultTaxRate,
+      taxOverride: req.body.tax,
+    });
+    const total = subtotal - discount + tax;
+
     const sale = await Sale.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, currency: SALES_CURRENCY },
+      {
+        ...req.body,
+        currency: SALES_CURRENCY,
+        subtotal,
+        discount,
+        defaultTaxRate,
+        tax,
+        total,
+      },
       { new: true, runValidators: true }
     )
       .populate('salesChannel', 'name code type')

@@ -9,6 +9,11 @@ import {
   getProductDisplayName,
   getProductThumbnail,
   normalizeProductSupplierLinks,
+  getParentSku,
+  getChildSku,
+  getCatalogSku,
+  productToSkuFormValues,
+  skuFormValuesToProductFields,
 } from '../utils/productDisplayUtils';
 import './Products.css';
 
@@ -112,9 +117,15 @@ function ProductSuppliersModal({
             <p className="product-suppliers-subtitle">
               {displayName || product.sku || 'Product'} — link one or more suppliers
             </p>
-            {product.sku && (
+            {getParentSku(product) && (
               <p className="product-suppliers-product-meta">
-                Product SKU: <strong>{product.sku}</strong>
+                Parent SKU: <strong>{getParentSku(product)}</strong>
+                {getChildSku(product) && (
+                  <>
+                    {' '}
+                    · Child SKU: <strong>{getChildSku(product)}</strong>
+                  </>
+                )}
                 {product.unit && (
                   <>
                     {' '}
@@ -184,7 +195,7 @@ function ProductSuppliersModal({
                                 onChange={(e) =>
                                   onUpdateLink(link.supplierId, 'sku', e.target.value)
                                 }
-                                placeholder={product.sku || 'SKU'}
+                                placeholder={getCatalogSku(product) || 'SKU'}
                               />
                             </label>
                             <label>
@@ -260,9 +271,9 @@ function Products() {
   const [formData, setFormData] = useState({
     // Basic Information
     slno: '',
-    parentSkuOrAsin: '',
+    parentSku: '',
+    childSku: '',
     variation: '',
-    sku: '',
     ean: '',
     title: '',
     productUrl: '',
@@ -466,12 +477,11 @@ function Products() {
         newImages[index] = value;
         return { ...prev, images: newImages };
       }
-      // Handle variation change - clear parentSkuOrAsin if variation is NO
       if (name === 'variation') {
         return {
           ...prev,
           variation: value,
-          parentSkuOrAsin: value === 'NO' ? '' : prev.parentSkuOrAsin,
+          childSku: value === 'NO' ? '' : prev.childSku,
         };
       }
       return {
@@ -637,17 +647,21 @@ function Products() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.sku?.trim()) {
-      alert('SKU is required');
+    if (!formData.parentSku?.trim()) {
+      alert('Parent SKU is required');
+      return;
+    }
+    if (formData.variation === 'YES' && !formData.childSku?.trim()) {
+      alert('Child SKU is required when variation is YES');
       return;
     }
     try {
-      // Clean up empty values
+      const skuFields = skuFormValuesToProductFields(formData);
       const submitData = {
         ...formData,
-        sku: formData.sku.trim(),
-        // Clear parentSkuOrAsin if variation is NO
-        parentSkuOrAsin: formData.variation === 'YES' ? formData.parentSkuOrAsin : '',
+        ...skuFields,
+        parentSku: undefined,
+        childSku: undefined,
         // Convert category and subCategory to ObjectIds or null
         category: formData.category || null,
         subCategory: formData.subCategory || null,
@@ -719,11 +733,12 @@ function Products() {
       await fetchSubcategories(categoryId);
     }
     
+    const skuValues = productToSkuFormValues(product);
     setFormData({
       slno: product.slno || '',
-      parentSkuOrAsin: product.parentSkuOrAsin || '',
+      parentSku: skuValues.parentSku,
+      childSku: skuValues.childSku,
       variation: product.variation || '',
-      sku: product.sku || '',
       ean: product.ean || '',
       title: product.title || '',
       productUrl: product.productUrl || '',
@@ -811,9 +826,9 @@ function Products() {
     
     setFormData({
       slno: '',
-      parentSkuOrAsin: '',
+      parentSku: '',
+      childSku: '',
       variation: '',
-      sku: '',
       ean: '',
       title: '',
       productUrl: '',
@@ -968,7 +983,7 @@ function Products() {
       <div className="search-bar">
         <input
           type="text"
-          placeholder="Search products by title, SKU, EAN, brand, HSN code..."
+          placeholder="Search products by title, Parent SKU, Child SKU, EAN, brand, HSN code..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
@@ -981,7 +996,8 @@ function Products() {
           <table className="products-table">
             <thead>
               <tr>
-                <th>SKU</th>
+                <th>Parent SKU</th>
+                <th>Child SKU</th>
                 <th>Product</th>
                 <th>Brand</th>
                 <th>Category</th>
@@ -994,7 +1010,7 @@ function Products() {
             <tbody>
               {products.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="no-data">
+                  <td colSpan="9" className="no-data">
                     No products found
                   </td>
                 </tr>
@@ -1002,8 +1018,13 @@ function Products() {
                 products.map((product) => (
                   <tr key={product._id}>
                     <td className="product-sku-cell">
-                      <span className={`product-sku-value${product.sku ? '' : ' product-sku-empty'}`}>
-                        {product.sku || '—'}
+                      <span className={`product-sku-value${getParentSku(product) ? '' : ' product-sku-empty'}`}>
+                        {getParentSku(product) || '—'}
+                      </span>
+                    </td>
+                    <td className="product-sku-cell">
+                      <span className={`product-sku-value${getChildSku(product) ? '' : ' product-sku-empty'}`}>
+                        {getChildSku(product) || '—'}
                       </span>
                     </td>
                     <td className="product-cell">
@@ -1099,7 +1120,10 @@ function Products() {
             {editingProduct && (
               <div className="product-detail-preview">
                 <div className="product-detail-preview-sku">
-                  SKU: {formData.sku?.trim() || '—'}
+                  Parent SKU: {formData.parentSku?.trim() || '—'}
+                  {formData.variation === 'YES' && (
+                    <> · Child SKU: {formData.childSku?.trim() || '—'}</>
+                  )}
                 </div>
                 <ProductInfoCell product={{ ...editingProduct, ...formData }} />
               </div>
@@ -1133,31 +1157,32 @@ function Products() {
                       <option value="NO">NO</option>
                     </select>
                   </div>
+                  <div className="form-group">
+                    <label>Parent SKU *</label>
+                    <input
+                      type="text"
+                      name="parentSku"
+                      value={formData.parentSku}
+                      onChange={handleInputChange}
+                      required
+                      placeholder="e.g. PARENT-001"
+                    />
+                  </div>
                   {formData.variation === 'YES' && (
                     <div className="form-group">
-                      <label>Parent SKU or ASIN *</label>
+                      <label>Child SKU *</label>
                       <input
                         type="text"
-                        name="parentSkuOrAsin"
-                        value={formData.parentSkuOrAsin}
+                        name="childSku"
+                        value={formData.childSku}
                         onChange={handleInputChange}
                         required={formData.variation === 'YES'}
+                        placeholder="e.g. CHILD-001-RED"
                       />
                     </div>
                   )}
                 </div>
                 <div className="form-row">
-                  <div className="form-group">
-                    <label>SKU *</label>
-                    <input
-                      type="text"
-                      name="sku"
-                      value={formData.sku}
-                      onChange={handleInputChange}
-                      required
-                      placeholder="e.g. PROD-001"
-                    />
-                  </div>
                   <div className="form-group">
                     <label>EAN</label>
                     <input

@@ -5,6 +5,7 @@ const Price = require('../models/Price');
 const Product = require('../models/Product');
 const Supplier = require('../models/Supplier');
 const PurchaseOrder = require('../models/PurchaseOrder');
+const Purchase = require('../models/Purchase');
 
 const PRODUCT_POPULATE = { path: 'product', select: 'name title sku brandName' };
 const SUPPLIER_POPULATE = { path: 'supplier', select: 'name supplierCode contactPerson' };
@@ -51,6 +52,37 @@ async function getLatestPoVendorPriceMap() {
   const map = new Map();
   for (const row of rows) {
     map.set(`${row._id.product}-${row._id.supplier}`, row);
+  }
+  return map;
+}
+
+async function getLastAcquisitionPricesMap(limit = 3) {
+  const rows = await Purchase.aggregate([
+    { $match: { supplier: { $exists: true, $ne: null } } },
+    { $sort: { purchaseDate: -1, createdAt: -1 } },
+    { $unwind: '$items' },
+    {
+      $group: {
+        _id: { product: '$items.product', supplier: '$supplier' },
+        acquisitions: {
+          $push: {
+            unitPrice: '$items.unitPrice',
+            purchaseDate: '$purchaseDate',
+            purchaseNumber: '$purchaseNumber',
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        acquisitions: { $slice: ['$acquisitions', limit] },
+      },
+    },
+  ]);
+
+  const map = new Map();
+  for (const row of rows) {
+    map.set(`${row._id.product}-${row._id.supplier}`, row.acquisitions || []);
   }
   return map;
 }
@@ -107,16 +139,17 @@ router.get('/vendor-catalog', async (req, res) => {
     const { supplier: supplierFilter, search } = req.query;
     const searchTerm = search?.trim().toLowerCase() || '';
 
-    const [products, vendorPrices, poPriceMap] = await Promise.all([
+    const [products, vendorPrices, poPriceMap, acquisitionMap] = await Promise.all([
       Product.find({ 'suppliers.0': { $exists: true } })
         .populate('suppliers.supplier', 'name supplierCode contactPerson')
-        .select('name title sku suppliers unit images')
+        .select('name title sku parentSkuOrAsin variation suppliers unit images')
         .lean(),
       Price.find({ supplier: { $ne: null } })
         .populate(SUPPLIER_POPULATE)
         .sort({ effectiveDate: -1 })
         .lean(),
       getLatestPoVendorPriceMap(),
+      getLastAcquisitionPricesMap(3),
     ]);
 
     const activeVendorPriceMap = new Map();
@@ -146,9 +179,16 @@ router.get('/vendor-catalog', async (req, res) => {
         const vendorName = supplierDoc?.name || 'Unknown vendor';
         const productTitle = product.title || product.name || 'Unknown product';
         const productSku = product.sku || '';
+        const parentSku =
+          String(product.variation || '').trim().toUpperCase() === 'YES'
+            ? product.parentSkuOrAsin || ''
+            : productSku;
+        const childSku = productSku;
 
         if (searchTerm) {
-          const haystack = `${productTitle} ${productSku} ${vendorName}`.toLowerCase();
+          const linkSku = (link.sku || '').toString();
+          const haystack =
+            `${productTitle} ${productSku} ${parentSku} ${childSku} ${linkSku} ${vendorName}`.toLowerCase();
           if (!haystack.includes(searchTerm)) continue;
         }
 
@@ -156,6 +196,7 @@ router.get('/vendor-catalog', async (req, res) => {
         const activePrice = activeVendorPriceMap.get(key);
         const latestPrice = latestVendorPriceMap.get(key);
         const poPrice = poPriceMap.get(key);
+        const recentAcquisitions = acquisitionMap.get(key) || [];
 
         const purchasePrice =
           activePrice?.purchasePrice ??
@@ -175,6 +216,8 @@ router.get('/vendor-catalog', async (req, res) => {
             title: productTitle,
             name: product.name,
             sku: productSku,
+            parentSkuOrAsin: product.parentSkuOrAsin || '',
+            variation: product.variation || '',
             images: product.images || [],
           },
           supplier: {
@@ -183,6 +226,7 @@ router.get('/vendor-catalog', async (req, res) => {
             supplierCode: supplierDoc?.supplierCode,
           },
           vendorSku: link.sku || '',
+          childSku: link.sku || childSku || '',
           vendorUnit: link.unit || product.unit || 'pcs',
           purchasePrice,
           effectiveDate: activePrice?.effectiveDate || latestPrice?.effectiveDate || poPrice?.orderDate,
@@ -191,6 +235,7 @@ router.get('/vendor-catalog', async (req, res) => {
           priceSource,
           poNumber: poPrice?.poNumber,
           notes: activePrice?.notes || latestPrice?.notes || '',
+          recentAcquisitions,
         });
       }
     }

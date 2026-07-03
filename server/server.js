@@ -87,6 +87,10 @@ try {
   logger.backend.info('Subcategories routes loaded');
   const companyProfileRoutes = require('./routes/companyProfile');
   logger.backend.info('Company profile routes loaded');
+  const geminiRoutes = require('./routes/gemini');
+  logger.backend.info('Gemini routes loaded');
+  const hrRoutes = require('./hr/routes');
+  logger.backend.info('HR routes loaded');
 
   // API Routes
   app.use('/api/products', productsRoutes);
@@ -110,6 +114,7 @@ try {
   app.use('/api/categories', categoriesRoutes);
   app.use('/api/subcategories', subcategoriesRoutes);
   app.use('/api/company-profile', companyProfileRoutes);
+  app.use('/api/hr', hrRoutes);
   app.use('/api/gemini', geminiRoutes);
   
   logger.backend.info('All routes loaded successfully');

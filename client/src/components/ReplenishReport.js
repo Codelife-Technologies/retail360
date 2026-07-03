@@ -155,7 +155,8 @@ function ReplenishReport({ onNavigate }) {
   const getRowKey = (item) => `${item.location?._id}-${item.product?._id}`;
 
   const isSelectableItem = (item) =>
-    item.replenishStatus === 'REORDER' || item.replenishStatus === 'LOW';
+    (item.replenishStatus === 'REORDER' || item.replenishStatus === 'LOW') &&
+    (item.reorderQty ?? item.suggestedReorder ?? 0) > 0;
 
   const getPrCandidateItems = () => {
     if (!reportData?.products) return [];
@@ -389,7 +390,6 @@ function ReplenishReport({ onNavigate }) {
         </td>
         <td>{item.product.category?.name || 'Uncategorized'}</td>
         <td className="text-center font-semibold">{item.inventory.currentStock}</td>
-        <td className="text-center text-muted">{item.inventory.minStock}</td>
         <td className="text-center text-blue font-semibold">{item.salesCurrent ?? 0}</td>
         <td className="text-center text-blue font-semibold">
           {item.salesPastThreeMonths ?? 0}
@@ -408,8 +408,21 @@ function ReplenishReport({ onNavigate }) {
             {item.replenishStatus}
           </span>
         </td>
-        <td className="text-center font-bold text-violet">
-          {item.suggestedReorder > 0 ? item.suggestedReorder : '-'}
+        <td
+          className="text-center font-bold refill-qty-cell"
+          title={
+            item.refillQty > 0
+              ? `Transfer ${item.refillQty} unit(s) from Home`
+              : 'No home stock available to refill'
+          }
+        >
+          {item.refillQty > 0 ? item.refillQty : '-'}
+        </td>
+        <td
+          className="text-center font-bold text-violet"
+          title="Quantity still to purchase after home refill"
+        >
+          {(item.reorderQty ?? 0) > 0 ? item.reorderQty : '-'}
         </td>
       </tr>
       );
@@ -433,7 +446,6 @@ function ReplenishReport({ onNavigate }) {
         <th onClick={() => handleSort('inventory.currentStock')} className="sortable text-center">
           Stock {sortField === 'inventory.currentStock' && (sortDirection === 'asc' ? '🔼' : '🔽')}
         </th>
-        <th className="text-center">Min</th>
         <th
           onClick={() => handleSort('salesCurrent')}
           className="sortable text-center month-col"
@@ -458,8 +470,21 @@ function ReplenishReport({ onNavigate }) {
           </th>
         )}
         <th className="text-center">Status</th>
-        <th className="text-center" title="Higher of last month sales or 3-month average">
+        <th
+          onClick={() => handleSort('refillQty')}
+          className="sortable text-center"
+          title="Units that can be restocked from Home"
+        >
+          Refill
+          {sortField === 'refillQty' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
+        </th>
+        <th
+          onClick={() => handleSort('reorderQty')}
+          className="sortable text-center"
+          title="Units still needed to purchase after home refill"
+        >
           Reorder
+          {sortField === 'reorderQty' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
         </th>
       </tr>
     </thead>
@@ -972,7 +997,7 @@ function ReplenishReport({ onNavigate }) {
                             </span>
                           </td>
                           <td className="text-center font-bold text-violet">
-                            {item.suggestedReorder > 0 ? item.suggestedReorder : '—'}
+                            {(item.reorderQty ?? 0) > 0 ? item.reorderQty : '—'}
                           </td>
                         </tr>
                       );
@@ -1029,13 +1054,15 @@ function ReplenishReport({ onNavigate }) {
             currentStock: viewingReplenishItem.inventory?.currentStock,
             minStock: viewingReplenishItem.inventory?.minStock,
             availableStock: viewingReplenishItem.inventory?.availableStock,
+            homeLocationCode: viewingReplenishItem.homeInventory?.locationCode || reportData?.homeBranch?.code,
             salesCurrent: viewingReplenishItem.salesCurrent ?? 0,
             salesPastThreeMonths: viewingReplenishItem.salesPastThreeMonths ?? 0,
             salesOnDate: viewingReplenishItem.salesOnDate,
             replenishStatus: viewingReplenishItem.replenishStatus,
+            refillQty: viewingReplenishItem.refillQty ?? 0,
             suggestedReorder:
-              viewingReplenishItem.suggestedReorder > 0
-                ? viewingReplenishItem.suggestedReorder
+              (viewingReplenishItem.reorderQty ?? 0) > 0
+                ? viewingReplenishItem.reorderQty
                 : '—',
             lastMonthLabel: monthLabels.current,
             pastThreeMonthsLabel,

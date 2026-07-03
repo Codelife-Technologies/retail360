@@ -150,8 +150,8 @@ function Dashboard({ onNavigate }) {
   }
 
   const statCards = [
-    { tab: 'products', className: 'stat-card', icon: '📦', value: stats.totalProducts, label: 'Total Products' },
-    { tab: 'stock', className: 'stat-card warning', icon: '⚠️', value: stats.lowStockCount, label: 'Low Stock Items' },
+    { tab: 'master:products', className: 'stat-card', icon: '📦', value: stats.totalProducts, label: 'Total Products' },
+    { tab: 'master:stock', className: 'stat-card warning', icon: '⚠️', value: stats.lowStockCount, label: 'Low Stock Items' },
     { tab: 'purchase-requisite', className: 'stat-card info', icon: '📝', value: stats.totalRequisitions, label: 'PR' },
     { tab: 'purchase-orders', className: 'stat-card info', icon: '📋', value: stats.pendingPOs, label: 'Pending POs' },
     { tab: 'grn', className: 'stat-card', icon: '📥', value: stats.totalGrns, label: 'GRN', style: { borderLeft: '4px solid #6B3894' } },

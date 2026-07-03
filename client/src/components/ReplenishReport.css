@@ -237,6 +237,14 @@
   padding: 0 1.5rem;
 }
 
+.replenish-pr-modal-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: #f8fafc;
+  box-shadow: 0 2px 0 #e2e8f0;
+}
+
 .replenish-pr-modal-table {
   min-width: 700px;
 }
@@ -436,6 +444,15 @@
 .text-blue { color: #2563eb; }
 .text-green { color: #16a34a; }
 .text-violet { color: #7c3aed; }
+
+.home-avail-cell {
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.refill-qty-cell {
+  color: #0369a1;
+}
 .font-semibold { font-weight: 600; }
 .font-bold { font-weight: 700; }
 .font-monospace { font-family: 'Fira Code', monospace, Courier, monospace; }
@@ -500,6 +517,7 @@
 .table-responsive {
   width: 100%;
   overflow-x: auto;
+  overflow-y: visible;
   background: white;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
@@ -508,9 +526,18 @@
 
 .report-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   text-align: left;
   font-size: 0.925rem;
+}
+
+.report-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background-color: #f8fafc;
+  box-shadow: 0 2px 0 #e2e8f0;
 }
 
 .report-table th {
@@ -529,6 +556,12 @@
 .report-table th.sortable:hover {
   background-color: #f1f5f9;
   color: #0f172a;
+}
+
+.location-block .table-responsive {
+  border: none;
+  border-radius: 0 0 12px 12px;
+  box-shadow: none;
 }
 
 .report-table td {
@@ -657,7 +690,6 @@
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 

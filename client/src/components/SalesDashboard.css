@@ -1,0 +1,374 @@
+.sales-dashboard {
+  padding: 2rem;
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #1e293b;
+}
+
+.sales-dash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.sales-dash-header h1 {
+  margin: 0 0 0.35rem;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sales-dash-subtitle {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.sales-dash-btn-refresh {
+  padding: 0.65rem 1.25rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sales-dash-btn-refresh:hover:not(:disabled) {
+  border-color: #6366f1;
+  color: #4f46e5;
+  background: #f8fafc;
+}
+
+.sales-dash-btn-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sales-dash-filters {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.sales-dash-period-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  background: #f1f5f9;
+  padding: 0.25rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  width: fit-content;
+}
+
+.sales-dash-period-toggle button {
+  border: none;
+  background: transparent;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sales-dash-period-toggle button:hover {
+  color: #1e293b;
+}
+
+.sales-dash-period-toggle button.active {
+  background: white;
+  color: #6366f1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.sales-dash-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.sales-dash-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 160px;
+}
+
+.sales-dash-filter-field span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.sales-dash-filter-field input,
+.sales-dash-filter-field select {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: #f8fafc;
+}
+
+.sales-dash-filter-field input:focus,
+.sales-dash-filter-field select:focus {
+  outline: none;
+  border-color: #6366f1;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.sales-dash-loading,
+.sales-dash-empty {
+  padding: 3rem;
+  text-align: center;
+  color: #64748b;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.sales-dash-section {
+  margin-bottom: 2rem;
+}
+
+.sales-dash-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.sales-dash-section-header h2 {
+  margin: 0 0 0.35rem;
+}
+
+.sales-dash-section-header .sales-dash-range-hint {
+  margin: 0;
+}
+
+.sales-dash-chart-timeline {
+  min-width: 200px;
+}
+
+.sales-dash-section h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sales-dash-range-hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.sales-dash-range-chip {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.sales-dash-range-chip.current {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.sales-dash-range-chip.previous {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.sales-dash-chart-legend-row {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.sales-dash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.sales-dash-kpi {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.sales-dash-kpi.highlight {
+  border-left: 4px solid #6366f1;
+  background: linear-gradient(to right, #eef2ff, white 70%);
+}
+
+.sales-dash-kpi-grid.period-compare .sales-dash-kpi {
+  border-left: 4px solid #10b981;
+}
+
+.sales-dash-kpi-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sales-dash-kpi-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.sales-dash-kpi-sub {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.sales-dash-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-top: 0.25rem;
+  width: fit-content;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.sales-dash-change.up {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.sales-dash-change.down {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.sales-dash-change.neutral {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.sales-dash-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 1.25rem;
+}
+
+.sales-dash-chart-grid.comparison {
+  grid-template-columns: 1fr;
+}
+
+.sales-dash-chart-grid.comparison .sales-dash-chart-card {
+  min-height: 480px;
+}
+
+.sales-dash-chart-grid.single {
+  grid-template-columns: minmax(280px, 1fr) minmax(240px, 360px);
+  align-items: start;
+}
+
+.sales-dash-chart-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.sales-dash-chart-grid.single .sales-dash-chart-card {
+  min-height: 400px;
+}
+
+.sales-dash-chart-card h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.sales-dash-channel-table-wrap {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.sales-dash-channel-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+}
+
+.sales-dash-channel-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  box-shadow: 0 2px 0 #e2e8f0;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+}
+
+.sales-dash-channel-table td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+.sales-dash-channel-table tbody tr:hover td {
+  background: #f8fafc;
+}
+
+@media (max-width: 768px) {
+  .sales-dashboard {
+    padding: 1rem;
+  }
+
+  .sales-dash-chart-grid.single {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-dash-period-toggle {
+    width: 100%;
+  }
+
+  .sales-dash-period-toggle button {
+    flex: 1;
+    min-width: 0;
+    padding: 0.5rem 0.5rem;
+  }
+}

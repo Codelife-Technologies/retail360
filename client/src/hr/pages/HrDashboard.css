@@ -1,0 +1,11 @@
+.hr-dashboard .hr-empty {
+  padding: 1.5rem;
+}
+
+.hr-dashboard .hr-table-card {
+  border-radius: 0;
+}
+
+.hr-dashboard .hr-panel-card .hr-table {
+  min-width: 0;
+}

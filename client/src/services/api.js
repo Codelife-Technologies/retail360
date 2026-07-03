@@ -272,6 +272,7 @@ export const geminiAPI = {
 export const reportsAPI = {
   // Sales Reports
   getSalesSummary: (params) => api.get('/reports/sales/summary', { params }),
+  getSalesDashboard: (params) => api.get('/reports/sales/dashboard', { params }),
   getSalesDetailed: (params) => api.get('/reports/sales/detailed', { params }),
   getSalesStatistics: (params) => api.get('/reports/sales/statistics', { params }),
   getSalesBySku: (params) => api.get('/reports/sales/by-sku', { params }),

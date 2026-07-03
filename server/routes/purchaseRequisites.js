@@ -42,14 +42,20 @@ async function generatePRNumber() {
 }
 
 function mapReplenishItemToLine(item, unitPrice = 0, supplierInfo = {}) {
-  const requestedQty = Math.max(
-    1,
-    item.requestedQty ||
-      item.suggestedReorder ||
-      item.suggestedQty ||
-      Math.max(0, (item.inventory?.minStock || 0) * 2 - (item.inventory?.currentStock || 0)) ||
-      1
+  const reorderQty = Math.max(
+    0,
+    item.reorderQty ??
+      item.suggestedReorder ??
+      item.suggestedQty ??
+      0
   );
+
+  const requestedQty =
+    item.requestedQty != null && item.requestedQty > 0 ? item.requestedQty : reorderQty;
+
+  if (requestedQty <= 0) {
+    return null;
+  }
 
   return {
     product: item.product._id || item.product,
@@ -59,13 +65,13 @@ function mapReplenishItemToLine(item, unitPrice = 0, supplierInfo = {}) {
     locationName: item.location.name || '',
     currentStock: item.inventory?.currentStock ?? 0,
     minStock: item.inventory?.minStock ?? 0,
-    suggestedQty: item.suggestedReorder ?? item.suggestedQty ?? requestedQty,
+    suggestedQty: reorderQty || requestedQty,
     requestedQty,
     replenishStatus: item.replenishStatus || 'REORDER',
     supplier: supplierInfo.supplier || null,
     supplierName: supplierInfo.supplierName || '',
     unitPrice,
-    notes: '',
+    notes: item.refillQty > 0 ? `Refill ${item.refillQty} from home` : '',
   };
 }
 
@@ -159,7 +165,8 @@ async function buildIncomingLines(items = [], manualItems = []) {
     if (!productId || !locationId) continue;
     const unitPrice = await getProductUnitPrice(productId);
     const supplierInfo = await resolveLineSupplier(productId);
-    incoming.push(mapReplenishItemToLine(item, unitPrice, supplierInfo));
+    const line = mapReplenishItemToLine(item, unitPrice, supplierInfo);
+    if (line) incoming.push(line);
   }
 
   for (const manual of manualItems) {

@@ -6,6 +6,11 @@
   overflow-y: auto;
 }
 
+.sales-report-page .sales-sku-report {
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
 .sales-header {
   display: flex;
   justify-content: space-between;
@@ -27,17 +32,27 @@
 .sales-table-container {
   background: white;
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .sales-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .sales-table thead {
   background: #f8f9fa;
+}
+
+.sales-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f8f9fa;
+  box-shadow: 0 2px 0 #dee2e6;
 }
 
 .sales-table th {

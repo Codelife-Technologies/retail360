@@ -428,9 +428,9 @@ router.get('/template', (req, res) => {
     logger.backend.info('Generating product template');
     const headers = [
       { key: 'slno', label: 'SL No' },
-      { key: 'parentSkuOrAsin', label: 'Parent SKU/ASIN' },
+      { key: 'parentSkuOrAsin', label: 'Parent SKU *' },
       { key: 'variation', label: 'Variation' },
-      { key: 'sku', label: 'SKU *' },
+      { key: 'sku', label: 'Child SKU' },
       { key: 'ean', label: 'EAN' },
       { key: 'category', label: 'Category' },
       { key: 'subCategory', label: 'Sub Category' },
@@ -466,8 +466,8 @@ router.get('/template', (req, res) => {
       {
         slno: 1,
         parentSkuOrAsin: 'PARENT-001',
-        variation: 'Standard',
-        sku: 'PROD-001',
+        variation: 'YES',
+        sku: 'CHILD-001-RED',
         ean: '',
         category: 'Brass',
         subCategory: '',
@@ -804,12 +804,30 @@ router.post('/import', upload.single('file'), async (req, res) => {
       const rowNum = i + 2; // +2 for header row and 0-index
 
       try {
-        const sku = (row['SKU *'] || '').toString().trim();
+        const variation = (row['Variation'] || '').toString().trim().toUpperCase();
+        const parentSku = (
+          row['Parent SKU *'] ||
+          row['P-SKU (Parent SKU) *'] ||
+          row['Parent SKU/ASIN'] ||
+          ''
+        )
+          .toString()
+          .trim();
+        const childSku = (
+          row['Child SKU'] ||
+          row['C-SKU (Child SKU)'] ||
+          row['SKU *'] ||
+          ''
+        )
+          .toString()
+          .trim();
+        const isVariation = variation === 'YES';
+        const sku = isVariation ? childSku : parentSku || childSku;
         const name = (row['Name *'] || row['Title'] || '').toString().trim();
         const title = (row['Title'] || name || '').toString().trim();
 
         // Skip completely empty rows (Excel often has trailing blank rows)
-        const hasAnyData = sku || name || title ||
+        const hasAnyData = sku || parentSku || name || title ||
           (row['Category'] && String(row['Category']).trim()) ||
           (row['EAN'] && String(row['EAN']).trim()) ||
           (row['Brand Name'] && String(row['Brand Name']).trim());
@@ -822,7 +840,20 @@ router.post('/import', upload.single('file'), async (req, res) => {
           errors.push({
             row: rowNum,
             field: 'sku',
-            message: 'SKU is required',
+            message: isVariation
+              ? 'Child SKU is required when Variation is YES'
+              : 'Parent SKU is required',
+            data: row,
+          });
+          failed++;
+          continue;
+        }
+
+        if (isVariation && !parentSku) {
+          errors.push({
+            row: rowNum,
+            field: 'parentSkuOrAsin',
+            message: 'Parent SKU is required when Variation is YES',
             data: row,
           });
           failed++;
@@ -879,7 +910,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
         const productData = {
           slno: row['SL No'] ? parseInt(row['SL No'], 10) : undefined,
-          parentSkuOrAsin: row['Parent SKU/ASIN'] || '',
+          parentSkuOrAsin: isVariation ? parentSku : '',
           variation: row['Variation'] || '',
           sku,
           ean: row['EAN'] || '',

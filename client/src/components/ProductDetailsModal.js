@@ -5,6 +5,8 @@ import {
   getProductThumbnail,
   normalizeProductSupplierLinks,
   resolveProductImageUrl,
+  getParentSku,
+  getChildSku,
 } from '../utils/productDisplayUtils';
 import './Products.css';
 
@@ -16,7 +18,7 @@ function ProductDetailField({ label, value }) {
     </div>
   );
 }
-
+ 
 function formatDim(d) {
   return d && (d.length || d.width || d.height)
     ? `${d.length || 0} × ${d.width || 0} × ${d.height || 0} cm`
@@ -79,7 +81,10 @@ function ProductDetailsModal({
             }}
           />
           <div className="detail-hero-info">
-            <span className="detail-hero-sku">SKU: {product.sku || '—'}</span>
+            <span className="detail-hero-sku">
+              Parent SKU: {getParentSku(product) || '—'}
+              {getChildSku(product) && <> · Child SKU: {getChildSku(product)}</>}
+            </span>
             <h3 className="detail-hero-title">{displayName || '—'}</h3>
             {productUrl && (
               <a
@@ -119,7 +124,13 @@ function ProductDetailsModal({
                 />
               )}
               <ProductDetailField label="Replenish Status" value={replenishContext.replenishStatus} />
-              <ProductDetailField label="Suggested Reorder" value={replenishContext.suggestedReorder} />
+              {(replenishContext.refillQty ?? 0) > 0 && (
+                <ProductDetailField
+                  label={`Refill from Home (${replenishContext.homeLocationCode || 'Home'})`}
+                  value={replenishContext.refillQty}
+                />
+              )}
+              <ProductDetailField label="Reorder (after refill)" value={replenishContext.suggestedReorder} />
             </div>
           </div>
         )}
@@ -129,8 +140,10 @@ function ProductDetailsModal({
           <div className="detail-grid">
             <ProductDetailField label="SL No" value={product.slno} />
             <ProductDetailField label="Variation" value={product.variation} />
-            <ProductDetailField label="Parent SKU / ASIN" value={product.parentSkuOrAsin} />
-            <ProductDetailField label="SKU" value={product.sku} />
+            <ProductDetailField label="Parent SKU" value={getParentSku(product)} />
+            {getChildSku(product) && (
+              <ProductDetailField label="Child SKU" value={getChildSku(product)} />
+            )}
             <ProductDetailField label="EAN" value={product.ean} />
             <ProductDetailField label="Brand" value={product.brandName} />
           </div>

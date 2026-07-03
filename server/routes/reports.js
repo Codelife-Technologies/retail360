@@ -16,6 +16,274 @@ function buildDateQuery(startDate, endDate) {
   return Object.keys(query).length > 0 ? query : null;
 }
 
+function toDateInputStr(date) {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function startOfDay(date = new Date()) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfDay(date = new Date()) {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function computeSaleStats(sales = []) {
+  const totalSales = sales.length;
+  const totalRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
+  const totalItemsSold = sales.reduce(
+    (sum, s) => sum + s.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0),
+    0
+  );
+  const averageOrderValue = totalSales > 0 ? totalRevenue / totalSales : 0;
+  return {
+    totalSales,
+    totalRevenue: Math.round(totalRevenue * 100) / 100,
+    totalItemsSold,
+    averageOrderValue: Math.round(averageOrderValue * 100) / 100,
+  };
+}
+
+function filterSalesInRange(sales, start, end) {
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  return sales.filter((sale) => {
+    const t = new Date(sale.salesDate).getTime();
+    return t >= startMs && t <= endMs;
+  });
+}
+
+function resolvePeriodRange(period, customStart, customEnd) {
+  const now = new Date();
+  switch (period) {
+    case 'day':
+      return {
+        start: startOfDay(now),
+        end: endOfDay(now),
+        label: 'Today',
+      };
+    case 'week': {
+      const start = new Date(now);
+      start.setDate(now.getDate() - now.getDay());
+      return {
+        start: startOfDay(start),
+        end: endOfDay(now),
+        label: 'This Week',
+      };
+    }
+    case 'fortnight': {
+      const start = new Date(now);
+      start.setDate(now.getDate() - 13);
+      return {
+        start: startOfDay(start),
+        end: endOfDay(now),
+        label: 'Last 14 Days',
+      };
+    }
+    case 'month': {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      return {
+        start: startOfDay(start),
+        end: endOfDay(now),
+        label: 'This Month',
+      };
+    }
+    case 'custom': {
+      const start = customStart ? startOfDay(new Date(customStart)) : startOfDay(now);
+      const end = customEnd ? endOfDay(new Date(customEnd)) : endOfDay(now);
+      return { start, end, label: 'Custom Range' };
+    }
+    default:
+      return resolvePeriodRange('month');
+  }
+}
+
+function resolvePreviousRange(start, end) {
+  const durationMs = end.getTime() - start.getTime();
+  const prevEnd = new Date(start.getTime() - 1);
+  const prevStart = new Date(prevEnd.getTime() - durationMs);
+  return { start: prevStart, end: prevEnd };
+}
+
+function pctChange(current, previous) {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 10000) / 100;
+}
+
+const CHART_TIMELINE_LABELS = {
+  auto: 'Auto',
+  hour: 'Hourly',
+  day: 'Daily',
+  week: 'Weekly',
+  fortnight: 'Fortnight',
+  month: 'Monthly',
+};
+
+function resolveChartTimeline(period, currentRange, requestedTimeline) {
+  if (requestedTimeline && requestedTimeline !== 'auto' && CHART_TIMELINE_LABELS[requestedTimeline]) {
+    return requestedTimeline;
+  }
+
+  if (period === 'day') return 'hour';
+
+  const dayCount =
+    Math.floor((currentRange.end.getTime() - currentRange.start.getTime()) / 86400000) + 1;
+
+  if (dayCount <= 1) return 'hour';
+  if (dayCount <= 14) return 'day';
+  if (dayCount <= 45) return 'week';
+  if (dayCount <= 120) return 'fortnight';
+  return 'month';
+}
+
+function bucketIndexForDate(date, rangeStart, timeline) {
+  if (timeline === 'hour') {
+    return new Date(date).getHours();
+  }
+
+  const start = startOfDay(rangeStart);
+  const dayOffset = Math.floor((startOfDay(date).getTime() - start.getTime()) / 86400000);
+
+  switch (timeline) {
+    case 'day':
+      return dayOffset;
+    case 'week':
+      return Math.floor(dayOffset / 7);
+    case 'fortnight':
+      return Math.floor(dayOffset / 14);
+    case 'month': {
+      const d = new Date(date);
+      return (d.getFullYear() - rangeStart.getFullYear()) * 12 + (d.getMonth() - rangeStart.getMonth());
+    }
+    default:
+      return dayOffset;
+  }
+}
+
+function maxBucketIndex(rangeStart, rangeEnd, timeline) {
+  if (timeline === 'hour') return 23;
+
+  const dayCount =
+    Math.floor((startOfDay(rangeEnd).getTime() - startOfDay(rangeStart).getTime()) / 86400000);
+
+  switch (timeline) {
+    case 'day':
+      return dayCount;
+    case 'week':
+      return Math.floor(dayCount / 7);
+    case 'fortnight':
+      return Math.floor(dayCount / 14);
+    case 'month': {
+      const end = new Date(rangeEnd);
+      const start = new Date(rangeStart);
+      return (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+    }
+    default:
+      return dayCount;
+  }
+}
+
+function labelForBucket(index, rangeStart, timeline) {
+  switch (timeline) {
+    case 'hour':
+      return `${String(index).padStart(2, '0')}:00`;
+    case 'day': {
+      const d = new Date(rangeStart);
+      d.setDate(rangeStart.getDate() + index);
+      return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+    case 'week': {
+      const d = new Date(rangeStart);
+      d.setDate(rangeStart.getDate() + index * 7);
+      return `Wk ${index + 1} · ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
+    }
+    case 'fortnight': {
+      const d = new Date(rangeStart);
+      d.setDate(rangeStart.getDate() + index * 14);
+      return `Fn ${index + 1} · ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
+    }
+    case 'month': {
+      const d = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + index, 1);
+      return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+    }
+    default:
+      return `Bucket ${index + 1}`;
+  }
+}
+
+function buildIndexedComparison(timeline, currentSales, previousSales, currentRange, previousRange) {
+  const currentAgg = {};
+  const previousAgg = {};
+
+  currentSales.forEach((sale) => {
+    const idx = bucketIndexForDate(sale.salesDate, currentRange.start, timeline);
+    if (!currentAgg[idx]) currentAgg[idx] = { revenue: 0, orders: 0 };
+    currentAgg[idx].revenue += sale.total || 0;
+    currentAgg[idx].orders += 1;
+  });
+
+  previousSales.forEach((sale) => {
+    const idx = bucketIndexForDate(sale.salesDate, previousRange.start, timeline);
+    if (!previousAgg[idx]) previousAgg[idx] = { revenue: 0, orders: 0 };
+    previousAgg[idx].revenue += sale.total || 0;
+    previousAgg[idx].orders += 1;
+  });
+
+  const maxIndex = maxBucketIndex(currentRange.start, currentRange.end, timeline);
+
+  return Array.from({ length: maxIndex + 1 }, (_, index) => {
+    const cur = currentAgg[index] || { revenue: 0, orders: 0 };
+    const prev = previousAgg[index] || { revenue: 0, orders: 0 };
+    return {
+      label: labelForBucket(index, currentRange.start, timeline),
+      currentRevenue: Math.round(cur.revenue * 100) / 100,
+      previousRevenue: Math.round(prev.revenue * 100) / 100,
+      currentOrders: cur.orders,
+      previousOrders: prev.orders,
+    };
+  });
+}
+
+function buildComparisonChart(period, currentSales, previousSales, currentRange, previousRange, requestedTimeline) {
+  const timeline = resolveChartTimeline(period, currentRange, requestedTimeline);
+  const chart = buildIndexedComparison(
+    timeline,
+    currentSales,
+    previousSales,
+    currentRange,
+    previousRange
+  );
+  return { timeline, chart };
+}
+
+function buildChannelBreakdown(sales) {
+  const channelMap = {};
+  sales.forEach((sale) => {
+    const channelId = sale.salesChannel?._id || sale.salesChannel || 'unknown';
+    const name = sale.salesChannel?.name || 'Unknown Channel';
+    if (!channelMap[channelId]) {
+      channelMap[channelId] = { name, revenue: 0, orders: 0 };
+    }
+    channelMap[channelId].revenue += sale.total || 0;
+    channelMap[channelId].orders += 1;
+  });
+
+  return Object.values(channelMap)
+    .map((row) => ({
+      ...row,
+      revenue: Math.round(row.revenue * 100) / 100,
+    }))
+    .sort((a, b) => b.revenue - a.revenue);
+}
+
 /** Previous month + the 3 calendar months before it (excludes current month). */
 function buildMonthBuckets() {
   const now = new Date();
@@ -61,7 +329,7 @@ function formatDateKey(date) {
   return `${y}-${m}-${d}`;
 }
 
-function buildProductRow(product, loc, stockRec, monthBuckets, salesMonthlyMap, salesDailyMap = null) {
+function buildProductRow(product, loc, stockRec, monthBuckets, salesMonthlyMap, salesDailyMap = null, homeInventory = null) {
   const productIdStr = product._id.toString();
   const locIdStr = loc._id.toString();
 
@@ -121,7 +389,49 @@ function buildProductRow(product, loc, stockRec, monthBuckets, salesMonthlyMap, 
     ...(salesOnDate !== undefined ? { salesOnDate } : {}),
     replenishStatus: status,
     suggestedReorder,
+    ...(homeInventory ? { homeInventory } : {}),
   };
+}
+
+function computeAvailableStock(stockRec) {
+  if (!stockRec) return 0;
+  return Math.max(0, (stockRec.quantity || 0) - (stockRec.reservedQuantity || 0));
+}
+
+function buildHomeInventoryForProduct(productIdStr, homeLocation, homeStockByProduct) {
+  if (!homeLocation) return null;
+  return {
+    availableStock: homeStockByProduct.get(productIdStr) ?? 0,
+    locationName: homeLocation.name,
+    locationCode: homeLocation.code,
+  };
+}
+
+function applyHomeRefillAllocation(rows, homeLocation, homeStockByProduct) {
+  const depletableHome = new Map(homeStockByProduct);
+  const homeLocId = homeLocation?._id?.toString();
+
+  rows.forEach((item) => {
+    const need = item.suggestedReorder || 0;
+    if (need <= 0) {
+      item.refillQty = 0;
+      item.reorderQty = 0;
+      return;
+    }
+
+    if (homeLocId && item.location._id.toString() === homeLocId) {
+      item.refillQty = 0;
+      item.reorderQty = need;
+      return;
+    }
+
+    const productId = item.product._id.toString();
+    const homeAvail = depletableHome.get(productId) ?? 0;
+    const refill = Math.min(need, homeAvail);
+    item.refillQty = refill;
+    item.reorderQty = need - refill;
+    depletableHome.set(productId, Math.max(0, homeAvail - refill));
+  });
 }
 
 // Helper function to group data
@@ -431,11 +741,73 @@ async function aggregateSalesBySku(filters = {}) {
 
   skuRows = sortSkuRows(skuRows, sortBy, sortDir);
 
+  const lineItemRevenue = Math.round(
+    skuRows.reduce((sum, row) => sum + row.totalRevenue, 0) * 100
+  ) / 100;
+
+  const orderSummaryPipeline = [
+    { $match: saleMatch },
+    ...(search
+      ? [
+          { $unwind: '$items' },
+          {
+            $lookup: {
+              from: 'products',
+              localField: 'items.product',
+              foreignField: '_id',
+              as: 'product',
+            },
+          },
+          { $unwind: { path: '$product', preserveNullAndEmptyArrays: true } },
+          {
+            $match: {
+              $or: [
+                { 'product.sku': { $regex: search, $options: 'i' } },
+                { 'product.title': { $regex: search, $options: 'i' } },
+                { 'product.name': { $regex: search, $options: 'i' } },
+              ],
+            },
+          },
+          {
+            $group: {
+              _id: '$_id',
+              orderTotal: { $first: '$total' },
+              lineQuantity: { $sum: '$items.quantity' },
+            },
+          },
+        ]
+      : [
+          {
+            $project: {
+              total: 1,
+              lineQuantity: {
+                $reduce: {
+                  input: { $ifNull: ['$items', []] },
+                  initialValue: 0,
+                  in: { $add: ['$$value', { $ifNull: ['$$this.quantity', 0] }] },
+                },
+              },
+            },
+          },
+        ]),
+    {
+      $group: {
+        _id: null,
+        totalRevenue: { $sum: search ? '$orderTotal' : '$total' },
+        totalOrders: { $sum: 1 },
+        totalQuantitySold: { $sum: '$lineQuantity' },
+      },
+    },
+  ];
+
+  const [orderSummary = {}] = await Sale.aggregate(orderSummaryPipeline);
+
   const summary = {
     totalSkus: skuRows.length,
-    totalQuantitySold: skuRows.reduce((sum, row) => sum + row.totalQuantity, 0),
-    totalRevenue: Math.round(skuRows.reduce((sum, row) => sum + row.totalRevenue, 0) * 100) / 100,
-    totalOrders: skuRows.reduce((sum, row) => sum + row.orderCount, 0),
+    totalQuantitySold: orderSummary.totalQuantitySold || 0,
+    totalRevenue: Math.round((orderSummary.totalRevenue || 0) * 100) / 100,
+    totalOrders: orderSummary.totalOrders || 0,
+    lineItemRevenue,
   };
 
   return { summary, rows: skuRows };
@@ -475,6 +847,98 @@ router.get('/sales/by-sku/export', async (req, res) => {
     res.send(buffer);
   } catch (error) {
     logger.backend.error('Error exporting sales by SKU', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET sales dashboard (overview + period comparison)
+router.get('/sales/dashboard', async (req, res) => {
+  try {
+    const { period = 'month', startDate, endDate, salesChannel, salesLocation, chartTimeline } = req.query;
+    const currentRange = resolvePeriodRange(period, startDate, endDate);
+    const previousRange = resolvePreviousRange(currentRange.start, currentRange.end);
+
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const fetchStart = new Date(Math.min(
+      previousRange.start.getTime(),
+      startOfDay(weekStart).getTime(),
+      startOfDay(monthStart).getTime()
+    ));
+
+    const baseQuery = {};
+    if (salesChannel) baseQuery.salesChannel = salesChannel;
+    if (salesLocation) baseQuery.salesLocation = salesLocation;
+
+    const sales = await Sale.find({
+      ...baseQuery,
+      salesDate: { $gte: fetchStart },
+    })
+      .populate('salesChannel', 'name code')
+      .populate('salesLocation', 'name code')
+      .populate('items.product', 'name title sku')
+      .sort({ salesDate: -1 });
+
+    const allTimeQuery = { ...baseQuery };
+    const allTimeSales = await Sale.find(allTimeQuery)
+      .populate('salesChannel', 'name code')
+      .select('total items salesDate salesChannel');
+
+    const todaySales = filterSalesInRange(sales, startOfDay(now), endOfDay(now));
+    const thisWeekSales = filterSalesInRange(sales, startOfDay(weekStart), endOfDay(now));
+    const thisMonthSales = filterSalesInRange(sales, startOfDay(monthStart), endOfDay(now));
+    const currentSales = filterSalesInRange(sales, currentRange.start, currentRange.end);
+    const previousSales = filterSalesInRange(sales, previousRange.start, previousRange.end);
+
+    const currentPeriod = computeSaleStats(currentSales);
+    const previousPeriod = computeSaleStats(previousSales);
+
+    const change = {
+      totalSales: pctChange(currentPeriod.totalSales, previousPeriod.totalSales),
+      totalRevenue: pctChange(currentPeriod.totalRevenue, previousPeriod.totalRevenue),
+      totalItemsSold: pctChange(currentPeriod.totalItemsSold, previousPeriod.totalItemsSold),
+      averageOrderValue: pctChange(currentPeriod.averageOrderValue, previousPeriod.averageOrderValue),
+    };
+
+    const comparison = buildComparisonChart(
+      period,
+      currentSales,
+      previousSales,
+      currentRange,
+      previousRange,
+      chartTimeline
+    );
+
+    res.json({
+      period,
+      periodLabel: currentRange.label,
+      chartTimeline: comparison.timeline,
+      chartTimelineLabel: CHART_TIMELINE_LABELS[comparison.timeline] || comparison.timeline,
+      currentRange: {
+        start: toDateInputStr(currentRange.start),
+        end: toDateInputStr(currentRange.end),
+      },
+      previousRange: {
+        start: toDateInputStr(previousRange.start),
+        end: toDateInputStr(previousRange.end),
+      },
+      overview: {
+        today: computeSaleStats(todaySales),
+        thisWeek: computeSaleStats(thisWeekSales),
+        thisMonth: computeSaleStats(thisMonthSales),
+        allTime: computeSaleStats(allTimeSales),
+      },
+      currentPeriod,
+      previousPeriod,
+      change,
+      comparisonChart: comparison.chart,
+      channelBreakdown: buildChannelBreakdown(currentSales),
+    });
+  } catch (error) {
+    logger.backend.error('Error fetching sales dashboard', { error: error.message, stack: error.stack });
     res.status(500).json({ error: error.message });
   }
 });
@@ -850,6 +1314,21 @@ router.get('/replenish', async (req, res) => {
       stockRecords.map((s) => [`${s.product.toString()}-${s.location.toString()}`, s])
     );
 
+    const homeLocation =
+      (await Location.findOne({ isHomeBranch: true }).lean()) ||
+      (await Location.findOne({ code: /^NOIDA63$/i }).lean());
+
+    const homeStockByProduct = new Map();
+    if (homeLocation) {
+      const homeStockRecords = await Stock.find({
+        product: { $in: productIds },
+        location: homeLocation._id,
+      }).lean();
+      homeStockRecords.forEach((s) => {
+        homeStockByProduct.set(s.product.toString(), computeAvailableStock(s));
+      });
+    }
+
     // 6. Monthly sales per product + warehouse location (via salesLocation mapping)
     const salesLocDocs = await SalesLocation.find().select('_id location').lean();
     const salesLocToWarehouse = new Map(
@@ -949,7 +1428,8 @@ router.get('/replenish', async (req, res) => {
           stockRec,
           monthBuckets,
           salesMonthlyMap,
-          salesDailyMap
+          salesDailyMap,
+          buildHomeInventoryForProduct(productIdStr, homeLocation, homeStockByProduct)
         );
         locationProducts.push(row);
         combinedData.push(row);
@@ -981,6 +1461,8 @@ router.get('/replenish', async (req, res) => {
         });
       }
     });
+
+    applyHomeRefillAllocation(combinedData, homeLocation, homeStockByProduct);
 
     const categorySummary = {};
     combinedData.forEach((item) => {
@@ -1037,6 +1519,9 @@ router.get('/replenish', async (req, res) => {
       monthKeys: monthBuckets.map((b) => b.key),
       dateWindow,
       specificDate: specificDay ? { value: specificDay.key, label: specificDay.label } : null,
+      homeBranch: homeLocation
+        ? { _id: homeLocation._id, name: homeLocation.name, code: homeLocation.code }
+        : null,
       products: combinedData,
       groupedByLocation,
       groupedByCategory: Object.values(categorySummary),

@@ -1,0 +1,55 @@
+.sales-trend-charts {
+  margin: 1.25rem 0 1.5rem;
+  padding: 1.25rem 1.5rem;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.sales-trend-charts h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.sales-trend-totals {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.sales-trend-totals strong {
+  color: #111827;
+}
+
+.sales-trend-chart-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+@media (min-width: 992px) {
+  .sales-trend-chart-grid {
+    grid-template-columns: 1.4fr 1fr;
+  }
+}
+
+.sales-trend-chart-card {
+  min-width: 0;
+}
+
+.sales-trend-chart-card h4 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  color: #555;
+  font-weight: 600;
+}
+
+.sales-trend-empty {
+  text-align: center;
+  color: #6b7280;
+}
+
+.sales-trend-empty p {
+  margin: 0;
+}

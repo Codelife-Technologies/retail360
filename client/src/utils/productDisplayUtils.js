@@ -33,7 +33,7 @@ export function getProductDisplayName(product) {
 }
 
 export function normalizeProductSupplierLinks(product, allSuppliers = []) {
-  const defaultSku = product?.sku || '';
+  const defaultSku = getCatalogSku(product) || '';
   const defaultUnit = product?.unit || 'pcs';
 
   return (product?.suppliers || [])
@@ -71,4 +71,52 @@ export function normalizeProductSupplierLinks(product, allSuppliers = []) {
       return null;
     })
     .filter(Boolean);
+}
+
+export function isVariationProduct(product) {
+  return String(product?.variation || '').trim().toUpperCase() === 'YES';
+}
+
+/** Parent SKU — shown on every product. */
+export function getParentSku(product) {
+  if (!product) return '';
+  return isVariationProduct(product) ? product.parentSkuOrAsin || '' : product.sku || '';
+}
+
+/** Child SKU — shown when variation is YES. */
+export function getChildSku(product) {
+  if (!isVariationProduct(product)) return '';
+  return product?.sku || '';
+}
+
+/** Operational SKU used for stock, sales, and supplier defaults (Child SKU when variation). */
+export function getCatalogSku(product) {
+  return product?.sku || '';
+}
+
+export function productToSkuFormValues(product) {
+  return {
+    parentSku: getParentSku(product),
+    childSku: getChildSku(product),
+  };
+}
+
+export function skuFormValuesToProductFields({ parentSku, childSku, variation }) {
+  const isVar = String(variation || '').trim().toUpperCase() === 'YES';
+  const parent = (parentSku || '').trim();
+  const child = (childSku || '').trim();
+
+  if (isVar) {
+    return { sku: child, parentSkuOrAsin: parent };
+  }
+  return { sku: parent, parentSkuOrAsin: '' };
+}
+
+export function formatProductSkuSummary(product) {
+  const parent = getParentSku(product);
+  const child = getChildSku(product);
+  if (child) {
+    return `Parent SKU: ${parent || '—'} · Child SKU: ${child}`;
+  }
+  return parent ? `Parent SKU: ${parent}` : '—';
 }

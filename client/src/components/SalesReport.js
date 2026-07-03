@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { reportsAPI, salesChannelsAPI, salesLocationsAPI } from '../services/api';
 import { formatMoney } from '../utils/locationCurrency';
 import logger from '../utils/logger';
+import SalesMonthlyTrendCharts from './SalesMonthlyTrendCharts';
 import './SalesReport.css';
 
 const formatAed = (amount) => formatMoney(amount, 'AED');
@@ -11,6 +12,7 @@ function SalesReport() {
   const [loading, setLoading] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
   const [detailedData, setDetailedData] = useState([]);
+  const [monthlyTrend, setMonthlyTrend] = useState([]);
   const [salesChannels, setSalesChannels] = useState([]);
   const [salesLocations, setSalesLocations] = useState([]);
   
@@ -64,12 +66,21 @@ function SalesReport() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      const trendParams = { ...filters, groupBy: 'month' };
       if (view === 'summary') {
-        const response = await reportsAPI.getSalesSummary(filters);
+        const [response, trendRes] = await Promise.all([
+          reportsAPI.getSalesSummary(filters),
+          reportsAPI.getSalesSummary(trendParams),
+        ]);
         setSummaryData(response.data);
+        setMonthlyTrend(trendRes.data?.groupedData || []);
       } else {
-        const response = await reportsAPI.getSalesDetailed(filters);
+        const [response, trendRes] = await Promise.all([
+          reportsAPI.getSalesDetailed(filters),
+          reportsAPI.getSalesSummary(trendParams),
+        ]);
         setDetailedData(response.data);
+        setMonthlyTrend(trendRes.data?.groupedData || []);
       }
     } catch (error) {
       console.error('Error fetching report data:', error);
@@ -242,7 +253,11 @@ function SalesReport() {
 
       {loading ? (
         <div className="loading">Loading report data...</div>
-      ) : view === 'summary' && summaryData ? (
+      ) : (
+        <>
+          <SalesMonthlyTrendCharts groupedData={monthlyTrend} formatCurrency={formatAed} />
+
+          {view === 'summary' && summaryData ? (
         <div className="summary-view">
           <div className="stats-cards">
             <div className="stat-card">
@@ -384,6 +399,8 @@ function SalesReport() {
         </div>
       ) : (
         <div className="no-data">No data available</div>
+      )}
+        </>
       )}
     </div>
   );

@@ -1,0 +1,701 @@
+/* Shared HR module styles — consistent with Retail360 ERP */
+
+.hr-page {
+  padding: 2rem;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.hr-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.hr-page-header h1 {
+  margin: 0;
+  color: var(--text, #333);
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.hr-page-subtitle {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.hr-header-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.hr-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
+}
+
+@media (min-width: 1200px) {
+  .hr-kpi-grid-6 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1400px) {
+  .hr-kpi-grid-6 {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+.hr-kpi-card {
+  background: var(--surface, #fff);
+  border-radius: 12px;
+  padding: 1.25rem 1.35rem;
+  box-shadow: 0 2px 8px var(--shadow, rgba(0, 0, 0, 0.1));
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-left: 4px solid #667eea;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.hr-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px var(--shadow, rgba(0, 0, 0, 0.15));
+}
+
+.hr-kpi-card.success { border-left-color: #10b981; }
+.hr-kpi-card.warning { border-left-color: #f59e0b; }
+.hr-kpi-card.danger { border-left-color: #ef4444; }
+.hr-kpi-card.info { border-left-color: #6B3894; }
+
+.hr-kpi-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.hr-kpi-body h3 {
+  margin: 0;
+  font-size: 1.65rem;
+  color: var(--text, #333);
+  font-weight: 700;
+}
+
+.hr-kpi-body p {
+  margin: 0.2rem 0 0;
+  color: var(--text-muted, #666);
+  font-size: 0.875rem;
+}
+
+.hr-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  align-items: center;
+}
+
+.hr-search-input,
+.hr-filter-select,
+.hr-filter-input {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: var(--surface, #fff);
+  color: var(--text, #333);
+  min-width: 140px;
+}
+
+.hr-search-input {
+  flex: 1;
+  min-width: 200px;
+  max-width: 360px;
+}
+
+.hr-table-card {
+  background: var(--surface, #fff);
+  border-radius: 12px;
+  overflow-x: auto;
+  box-shadow: 0 2px 8px var(--shadow, rgba(0, 0, 0, 0.1));
+}
+
+.hr-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+}
+
+.hr-table thead {
+  background: var(--surface-2, #f8f9fa);
+}
+
+.hr-table th {
+  padding: 0.9rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text, #333);
+  border-bottom: 2px solid var(--border, #dee2e6);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hr-table th.sortable:hover {
+  color: #667eea;
+}
+
+.hr-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-soft, #e5e7eb);
+  color: var(--text, #333);
+  vertical-align: middle;
+}
+
+.hr-table tbody tr:hover {
+  background: var(--surface-3, #f9fafb);
+}
+
+.hr-table tbody tr.clickable-row {
+  cursor: pointer;
+}
+
+.hr-btn {
+  padding: 0.55rem 1.1rem;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.hr-btn:hover {
+  transform: translateY(-1px);
+}
+
+.hr-btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+.hr-btn-secondary {
+  background: var(--surface-2, #f3f4f6);
+  color: var(--text, #333);
+  border: 1px solid var(--border, #dee2e6);
+}
+
+.hr-btn-success {
+  background: #10b981;
+  color: #fff;
+}
+
+.hr-btn-danger {
+  background: #ef4444;
+  color: #fff;
+}
+
+.hr-btn-warning {
+  background: #f59e0b;
+  color: #fff;
+}
+
+.hr-btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.hr-btn-icon {
+  padding: 0.35rem 0.5rem;
+  min-width: auto;
+}
+
+.hr-actions-cell {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.hr-status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.hr-status-active,
+.hr-status-present,
+.hr-status-approved,
+.hr-status-paid,
+.hr-status-processed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.hr-status-inactive,
+.hr-status-absent,
+.hr-status-rejected,
+.hr-status-terminated {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.hr-status-pending,
+.hr-status-half-day {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.hr-status-leave,
+.hr-status-on-leave {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.hr-status-holiday,
+.hr-status-work-from-home,
+.hr-status-cancelled {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.hr-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #667eea;
+  font-size: 0.85rem;
+}
+
+.hr-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.hr-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.hr-pagination-info {
+  color: var(--text-muted, #666);
+  font-size: 0.9rem;
+}
+
+.hr-pagination-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.hr-loading,
+.hr-empty {
+  padding: 3rem 2rem;
+  text-align: center;
+  color: var(--text-muted, #666);
+}
+
+.hr-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.hr-modal {
+  background: var(--surface, #fff);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.hr-modal-lg {
+  max-width: 900px;
+}
+
+.hr-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border, #dee2e6);
+}
+
+.hr-modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--text, #333);
+}
+
+.hr-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--text-muted, #666);
+  line-height: 1;
+}
+
+.hr-modal-body {
+  padding: 1.5rem;
+}
+
+.hr-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border, #dee2e6);
+}
+
+.hr-form-section {
+  margin-bottom: 1.5rem;
+}
+
+.hr-form-section h3 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  color: #667eea;
+  border-bottom: 1px solid var(--border-soft, #e5e7eb);
+  padding-bottom: 0.5rem;
+}
+
+.hr-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.hr-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.hr-form-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted, #555);
+}
+
+.hr-form-group label .required {
+  color: #ef4444;
+}
+
+.hr-form-group input,
+.hr-form-group select,
+.hr-form-group textarea {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: var(--surface, #fff);
+  color: var(--text, #333);
+}
+
+.hr-form-group textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.hr-form-error {
+  color: #ef4444;
+  font-size: 0.8rem;
+}
+
+.hr-chart-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 992px) {
+  .hr-chart-grid-2 {
+    grid-template-columns: 1.4fr 1fr;
+  }
+}
+
+.hr-chart-card,
+.hr-panel-card {
+  background: var(--surface, #fff);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 2px 8px var(--shadow, rgba(0, 0, 0, 0.1));
+}
+
+.hr-chart-card h3,
+.hr-panel-card h3 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  color: var(--text, #333);
+}
+
+.hr-attendance-trend-card {
+  margin-bottom: 1.5rem;
+}
+
+.hr-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.hr-seed-message {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  color: #065f46;
+  font-size: 0.9rem;
+}
+
+.hr-chart-container {
+  width: 100%;
+  min-width: 0;
+  min-height: 300px;
+}
+
+.hr-dashboard-bottom {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 992px) {
+  .hr-dashboard-bottom {
+    grid-template-columns: 1.4fr 1fr;
+  }
+}
+
+.hr-side-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.hr-mini-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.hr-mini-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--border-soft, #e5e7eb);
+  gap: 0.75rem;
+}
+
+.hr-mini-list li:last-child {
+  border-bottom: none;
+}
+
+.hr-view-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.hr-view-tab {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border, #dee2e6);
+  background: var(--surface-2, #f8f9fa);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-muted, #666);
+}
+
+.hr-view-tab.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border-color: transparent;
+}
+
+.hr-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+}
+
+.hr-calendar-day-header {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted, #666);
+  padding: 0.35rem;
+}
+
+.hr-calendar-day {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  background: var(--surface-2, #f8f9fa);
+  border: 1px solid var(--border-soft, #e5e7eb);
+  padding: 0.25rem;
+  min-height: 48px;
+}
+
+.hr-calendar-day.other-month {
+  opacity: 0.4;
+}
+
+.hr-calendar-day.today {
+  border-color: #667eea;
+  font-weight: 700;
+}
+
+.hr-calendar-day.holiday {
+  background: #ede9fe;
+  border-color: #667eea;
+}
+
+.hr-calendar-day-label {
+  font-size: 0.6rem;
+  color: #667eea;
+  text-align: center;
+  line-height: 1.1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .hr-kpi-card,
+[data-theme="dark"] .hr-table-card,
+[data-theme="dark"] .hr-chart-card,
+[data-theme="dark"] .hr-panel-card,
+[data-theme="dark"] .hr-modal {
+  background: var(--surface) !important;
+}
+
+@media (max-width: 768px) {
+  .hr-page {
+    padding: 1rem;
+  }
+
+  .hr-page-header h1 {
+    font-size: 1.4rem;
+  }
+
+  .hr-kpi-body h3 {
+    font-size: 1.35rem;
+  }
+
+  .hr-leave-balance-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hr-leave-balance-panel {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-soft, #e5e7eb);
+}
+
+.hr-leave-balance-panel h3 {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  color: var(--text, #333);
+}
+
+.hr-leave-balance-panel.compact {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.hr-leave-balance-hint {
+  margin-bottom: 1.25rem;
+  color: var(--text-muted, #666);
+  font-size: 0.95rem;
+}
+
+.hr-leave-balance-hint p {
+  margin: 0;
+}
+
+.hr-leave-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+}
+
+.hr-leave-balance-card {
+  background: var(--surface-2, #f8f9fa);
+  border: 1px solid var(--border-soft, #e5e7eb);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+}
+
+.hr-leave-balance-card h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
+  color: var(--text, #333);
+}
+
+.hr-leave-balance-card p {
+  margin: 0.15rem 0;
+  font-size: 0.82rem;
+  color: var(--text-muted, #666);
+}
+
+.hr-leave-balance-quota {
+  font-weight: 600;
+}
+
+.hr-leave-balance-remaining {
+  margin-top: 0.35rem !important;
+  color: #667eea !important;
+}
+
+.form-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--text-muted, #666);
+}

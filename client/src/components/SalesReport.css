@@ -166,6 +166,19 @@
   margin-bottom: 2rem;
   width: 100%;
   box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.detailed-view {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .grouped-data-section h3,
@@ -177,13 +190,23 @@
 
 .report-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   table-layout: auto;
 }
 
 .report-table-container {
   width: 100%;
   overflow-x: auto;
+  overflow-y: visible;
+}
+
+.report-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f8f9fa;
+  box-shadow: 0 2px 0 #dee2e6;
 }
 
 .report-table thead {
@@ -234,15 +257,6 @@
 .stat-box li {
   margin-bottom: 0.25rem;
   color: #666;
-}
-
-.detailed-view {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  width: 100%;
-  box-sizing: border-box;
 }
 
 .detailed-view h3 {

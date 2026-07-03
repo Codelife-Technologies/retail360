@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { reportsAPI, salesChannelsAPI, salesLocationsAPI } from '../services/api';
+import { reportsAPI, salesAPI, salesChannelsAPI } from '../services/api';
 import { formatMoney } from '../utils/locationCurrency';
+import { getCatalogSku } from '../utils/productDisplayUtils';
+import SalesMonthlyTrendCharts from './SalesMonthlyTrendCharts';
+import SaleDetailsModal from './SaleDetailsModal';
 import './SalesSkuReport.css';
 
 const formatAed = (amount) => formatMoney(amount, 'AED');
@@ -8,7 +11,6 @@ const defaultFilters = () => ({
   startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0],
   endDate: new Date().toISOString().split('T')[0],
   salesChannel: '',
-  salesLocation: '',
   paymentStatus: '',
   orderStatus: '',
   search: '',
@@ -31,19 +33,36 @@ const ORDER_SORT_OPTIONS = [
   { value: 'amazonOrderId', label: 'Amazon Order ID' },
 ];
 
+function countActiveAppliedFilters(applied) {
+  const defaults = defaultFilters();
+  let count = 0;
+  if (applied.salesChannel) count += 1;
+  if (applied.paymentStatus) count += 1;
+  if (applied.orderStatus) count += 1;
+  if (applied.search?.trim()) count += 1;
+  if (applied.startDate !== defaults.startDate || applied.endDate !== defaults.endDate) {
+    count += 1;
+  }
+  return count;
+}
+
 function SalesSkuReport({ onClose }) {
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
+  const [showFilters, setShowFilters] = useState(false);
   const [salesChannels, setSalesChannels] = useState([]);
-  const [salesLocations, setSalesLocations] = useState([]);
   const [summary, setSummary] = useState(null);
   const [skuRows, setSkuRows] = useState([]);
   const [orderRows, setOrderRows] = useState([]);
+  const [monthlyTrend, setMonthlyTrend] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [viewingSale, setViewingSale] = useState(null);
+  const [viewingSaleLoading, setViewingSaleLoading] = useState(false);
 
   const isSkuView = appliedFilters.view === 'sku';
   const sortOptions = isSkuView ? SKU_SORT_OPTIONS : ORDER_SORT_OPTIONS;
+  const activeFilterCount = countActiveAppliedFilters(appliedFilters);
 
   useEffect(() => {
     salesChannelsAPI.getAll({ isActive: 'true' }).then((res) => {
@@ -51,32 +70,50 @@ function SalesSkuReport({ onClose }) {
     }).catch(console.error);
   }, []);
 
-  useEffect(() => {
-    if (filters.salesChannel) {
-      salesLocationsAPI.getByChannel(filters.salesChannel).then((res) => {
-        setSalesLocations(res.data || []);
-      }).catch(console.error);
-    } else {
-      setSalesLocations([]);
-    }
-  }, [filters.salesChannel]);
-
   const fetchReport = useCallback(async () => {
     try {
       setLoading(true);
       const params = { ...appliedFilters };
       if (!params.search) delete params.search;
 
+      const trendParams = { ...params };
+      delete trendParams.view;
+      delete trendParams.sortBy;
+      delete trendParams.sortDir;
+      delete trendParams.search;
+
+      const trendPromise = reportsAPI.getSalesSummary({ ...trendParams, groupBy: 'month' });
+
+      const detailParams = { ...params };
+      delete detailParams.view;
+      delete detailParams.search;
       if (appliedFilters.view === 'sku') {
-        const response = await reportsAPI.getSalesBySku(params);
+        detailParams.sortBy = 'salesDate';
+        detailParams.sortDir = 'desc';
+      }
+
+      const ordersPromise = reportsAPI.getSalesDetailed(detailParams);
+
+      if (appliedFilters.view === 'sku') {
+        const [response, trendRes, ordersRes] = await Promise.all([
+          reportsAPI.getSalesBySku(params),
+          trendPromise,
+          ordersPromise,
+        ]);
+        const orders = Array.isArray(ordersRes.data) ? ordersRes.data : ordersRes.data?.data || [];
         setSummary(response.data.summary);
         setSkuRows(response.data.rows || []);
-        setOrderRows([]);
+        setOrderRows(orders);
+        setMonthlyTrend(trendRes.data?.groupedData || []);
       } else {
-        const response = await reportsAPI.getSalesDetailed(params);
+        const [response, trendRes] = await Promise.all([
+          ordersPromise,
+          trendPromise,
+        ]);
         const orders = Array.isArray(response.data) ? response.data : response.data?.data || [];
         setOrderRows(orders);
         setSkuRows([]);
+        setMonthlyTrend(trendRes.data?.groupedData || []);
         setSummary({
           totalSkus: null,
           totalSales: orders.length,
@@ -89,6 +126,7 @@ function SalesSkuReport({ onClose }) {
           totalOrders: orders.length,
         });
       }
+      setViewingSale(null);
     } catch (error) {
       console.error('Error fetching sales report:', error);
       alert(error.response?.data?.error || 'Failed to load sales report');
@@ -101,12 +139,16 @@ function SalesSkuReport({ onClose }) {
     fetchReport();
   }, [fetchReport]);
 
+  useEffect(() => {
+    setViewingSale(null);
+    setViewingSaleLoading(false);
+  }, [appliedFilters]);
+
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFilters((prev) => ({
       ...prev,
       [name]: value,
-      ...(name === 'salesChannel' ? { salesLocation: '' } : {}),
     }));
   };
 
@@ -161,7 +203,83 @@ function SalesSkuReport({ onClose }) {
     return sortDir === 'desc' ? 'High to low' : 'Low to high';
   };
 
-  const hasRows = isSkuView ? skuRows.length > 0 : orderRows.length > 0;
+  const hasSkuRows = skuRows.length > 0;
+  const hasOrderRows = orderRows.length > 0;
+
+  const getProductSku = (item) => {
+    const sku = getCatalogSku(item.product) || item.sku;
+    return sku || '—';
+  };
+
+  const getSaleProductSkus = (sale) => {
+    const skus = (sale.items || [])
+      .map((item) => getProductSku(item))
+      .filter((sku) => sku && sku !== '—');
+    return [...new Set(skus)].join(', ') || '—';
+  };
+
+  const openSaleDetail = async (sale) => {
+    setViewingSale(sale);
+    setViewingSaleLoading(true);
+
+    try {
+      const response = await salesAPI.getById(sale._id);
+      setViewingSale(response.data);
+    } catch (error) {
+      console.error('Error loading sale details:', error);
+      setViewingSale(sale);
+    } finally {
+      setViewingSaleLoading(false);
+    }
+  };
+
+  const closeSaleDetail = () => {
+    setViewingSale(null);
+    setViewingSaleLoading(false);
+  };
+
+  const renderSalesDetailSection = () => {
+    if (!hasOrderRows) return null;
+
+    return (
+      <div className="sales-detail-section">
+        <h3 className="sales-detail-heading">Sales Detail</h3>
+        <div className="sales-sku-table-wrap">
+          <table className="sales-sku-table sales-detail-table">
+            <thead>
+              <tr>
+                <th>Product SKU</th>
+                <th>Amazon Order ID</th>
+                <th>Sale Date</th>
+                <th>Channel</th>
+                <th>Items</th>
+                <th>Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orderRows.map((sale) => {
+                const itemCount = sale.items?.length || 0;
+                return (
+                  <tr
+                    key={sale._id}
+                    className="sales-detail-row"
+                    onClick={() => openSaleDetail(sale)}
+                  >
+                    <td className="mono">{getSaleProductSkus(sale)}</td>
+                    <td className="mono">{sale.amazonOrderId || '—'}</td>
+                    <td>{new Date(sale.salesDate).toLocaleDateString('en-IN')}</td>
+                    <td>{sale.salesChannel?.name || '—'}</td>
+                    <td className="num">{itemCount}</td>
+                    <td className="num">{formatAed(sale.subtotal)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="sales-sku-report">
@@ -170,11 +288,21 @@ function SalesSkuReport({ onClose }) {
           <h2>Sales Report</h2>
           <p className="sales-sku-report-subtitle">
             {isSkuView
-              ? 'Aggregated sales data for every SKU in the selected period'
-              : 'Individual sales sorted by date, channel, or order total'}
+              ? 'SKU summary with full sales detail below'
+              : 'Sales orders — click a row to open order details'}
           </p>
         </div>
         <div className="sales-sku-report-header-actions">
+          <button
+            type="button"
+            className={`btn-filters${showFilters ? ' active' : ''}`}
+            onClick={() => setShowFilters((prev) => !prev)}
+          >
+            🔍 Filters
+            {activeFilterCount > 0 && (
+              <span className="filter-count-badge">{activeFilterCount}</span>
+            )}
+          </button>
           <button
             type="button"
             className="btn-secondary"
@@ -208,7 +336,10 @@ function SalesSkuReport({ onClose }) {
         </button>
       </div>
 
+      {showFilters && (
       <div className="sales-sku-filters">
+        <h3 className="sales-sku-filters-title">Filters</h3>
+        <div className="sales-sku-filters-grid">
         <div className="filter-group">
           <label>Start Date</label>
           <input type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} />
@@ -224,22 +355,6 @@ function SalesSkuReport({ onClose }) {
             {salesChannels.map((channel) => (
               <option key={channel._id} value={channel._id}>
                 {channel.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="filter-group">
-          <label>Location</label>
-          <select
-            name="salesLocation"
-            value={filters.salesLocation}
-            onChange={handleFilterChange}
-            disabled={!filters.salesChannel}
-          >
-            <option value="">All Locations</option>
-            {salesLocations.map((location) => (
-              <option key={location._id} value={location._id}>
-                {location.name}
               </option>
             ))}
           </select>
@@ -314,7 +429,9 @@ function SalesSkuReport({ onClose }) {
             Apply
           </button>
         </div>
+        </div>
       </div>
+      )}
 
       {appliedFilters.sortBy && (
         <p className="sales-sku-sort-hint">
@@ -343,8 +460,18 @@ function SalesSkuReport({ onClose }) {
           <div className="summary-card">
             <span>Total Revenue</span>
             <strong>{formatAed(summary.totalRevenue)}</strong>
+            {isSkuView && summary.lineItemRevenue != null && summary.lineItemRevenue !== summary.totalRevenue && (
+              <span className="summary-card-note">
+                Line items: {formatAed(summary.lineItemRevenue)}
+              </span>
+            )}
           </div>
-          {!isSkuView && (
+          {isSkuView ? (
+            <div className="summary-card">
+              <span>Orders</span>
+              <strong>{summary.totalOrders}</strong>
+            </div>
+          ) : (
             <div className="summary-card">
               <span>Orders Shown</span>
               <strong>{summary.totalOrders}</strong>
@@ -353,86 +480,60 @@ function SalesSkuReport({ onClose }) {
         </div>
       )}
 
+      <SalesMonthlyTrendCharts groupedData={monthlyTrend} formatCurrency={formatAed} />
+
       {loading ? (
         <div className="sales-sku-loading">Loading report…</div>
-      ) : !hasRows ? (
+      ) : !hasSkuRows && !hasOrderRows ? (
         <div className="sales-sku-empty">No sales data found for the selected filters.</div>
-      ) : isSkuView ? (
-        <div className="sales-sku-table-wrap">
-          <table className="sales-sku-table">
-            <thead>
-              <tr>
-                <th>SKU</th>
-                <th>Product</th>
-                <th>Category</th>
-                <th>Sub Category</th>
-                <th>HSN</th>
-                <th>Qty Sold</th>
-                <th>Avg Price</th>
-                <th>Revenue</th>
-                <th>Orders</th>
-              </tr>
-            </thead>
-            <tbody>
-              {skuRows.map((row) => (
-                <tr key={row.productId || row.sku}>
-                  <td className="mono">{row.sku}</td>
-                  <td>{row.productName}</td>
-                  <td>{row.category}</td>
-                  <td>{row.subCategory}</td>
-                  <td>{row.hsnCode}</td>
-                  <td className="num">{row.totalQuantity}</td>
-                  <td className="num">{formatAed(row.averageUnitPrice)}</td>
-                  <td className="num">{formatAed(row.totalRevenue)}</td>
-                  <td className="num">{row.orderCount}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       ) : (
-        <div className="sales-sku-table-wrap">
-          <table className="sales-sku-table">
-            <thead>
-              <tr>
-                <th>Amazon Order ID</th>
-                <th>Sale Date</th>
-                <th>Channel</th>
-                <th>Location</th>
-                <th>Customer</th>
-                <th>Items</th>
-                <th>Subtotal</th>
-                <th>Total</th>
-                <th>Payment</th>
-                <th>Order Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orderRows.map((sale) => (
-                <tr key={sale._id}>
-                  <td className="mono">{sale.amazonOrderId || '—'}</td>
-                  <td>{new Date(sale.salesDate).toLocaleDateString('en-IN')}</td>
-                  <td>{sale.salesChannel?.name || '—'}</td>
-                  <td>{sale.salesLocation?.name || '—'}</td>
-                  <td>{sale.customer?.name || '—'}</td>
-                  <td className="num">{sale.items?.length || 0}</td>
-                  <td className="num">{formatAed(sale.subtotal)}</td>
-                  <td className="num">{formatAed(sale.total)}</td>
-                  <td>
-                    <span className={`status-badge status-${sale.paymentStatus}`}>
-                      {sale.paymentStatus}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`status-badge status-${sale.orderStatus}`}>
-                      {sale.orderStatus}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {isSkuView && hasSkuRows && (
+            <div className="sales-sku-table-wrap">
+              <h3 className="sales-detail-heading">By SKU</h3>
+              <table className="sales-sku-table">
+                <thead>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Product</th>
+                    <th>Category</th>
+                    <th>Sub Category</th>
+                    <th>HSN</th>
+                    <th>Qty Sold</th>
+                    <th>Avg Price</th>
+                    <th>Line Revenue</th>
+                    <th>Orders</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {skuRows.map((row) => (
+                    <tr key={row.productId || row.sku}>
+                      <td className="mono">{row.sku}</td>
+                      <td>{row.productName}</td>
+                      <td>{row.category}</td>
+                      <td>{row.subCategory}</td>
+                      <td>{row.hsnCode}</td>
+                      <td className="num">{row.totalQuantity}</td>
+                      <td className="num">{formatAed(row.averageUnitPrice)}</td>
+                      <td className="num">{formatAed(row.totalRevenue)}</td>
+                      <td className="num">{row.orderCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {renderSalesDetailSection()}
+        </>
+      )}
+
+      {(viewingSale || viewingSaleLoading) && (
+        <SaleDetailsModal
+          sale={viewingSale}
+          loading={viewingSaleLoading}
+          onClose={closeSaleDetail}
+        />
       )}
     </div>
   );
