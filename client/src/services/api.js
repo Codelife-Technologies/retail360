@@ -9,6 +9,26 @@ const api = axios.create({
   },
 });
 
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.dispatchEvent(new CustomEvent('auth-logout'));
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Products API
 export const productsAPI = {
   getAll: (params) => api.get('/products', { params }),
@@ -293,6 +313,69 @@ export const reportsAPI = {
 // Health check
 export const healthAPI = {
   check: () => api.get('/health'),
+};
+
+// Price Masters API
+export const priceMastersAPI = {
+  getAll: (params) => api.get('/price-masters', { params }),
+  getById: (id) => api.get(`/price-masters/${id}`),
+  getByLocation: (locationId) => api.get(`/price-masters/location/${locationId}`),
+  lookup: (data) => api.post('/price-masters/lookup', data),
+  create: (data) => api.post('/price-masters', data),
+  update: (id, data) => api.put(`/price-masters/${id}`, data),
+  delete: (id) => api.delete(`/price-masters/${id}`),
+};
+
+// Units API
+export const unitsAPI = {
+  getAll: (params) => api.get('/units', { params }),
+  getById: (id) => api.get(`/units/${id}`),
+  create: (data) => api.post('/units', data),
+  update: (id, data) => api.put(`/units/${id}`, data),
+  delete: (id) => api.delete(`/units/${id}`),
+};
+
+// Permissions API
+export const permissionsAPI = {
+  getAll: (params) => api.get('/permissions', { params }),
+  getById: (id) => api.get(`/permissions/${id}`),
+  create: (data) => api.post('/permissions', data),
+  update: (id, data) => api.put(`/permissions/${id}`, data),
+  delete: (id) => api.delete(`/permissions/${id}`),
+};
+
+// Roles API
+export const rolesAPI = {
+  getAll: (params) => api.get('/roles', { params }),
+  getById: (id) => api.get(`/roles/${id}`),
+  create: (data) => api.post('/roles', data),
+  update: (id, data) => api.put(`/roles/${id}`, data),
+  delete: (id) => api.delete(`/roles/${id}`),
+};
+
+// Groups API
+export const groupsAPI = {
+  getAll: (params) => api.get('/groups', { params }),
+  getById: (id) => api.get(`/groups/${id}`),
+  create: (data) => api.post('/groups', data),
+  update: (id, data) => api.put(`/groups/${id}`, data),
+  delete: (id) => api.delete(`/groups/${id}`),
+};
+
+// Users API
+export const usersAPI = {
+  getAll: (params) => api.get('/users', { params }),
+  getById: (id) => api.get(`/users/${id}`),
+  create: (data) => api.post('/users', data),
+  update: (id, data) => api.put(`/users/${id}`, data),
+  delete: (id) => api.delete(`/users/${id}`),
+};
+
+// Auth API
+export const authAPI = {
+  login: (credentials) => api.post('/auth/login', credentials),
+  me: () => api.get('/auth/me'),
+  seed: () => api.post('/auth/seed'),
 };
 
 export default api;

@@ -33,9 +33,31 @@ mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => {
+.then(async () => {
   logger.backend.info('Connected to MongoDB');
   console.log('Connected to MongoDB');
+  try {
+    const { seedPermissions } = require('./utils/seedPermissions');
+    const permResult = await seedPermissions();
+    if (permResult.created > 0) {
+      console.log(`Seed: ${permResult.created} permissions created`);
+    }
+    const { seedSuperAdmin } = require('./utils/seedAdmin');
+    const result = await seedSuperAdmin();
+    if (result.skipped) {
+      console.log('Seed: users already exist, skipping');
+    } else {
+      console.log(`Seed: Super admin created - username: ${result.username}, password: ${result.password}`);
+    }
+    const { seedAmazonMarketplaces } = require('./utils/seedAmazonMarketplaces');
+    const mpResult = await seedAmazonMarketplaces();
+    if (mpResult.created > 0) {
+      console.log(`Seed: ${mpResult.created} Amazon marketplace channels created`);
+    }
+  } catch (seedError) {
+    logger.backend.warn('Startup seed skipped or failed', { error: seedError.message });
+    console.warn('Startup seed skipped or failed:', seedError.message);
+  }
 })
 .catch((error) => {
   logger.backend.error('MongoDB connection error', { error: error.message, stack: error.stack });
@@ -91,6 +113,25 @@ try {
   logger.backend.info('Gemini routes loaded');
   const hrRoutes = require('./hr/routes');
   logger.backend.info('HR routes loaded');
+  const priceMastersRoutes = require('./routes/priceMasters');
+  logger.backend.info('Price masters routes loaded');
+  const unitsRoutes = require('./routes/units');
+  logger.backend.info('Units routes loaded');
+  const permissionsRoutes = require('./routes/permissions');
+  logger.backend.info('Permissions routes loaded');
+  const rolesRoutes = require('./routes/roles');
+  logger.backend.info('Roles routes loaded');
+  const groupsRoutes = require('./routes/groups');
+  logger.backend.info('Groups routes loaded');
+  const usersRoutes = require('./routes/users');
+  logger.backend.info('Users routes loaded');
+  const authRoutes = require('./routes/auth');
+  logger.backend.info('Auth routes loaded');
+  const { authenticate } = require('./middleware/auth');
+
+  // Auth routes first (login, seed - no auth required)
+  app.use('/api/auth', authRoutes);
+  app.use('/api', authenticate);
 
   // API Routes
   app.use('/api/products', productsRoutes);
@@ -103,6 +144,7 @@ try {
   app.use('/api/locations', locationsRoutes);
   app.use('/api/stock', stockRoutes);
   app.use('/api/prices', pricesRoutes);
+  app.use('/api/price-masters', priceMastersRoutes);
   app.use('/api/sales-channels', salesChannelsRoutes);
   app.use('/api/sales-locations', salesLocationsRoutes);
   app.use('/api/sales', salesRoutes);
@@ -116,7 +158,12 @@ try {
   app.use('/api/company-profile', companyProfileRoutes);
   app.use('/api/hr', hrRoutes);
   app.use('/api/gemini', geminiRoutes);
-  
+  app.use('/api/units', unitsRoutes);
+  app.use('/api/permissions', permissionsRoutes);
+  app.use('/api/roles', rolesRoutes);
+  app.use('/api/groups', groupsRoutes);
+  app.use('/api/users', usersRoutes);
+
   logger.backend.info('All routes loaded successfully');
   console.log('All routes loaded successfully');
 } catch (error) {
