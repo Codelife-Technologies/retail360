@@ -520,7 +520,7 @@ router.get('/:id', async (req, res) => {
     const sale = await Sale.findById(req.params.id)
       .populate('salesChannel', 'name code type')
       .populate(SALES_LOCATION_POPULATE)
-      .populate('items.product', 'name title sku');
+      .populate('items.product', 'name title sku images parentSkuOrAsin variation');
     if (!sale) {
       return res.status(404).json({ error: 'Sale not found' });
     }
@@ -577,7 +577,7 @@ router.post('/', async (req, res) => {
     const populatedSale = await Sale.findById(sale._id)
       .populate('salesChannel', 'name code type')
       .populate(SALES_LOCATION_POPULATE)
-      .populate('items.product', 'name title sku');
+      .populate('items.product', 'name title sku images parentSkuOrAsin variation');
     
     res.status(201).json(populatedSale);
   } catch (error) {
@@ -660,7 +660,7 @@ router.put('/:id', async (req, res) => {
     )
       .populate('salesChannel', 'name code type')
       .populate(SALES_LOCATION_POPULATE)
-      .populate('items.product', 'name title sku');
+      .populate('items.product', 'name title sku images parentSkuOrAsin variation');
     
     res.json(sale);
   } catch (error) {
@@ -739,10 +739,13 @@ router.post('/remove-amazon-order-duplicates', async (req, res) => {
 // DELETE sale
 router.delete('/:id', async (req, res) => {
   try {
-    const sale = await Sale.findByIdAndDelete(req.params.id);
+    const sale = await Sale.findById(req.params.id);
     if (!sale) {
       return res.status(404).json({ error: 'Sale not found' });
     }
+
+    await reverseSaleStock(sale);
+    await Sale.findByIdAndDelete(req.params.id);
     res.json({ message: 'Sale deleted successfully' });
   } catch (error) {
     console.error('Error deleting sale:', error);

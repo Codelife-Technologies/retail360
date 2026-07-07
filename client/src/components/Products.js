@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { productsAPI, pricesAPI, categoriesAPI, subcategoriesAPI, suppliersAPI } from '../services/api';
 import logger from '../utils/logger';
 import Pagination from './Pagination';
@@ -253,13 +253,30 @@ function ProductSuppliersModal({
   );
 }
 
+const defaultProductFilters = () => ({
+  search: '',
+  category: '',
+  subCategory: '',
+});
+
+function countActiveProductFilters(applied) {
+  let count = 0;
+  if (applied.search?.trim()) count += 1;
+  if (applied.category) count += 1;
+  if (applied.subCategory) count += 1;
+  return count;
+}
+
 function Products() {
   const [products, setProducts] = useState([]);
   const [productPrices, setProductPrices] = useState({}); // Map of productId -> price
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [filters, setFilters] = useState(defaultProductFilters);
+  const [appliedFilters, setAppliedFilters] = useState(defaultProductFilters);
+  const [filterSubcategories, setFilterSubcategories] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [showExcelUpload, setShowExcelUpload] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [viewingProduct, setViewingProduct] = useState(null);
   const [pagination, setPagination] = useState({
@@ -317,7 +334,6 @@ function Products() {
   const [savingSuppliers, setSavingSuppliers] = useState(false);
 
   useEffect(() => {
-    fetchProducts();
     fetchCategories();
   }, []);
 
@@ -330,14 +346,29 @@ function Products() {
     }
   }, [formData.category]);
 
-  const fetchProducts = async (page = pagination.page, limit = pagination.limit) => {
+  useEffect(() => {
+    if (filters.category) {
+      fetchFilterSubcategories(filters.category);
+    } else {
+      setFilterSubcategories([]);
+    }
+  }, [filters.category]);
+
+  const fetchProducts = useCallback(async (page = 1, limit = pagination.limit) => {
     try {
       setLoading(true);
-      const response = await productsAPI.getAll({ 
-        search: searchTerm,
-        page,
-        limit
-      });
+      const params = { page, limit };
+      if (appliedFilters.search?.trim()) {
+        params.search = appliedFilters.search.trim();
+      }
+      if (appliedFilters.category) {
+        params.category = appliedFilters.category;
+      }
+      if (appliedFilters.subCategory) {
+        params.subCategory = appliedFilters.subCategory;
+      }
+
+      const response = await productsAPI.getAll(params);
       
       // Check if response has pagination metadata
       if (response.data.pagination) {
@@ -364,14 +395,43 @@ function Products() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [appliedFilters, pagination.limit]);
 
   useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      fetchProducts(1, pagination.limit); // Reset to page 1 when search changes
-    }, 300);
-    return () => clearTimeout(debounceTimer);
-  }, [searchTerm]);
+    fetchProducts(1, pagination.limit);
+  }, [fetchProducts]);
+
+  const fetchFilterSubcategories = async (categoryId) => {
+    try {
+      const response = await categoriesAPI.getSubcategories(categoryId);
+      setFilterSubcategories(response.data);
+    } catch (error) {
+      logger.error('Error fetching filter subcategories', { error: error.message });
+      setFilterSubcategories([]);
+    }
+  };
+
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters((prev) => {
+      const next = { ...prev, [name]: value };
+      if (name === 'category') {
+        next.subCategory = '';
+      }
+      return next;
+    });
+  };
+
+  const handleApplyFilters = () => {
+    setAppliedFilters({ ...filters });
+  };
+
+  const handleClearFilters = () => {
+    const cleared = defaultProductFilters();
+    setFilters(cleared);
+    setAppliedFilters(cleared);
+    setFilterSubcategories([]);
+  };
 
   const fetchCategories = async () => {
     try {
@@ -969,12 +1029,52 @@ function Products() {
   };
 
   const getSupplierCount = (product) => (product.suppliers || []).length;
+  const activeFilterCount = countActiveProductFilters(appliedFilters);
+
+  const handleExportExcel = async () => {
+    try {
+      setExporting(true);
+      const params = {};
+      if (appliedFilters.search?.trim()) {
+        params.search = appliedFilters.search.trim();
+      }
+      if (appliedFilters.category) {
+        params.category = appliedFilters.category;
+      }
+      if (appliedFilters.subCategory) {
+        params.subCategory = appliedFilters.subCategory;
+      }
+
+      const response = await productsAPI.exportExcel(params);
+      const filename = `products_export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting products:', error);
+      alert(error.response?.data?.error || 'Failed to export products');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="products-container">
       <div className="products-header">
         <h1>Products</h1>
         <div className="header-actions">
+          <button
+            className="btn-secondary"
+            onClick={handleExportExcel}
+            disabled={exporting}
+          >
+            {exporting ? 'Exporting…' : '📤 Export Excel'}
+          </button>
           <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
             📥 Upload Excel
           </button>
@@ -984,13 +1084,79 @@ function Products() {
         </div>
       </div>
 
-      <div className="search-bar">
-        <input
-          type="text"
-          placeholder="Search products by title, Parent SKU, Child SKU, EAN, brand, HSN code..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+      <div className="products-filters">
+        <div className="products-filters-header">
+          <h3 className="products-filters-title">Search &amp; Filters</h3>
+          {activeFilterCount > 0 && (
+            <span className="products-filter-count">{activeFilterCount} active</span>
+          )}
+        </div>
+        <div className="products-filters-grid">
+          <div className="filter-group filter-search">
+            <label htmlFor="product-search">Search</label>
+            <input
+              id="product-search"
+              type="text"
+              name="search"
+              placeholder="Title, Parent SKU, Child SKU, EAN, brand, HSN code..."
+              value={filters.search}
+              onChange={handleFilterChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleApplyFilters();
+              }}
+            />
+          </div>
+          <div className="filter-group">
+            <label htmlFor="product-filter-category">Category</label>
+            <select
+              id="product-filter-category"
+              name="category"
+              value={filters.category}
+              onChange={handleFilterChange}
+            >
+              <option value="">All Categories</option>
+              {categories.map((category) => (
+                <option key={category._id} value={category._id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="filter-group">
+            <label htmlFor="product-filter-subcategory">Sub-Category</label>
+            <select
+              id="product-filter-subcategory"
+              name="subCategory"
+              value={filters.subCategory}
+              onChange={handleFilterChange}
+              disabled={!filters.category}
+            >
+              <option value="">All Sub-Categories</option>
+              {filterSubcategories.map((subcategory) => (
+                <option key={subcategory._id} value={subcategory._id}>
+                  {subcategory.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="filter-group filter-apply">
+            <label>&nbsp;</label>
+            <button type="button" className="btn-primary" onClick={handleApplyFilters}>
+              Apply
+            </button>
+          </div>
+          <div className="filter-group filter-clear">
+            <label>&nbsp;</label>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleClearFilters}
+              disabled={activeFilterCount === 0 && !filters.search && !filters.category && !filters.subCategory}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
       </div>
 
       {loading ? (

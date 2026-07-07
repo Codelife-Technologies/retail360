@@ -14,8 +14,11 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { reportsAPI, salesChannelsAPI } from '../services/api';
+import { reportsAPI, salesChannelsAPI, salesAPI } from '../services/api';
 import { formatMoney } from '../utils/locationCurrency';
+import { getCatalogSku } from '../utils/productDisplayUtils';
+import Pagination from './Pagination';
+import SaleDetailsModal from './SaleDetailsModal';
 import './SalesDashboard.css';
 
 const formatAed = (amount) => formatMoney(amount, 'AED');
@@ -80,6 +83,8 @@ function formatComparisonPeriodLabel(startStr, endStr, periodFilter, isPrevious)
     }
     case 'custom':
       return isPrevious ? `Previous range (${span})` : `Selected range (${span})`;
+    case 'allTime':
+      return isPrevious ? 'Previous period' : 'All time';
     default:
       return isPrevious ? `Previous (${span})` : `Current (${span})`;
   }
@@ -90,8 +95,51 @@ const PERIOD_OPTIONS = [
   { id: 'week', label: 'Week' },
   { id: 'fortnight', label: 'Fortnight' },
   { id: 'month', label: 'Month' },
+  { id: 'allTime', label: 'All Time' },
   { id: 'custom', label: 'Custom' },
 ];
+
+const defaultDashboardFilters = () => ({
+  period: 'month',
+  chartTimeline: 'auto',
+  customStart: '',
+  customEnd: '',
+  salesChannel: '',
+});
+
+function buildDashboardParams(applied) {
+  const params = {
+    period: applied.period,
+    chartTimeline: applied.chartTimeline,
+    salesChannel: applied.salesChannel || undefined,
+  };
+  if (applied.period === 'custom') {
+    if (applied.customStart) params.startDate = applied.customStart;
+    if (applied.customEnd) params.endDate = applied.customEnd;
+  }
+  return params;
+}
+
+function buildRecordParams(applied, currentRange, page) {
+  const params = {
+    salesChannel: applied.salesChannel || undefined,
+    sortBy: 'salesDate',
+    sortDir: 'desc',
+    page,
+    limit: 25,
+  };
+  if (applied.period === 'allTime') {
+    return params;
+  }
+  if (applied.period === 'custom') {
+    if (applied.customStart) params.startDate = applied.customStart;
+    if (applied.customEnd) params.endDate = applied.customEnd;
+    return params;
+  }
+  if (currentRange?.start) params.startDate = currentRange.start;
+  if (currentRange?.end) params.endDate = currentRange.end;
+  return params;
+}
 
 const CHART_TIMELINE_OPTIONS = [
   { id: 'auto', label: 'Auto (best fit)' },
@@ -150,14 +198,17 @@ function KpiCard({ label, value, subValue, change, highlight }) {
 }
 
 function SalesDashboard() {
-  const [period, setPeriod] = useState('month');
-  const [chartTimeline, setChartTimeline] = useState('auto');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
-  const [salesChannel, setSalesChannel] = useState('');
+  const [filters, setFilters] = useState(defaultDashboardFilters);
+  const [appliedFilters, setAppliedFilters] = useState(defaultDashboardFilters);
   const [channels, setChannels] = useState([]);
   const [data, setData] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
+  const [records, setRecords] = useState([]);
+  const [recordsPage, setRecordsPage] = useState(1);
+  const [recordsPagination, setRecordsPagination] = useState(null);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [viewingSale, setViewingSale] = useState(null);
+  const [viewingSaleLoading, setViewingSaleLoading] = useState(false);
 
   useEffect(() => {
     salesChannelsAPI.getAll({ isActive: 'true' }).then((res) => {
@@ -165,42 +216,102 @@ function SalesDashboard() {
     }).catch(() => setChannels([]));
   }, []);
 
-  const fetchDashboard = useCallback(async () => {
+  const fetchDashboardData = useCallback(async () => {
+    const dashParams = buildDashboardParams(appliedFilters);
+    const response = await reportsAPI.getSalesDashboard(dashParams);
+    return { ...emptyDashboard, ...response.data };
+  }, [appliedFilters]);
+
+  const fetchSalesRecords = useCallback(async (currentRange, page) => {
+    const recordParams = buildRecordParams(appliedFilters, currentRange, page);
+    const response = await reportsAPI.getSalesDetailed(recordParams);
+    if (response.data?.pagination) {
+      return {
+        rows: response.data.data || [],
+        pagination: response.data.pagination,
+      };
+    }
+    const rows = Array.isArray(response.data) ? response.data : response.data?.data || [];
+    return { rows, pagination: null };
+  }, [appliedFilters]);
+
+  const loadDashboard = useCallback(async () => {
+    if (appliedFilters.period === 'custom' && (!appliedFilters.customStart || !appliedFilters.customEnd)) {
+      return;
+    }
+
     try {
       setLoading(true);
-      const params = {
-        period,
-        chartTimeline,
-        salesChannel: salesChannel || undefined,
-      };
-      if (period === 'custom') {
-        if (customStart) params.startDate = customStart;
-        if (customEnd) params.endDate = customEnd;
-      }
-      const response = await reportsAPI.getSalesDashboard(params);
-      setData({ ...emptyDashboard, ...response.data });
+      setRecordsLoading(true);
+      const dashboardData = await fetchDashboardData();
+      setData(dashboardData);
+
+      const { rows, pagination } = await fetchSalesRecords(dashboardData.currentRange, recordsPage);
+      setRecords(rows);
+      setRecordsPagination(pagination);
     } catch (error) {
       console.error('Error fetching sales dashboard:', error);
       setData(emptyDashboard);
+      setRecords([]);
+      setRecordsPagination(null);
     } finally {
       setLoading(false);
+      setRecordsLoading(false);
     }
-  }, [period, chartTimeline, customStart, customEnd, salesChannel]);
+  }, [appliedFilters, recordsPage, fetchDashboardData, fetchSalesRecords]);
 
   useEffect(() => {
-    if (period === 'custom' && (!customStart || !customEnd)) return;
-    fetchDashboard();
-  }, [fetchDashboard, period, customStart, customEnd]);
+    loadDashboard();
+  }, [loadDashboard]);
+
+  const handleApplyFilters = () => {
+    if (filters.period === 'custom' && (!filters.customStart || !filters.customEnd)) {
+      alert('Select both start and end dates for a custom range.');
+      return;
+    }
+    setRecordsPage(1);
+    setAppliedFilters({ ...filters });
+  };
 
   const handlePeriodChange = (nextPeriod) => {
-    setPeriod(nextPeriod);
-    if (nextPeriod !== 'custom') {
-      setCustomStart('');
-      setCustomEnd('');
+    setFilters((prev) => ({
+      ...prev,
+      period: nextPeriod,
+      customStart: nextPeriod === 'custom' ? prev.customStart : '',
+      customEnd: nextPeriod === 'custom' ? prev.customEnd : '',
+    }));
+  };
+
+  const openSaleDetail = async (sale) => {
+    setViewingSale(sale);
+    setViewingSaleLoading(true);
+
+    try {
+      const response = await salesAPI.getById(sale._id);
+      setViewingSale(response.data);
+    } catch (error) {
+      console.error('Error loading sale details:', error);
+      setViewingSale(sale);
+    } finally {
+      setViewingSaleLoading(false);
     }
   };
 
+  const closeSaleDetail = () => {
+    setViewingSale(null);
+    setViewingSaleLoading(false);
+  };
+
+  const getSaleProductSkus = (sale) => {
+    const skus = (sale.items || [])
+      .map((item) => getCatalogSku(item.product) || item.sku)
+      .filter(Boolean);
+    return [...new Set(skus)].join(', ') || '—';
+  };
+
+  const isAllTimeView = appliedFilters.period === 'allTime';
   const { overview, currentPeriod, previousPeriod, change, comparisonChart, channelBreakdown } = data;
+  const period = appliedFilters.period;
 
   const chartTooltipFormatter = (value, name) => {
     if (String(name).toLowerCase().includes('revenue')) return [formatAed(value), name];
@@ -234,7 +345,7 @@ function SalesDashboard() {
             Revenue, orders, and trends with period-over-period comparison
           </p>
         </div>
-        <button type="button" className="sales-dash-btn-refresh" onClick={fetchDashboard} disabled={loading}>
+        <button type="button" className="sales-dash-btn-refresh" onClick={loadDashboard} disabled={loading}>
           Refresh
         </button>
       </header>
@@ -245,7 +356,7 @@ function SalesDashboard() {
             <button
               key={opt.id}
               type="button"
-              className={period === opt.id ? 'active' : ''}
+              className={filters.period === opt.id ? 'active' : ''}
               onClick={() => handlePeriodChange(opt.id)}
             >
               {opt.label}
@@ -254,35 +365,54 @@ function SalesDashboard() {
         </div>
 
         <div className="sales-dash-filter-row">
-          {period === 'custom' && (
+          {filters.period === 'custom' && (
             <>
               <label className="sales-dash-filter-field">
                 <span>From</span>
                 <input
                   type="date"
-                  value={customStart}
-                  onChange={(e) => setCustomStart(e.target.value)}
+                  value={filters.customStart}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, customStart: e.target.value }))}
                 />
               </label>
               <label className="sales-dash-filter-field">
                 <span>To</span>
                 <input
                   type="date"
-                  value={customEnd}
-                  onChange={(e) => setCustomEnd(e.target.value)}
+                  value={filters.customEnd}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, customEnd: e.target.value }))}
                 />
               </label>
             </>
           )}
           <label className="sales-dash-filter-field">
             <span>Channel</span>
-            <select value={salesChannel} onChange={(e) => setSalesChannel(e.target.value)}>
+            <select
+              value={filters.salesChannel}
+              onChange={(e) => setFilters((prev) => ({ ...prev, salesChannel: e.target.value }))}
+            >
               <option value="">All channels</option>
               {channels.map((ch) => (
                 <option key={ch._id} value={ch._id}>{ch.name}</option>
               ))}
             </select>
           </label>
+          <label className="sales-dash-filter-field">
+            <span>Comparison timeline</span>
+            <select
+              value={filters.chartTimeline}
+              onChange={(e) => setFilters((prev) => ({ ...prev, chartTimeline: e.target.value }))}
+            >
+              {CHART_TIMELINE_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>{opt.label}</option>
+              ))}
+            </select>
+          </label>
+          <div className="sales-dash-filter-apply">
+            <button type="button" className="sales-dash-btn-apply" onClick={handleApplyFilters}>
+              Apply
+            </button>
+          </div>
         </div>
       </section>
 
@@ -318,40 +448,48 @@ function SalesDashboard() {
           </section>
 
           <section className="sales-dash-section">
-            <h2>{data.periodLabel || 'Selected Period'}</h2>
-            <p className="sales-dash-range-hint">
-              <span className="sales-dash-range-chip current">{currentLegendLabel}</span>
-              {' vs '}
-              <span className="sales-dash-range-chip previous">{previousLegendLabel}</span>
-            </p>
+            <h2>{isAllTimeView ? 'All Time Summary' : (data.periodLabel || 'Selected Period')}</h2>
+            {!isAllTimeView && (
+              <p className="sales-dash-range-hint">
+                <span className="sales-dash-range-chip current">{currentLegendLabel}</span>
+                {' vs '}
+                <span className="sales-dash-range-chip previous">{previousLegendLabel}</span>
+              </p>
+            )}
+            {isAllTimeView && (
+              <p className="sales-dash-range-hint">
+                Complete sales history — period comparison is not shown for all-time view.
+              </p>
+            )}
             <div className="sales-dash-kpi-grid period-compare">
               <KpiCard
                 label="Revenue"
                 value={formatAed(currentPeriod.totalRevenue)}
-                subValue={`${previousLegendLabel}: ${formatAed(previousPeriod.totalRevenue)}`}
-                change={change.totalRevenue}
+                subValue={isAllTimeView ? `${currentPeriod.totalSales} orders` : `${previousLegendLabel}: ${formatAed(previousPeriod.totalRevenue)}`}
+                change={isAllTimeView ? null : change.totalRevenue}
               />
               <KpiCard
                 label="Orders"
                 value={currentPeriod.totalSales}
-                subValue={`${previousLegendLabel}: ${previousPeriod.totalSales}`}
-                change={change.totalSales}
+                subValue={isAllTimeView ? `${currentPeriod.totalItemsSold} units sold` : `${previousLegendLabel}: ${previousPeriod.totalSales}`}
+                change={isAllTimeView ? null : change.totalSales}
               />
               <KpiCard
                 label="Units Sold"
                 value={currentPeriod.totalItemsSold}
-                subValue={`${previousLegendLabel}: ${previousPeriod.totalItemsSold}`}
-                change={change.totalItemsSold}
+                subValue={isAllTimeView ? `Avg order ${formatAed(currentPeriod.averageOrderValue)}` : `${previousLegendLabel}: ${previousPeriod.totalItemsSold}`}
+                change={isAllTimeView ? null : change.totalItemsSold}
               />
               <KpiCard
                 label="Avg Order Value"
                 value={formatAed(currentPeriod.averageOrderValue)}
-                subValue={`${previousLegendLabel}: ${formatAed(previousPeriod.averageOrderValue)}`}
-                change={change.averageOrderValue}
+                subValue={isAllTimeView ? 'All-time average' : `${previousLegendLabel}: ${formatAed(previousPeriod.averageOrderValue)}`}
+                change={isAllTimeView ? null : change.averageOrderValue}
               />
             </div>
           </section>
 
+          {!isAllTimeView && (
           <section className="sales-dash-section">
             <div className="sales-dash-section-header">
               <div>
@@ -363,17 +501,6 @@ function SalesDashboard() {
                   )}
                 </p>
               </div>
-              <label className="sales-dash-filter-field sales-dash-chart-timeline">
-                <span>Comparison timeline</span>
-                <select
-                  value={chartTimeline}
-                  onChange={(e) => setChartTimeline(e.target.value)}
-                >
-                  {CHART_TIMELINE_OPTIONS.map((opt) => (
-                    <option key={opt.id} value={opt.id}>{opt.label}</option>
-                  ))}
-                </select>
-              </label>
             </div>
             {comparisonChart.length === 0 ? (
               <p className="sales-dash-empty">No comparison data for the selected period.</p>
@@ -413,6 +540,63 @@ function SalesDashboard() {
                   </ResponsiveContainer>
                 </div>
               </div>
+            )}
+          </section>
+          )}
+
+          <section className="sales-dash-section">
+            <h2>Sales Records — {data.periodLabel || 'Selected Period'}</h2>
+            <p className="sales-dash-range-hint">
+              {isAllTimeView
+                ? 'All sales orders in the system — click a row to view full order details'
+                : `Orders from ${formatRangeSpan(data.currentRange?.start, data.currentRange?.end) || 'selected period'} — click a row to view details`}
+            </p>
+            {recordsLoading ? (
+              <p className="sales-dash-empty">Loading sales records…</p>
+            ) : records.length === 0 ? (
+              <p className="sales-dash-empty">No sales records for the selected filters.</p>
+            ) : (
+              <>
+                <div className="sales-dash-records-wrap">
+                  <table className="sales-dash-records-table">
+                    <thead>
+                      <tr>
+                        <th>Product SKU</th>
+                        <th>Amazon Order ID</th>
+                        <th>Sale Date</th>
+                        <th>Channel</th>
+                        <th>Items</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {records.map((sale) => (
+                        <tr
+                          key={sale._id}
+                          className="sales-dash-record-row"
+                          onClick={() => openSaleDetail(sale)}
+                        >
+                          <td className="mono">{getSaleProductSkus(sale)}</td>
+                          <td className="mono">{sale.amazonOrderId || '—'}</td>
+                          <td>{new Date(sale.salesDate).toLocaleDateString('en-IN')}</td>
+                          <td>{sale.salesChannel?.name || '—'}</td>
+                          <td className="num">{sale.items?.length || 0}</td>
+                          <td className="num">{formatAed(sale.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {recordsPagination && (
+                  <Pagination
+                    currentPage={recordsPagination.page}
+                    totalPages={recordsPagination.totalPages}
+                    totalItems={recordsPagination.total}
+                    itemsPerPage={recordsPagination.limit}
+                    onPageChange={setRecordsPage}
+                  />
+                )}
+              </>
             )}
           </section>
 
@@ -466,6 +650,14 @@ function SalesDashboard() {
             )}
           </section>
         </>
+      )}
+
+      {(viewingSale || viewingSaleLoading) && (
+        <SaleDetailsModal
+          sale={viewingSale}
+          loading={viewingSaleLoading}
+          onClose={closeSaleDetail}
+        />
       )}
     </div>
   );

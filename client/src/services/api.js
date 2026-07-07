@@ -39,6 +39,7 @@ export const productsAPI = {
   updateSuppliers: (id, suppliers) => api.put(`/products/${id}/suppliers`, { suppliers }),
   delete: (id) => api.delete(`/products/${id}`),
   downloadTemplate: () => api.get('/products/template', { responseType: 'blob' }),
+  exportExcel: (params) => api.get('/products/export', { params, responseType: 'blob' }),
   import: (formData) => api.post('/products/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   uploadImages: (id, formData) => {
     const uploadApi = axios.create({

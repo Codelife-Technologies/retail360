@@ -48,8 +48,9 @@ router.get('/summary', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
-    const { search, month, year, paymentStatus, page, limit, sortBy, sortOrder } = req.query;
+    const { search, employee, month, year, paymentStatus, page, limit, sortBy, sortOrder } = req.query;
     const query = {};
+    if (employee) query.employee = employee;
     if (month) query.month = parseInt(month, 10);
     if (year) query.year = parseInt(year, 10);
     if (paymentStatus) query.paymentStatus = paymentStatus;

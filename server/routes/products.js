@@ -17,6 +17,138 @@ const SUPPLIER_POPULATE = {
   select: 'name supplierCode supplierId email phone contactPerson',
 };
 
+const PRODUCT_EXPORT_HEADERS = [
+  { key: 'slno', label: 'SL No' },
+  { key: 'parentSkuOrAsin', label: 'Parent SKU' },
+  { key: 'variation', label: 'Variation' },
+  { key: 'sku', label: 'Child SKU' },
+  { key: 'ean', label: 'EAN' },
+  { key: 'category', label: 'Category' },
+  { key: 'subCategory', label: 'Sub Category' },
+  { key: 'brandName', label: 'Brand Name' },
+  { key: 'title', label: 'Title' },
+  { key: 'name', label: 'Name' },
+  { key: 'productUrl', label: 'Product URL' },
+  { key: 'colour', label: 'Colour' },
+  { key: 'material', label: 'Material' },
+  { key: 'size', label: 'Size' },
+  { key: 'hsnCode', label: 'HSN Code' },
+  { key: 'description', label: 'Description' },
+  { key: 'manufacturerName', label: 'Manufacturer Name' },
+  { key: 'contactDetails', label: 'Contact Details' },
+  { key: 'bulletPoint1', label: 'Bullet Point 1' },
+  { key: 'bulletPoint2', label: 'Bullet Point 2' },
+  { key: 'bulletPoint3', label: 'Bullet Point 3' },
+  { key: 'bulletPoint4', label: 'Bullet Point 4' },
+  { key: 'bulletPoint5', label: 'Bullet Point 5' },
+  { key: 'productDimensionLength', label: 'Product Dimension Length (cm)' },
+  { key: 'productDimensionWidth', label: 'Product Dimension Width (cm)' },
+  { key: 'productDimensionHeight', label: 'Product Dimension Height (cm)' },
+  { key: 'packageDimensionLength', label: 'Package Dimension Length (cm)' },
+  { key: 'packageDimensionWidth', label: 'Package Dimension Width (cm)' },
+  { key: 'packageDimensionHeight', label: 'Package Dimension Height (cm)' },
+  { key: 'weight', label: 'Weight (kg)' },
+  { key: 'shape', label: 'Shape' },
+  { key: 'specialFeature', label: 'Special Feature' },
+  { key: 'images', label: 'Images (comma-separated URLs)' },
+  { key: 'keywords', label: 'Keywords (comma-separated)' },
+  { key: 'unit', label: 'Unit' },
+  { key: 'suppliers', label: 'Suppliers' },
+  { key: 'createdAt', label: 'Created At' },
+  { key: 'updatedAt', label: 'Updated At' },
+];
+
+function buildProductQuery(queryParams = {}) {
+  const { search, category, subCategory, brandName } = queryParams;
+  const query = {};
+
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { title: { $regex: search, $options: 'i' } },
+      { sku: { $regex: search, $options: 'i' } },
+      { ean: { $regex: search, $options: 'i' } },
+      { brandName: { $regex: search, $options: 'i' } },
+      { hsnCode: { $regex: search, $options: 'i' } },
+      { manufacturerName: { $regex: search, $options: 'i' } },
+    ];
+  }
+
+  if (category) {
+    query.category = category;
+  }
+
+  if (subCategory) {
+    query.subCategory = subCategory;
+  }
+
+  if (brandName) {
+    query.brandName = brandName;
+  }
+
+  return query;
+}
+
+function formatSuppliersForExport(suppliers) {
+  if (!suppliers || !suppliers.length) return '';
+  return suppliers
+    .map((link) => {
+      const name = link.supplier?.name || 'Unknown';
+      const parts = [name];
+      if (link.sku) parts.push(`SKU: ${link.sku}`);
+      if (link.unit) parts.push(`Unit: ${link.unit}`);
+      return parts.join(' — ');
+    })
+    .join('; ');
+}
+
+function mapProductToExportRow(product) {
+  const bulletPoints = product.bulletPoints || [];
+  const pd = product.productDimensionCm || {};
+  const pkd = product.packageDimensionCm || {};
+
+  return {
+    slno: product.slno ?? '',
+    parentSkuOrAsin: product.parentSkuOrAsin || '',
+    variation: product.variation || '',
+    sku: product.sku || '',
+    ean: product.ean || '',
+    category: product.category?.name || '',
+    subCategory: product.subCategory?.name || '',
+    brandName: product.brandName || '',
+    title: product.title || '',
+    name: product.name || '',
+    productUrl: product.productUrl || '',
+    colour: product.colour || '',
+    material: product.material || '',
+    size: product.size || '',
+    hsnCode: product.hsnCode || '',
+    description: product.description || '',
+    manufacturerName: product.manufacturerName || '',
+    contactDetails: product.contactDetails || '',
+    bulletPoint1: bulletPoints[0] || '',
+    bulletPoint2: bulletPoints[1] || '',
+    bulletPoint3: bulletPoints[2] || '',
+    bulletPoint4: bulletPoints[3] || '',
+    bulletPoint5: bulletPoints[4] || '',
+    productDimensionLength: pd.length ?? '',
+    productDimensionWidth: pd.width ?? '',
+    productDimensionHeight: pd.height ?? '',
+    packageDimensionLength: pkd.length ?? '',
+    packageDimensionWidth: pkd.width ?? '',
+    packageDimensionHeight: pkd.height ?? '',
+    weight: product.weight ?? '',
+    shape: product.shape || '',
+    specialFeature: product.specialFeature || '',
+    images: (product.images || []).filter(Boolean).join(', '),
+    keywords: (product.keywords || []).filter(Boolean).join(', '),
+    unit: product.unit || '',
+    suppliers: formatSuppliersForExport(product.suppliers),
+    createdAt: product.createdAt ? new Date(product.createdAt).toISOString() : '',
+    updatedAt: product.updatedAt ? new Date(product.updatedAt).toISOString() : '',
+  };
+}
+
 async function resolveProductHsnCode(body, fallbackCategoryId) {
   if (body.hsnCode && String(body.hsnCode).trim()) {
     return String(body.hsnCode).trim();
@@ -344,33 +476,7 @@ function parseImagesCell(value) {
 // GET product count
 router.get('/count', async (req, res) => {
   try {
-    const { search, category, subCategory, brandName } = req.query;
-    const query = {};
-    
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { title: { $regex: search, $options: 'i' } },
-        { sku: { $regex: search, $options: 'i' } },
-        { ean: { $regex: search, $options: 'i' } },
-        { brandName: { $regex: search, $options: 'i' } },
-        { hsnCode: { $regex: search, $options: 'i' } },
-        { manufacturerName: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    if (category) {
-      query.category = category;
-    }
-    
-    if (subCategory) {
-      query.subCategory = subCategory;
-    }
-    
-    if (brandName) {
-      query.brandName = brandName;
-    }
-    
+    const query = buildProductQuery(req.query);
     const count = await Product.countDocuments(query);
     res.json({ count });
   } catch (error) {
@@ -381,33 +487,9 @@ router.get('/count', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
-    const { search, category, subCategory, brandName, page, limit } = req.query;
-    const query = {};
-    
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { title: { $regex: search, $options: 'i' } },
-        { sku: { $regex: search, $options: 'i' } },
-        { ean: { $regex: search, $options: 'i' } },
-        { brandName: { $regex: search, $options: 'i' } },
-        { hsnCode: { $regex: search, $options: 'i' } },
-        { manufacturerName: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    if (category) {
-      query.category = category;
-    }
-    
-    if (subCategory) {
-      query.subCategory = subCategory;
-    }
-    
-    if (brandName) {
-      query.brandName = brandName;
-    }
-    
+    const { page, limit } = req.query;
+    const query = buildProductQuery(req.query);
+
     // Use pagination if page/limit provided, otherwise return all
     if (page || limit) {
       const result = await paginate(Product, query, {
@@ -519,11 +601,38 @@ router.get('/template', (req, res) => {
   }
 });
 
+// GET export products as Excel (must be before /:id route)
+router.get('/export', async (req, res) => {
+  try {
+    const query = buildProductQuery(req.query);
+    const products = await Product.find(query)
+      .populate('category', 'name hsnCode')
+      .populate({
+        path: 'subCategory',
+        select: 'name category',
+        populate: { path: 'category', select: 'name hsnCode' },
+      })
+      .populate(SUPPLIER_POPULATE)
+      .sort({ createdAt: -1 });
+
+    const rows = products.map(mapProductToExportRow);
+    const buffer = exportToExcel(rows, PRODUCT_EXPORT_HEADERS);
+    const filename = `products_export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(buffer);
+  } catch (error) {
+    logger.backend.error('Error exporting products', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET single product
 router.get('/:id', async (req, res) => {
   try {
     // Prevent matching special routes
-    if (req.params.id === 'template' || req.params.id === 'import') {
+    if (req.params.id === 'template' || req.params.id === 'import' || req.params.id === 'export') {
       return res.status(404).json({ error: 'Route not found' });
     }
     

@@ -7,6 +7,7 @@ import ProcurementModule from './procurement/ProcurementModule';
 import SalesModule from './sales/SalesModule';
 import HrModule from './hr/HrModule';
 import UserManagementModule from './userManagement/UserManagementModule';
+import EmployeeDashboardModule from './employeeDashboard/EmployeeDashboardModule';
 import Login from './components/Login';
 import { MASTER_GROUPS, isMasterTab, resolveMasterSubTab } from './master/masterTabs';
 import {
@@ -21,6 +22,11 @@ import {
   isUserManagementTab,
   resolveUserManagementSubTab,
 } from './userManagement/userManagementTabs';
+import {
+  EMPLOYEE_DASHBOARD_TABS,
+  isEmployeeDashboardTab,
+  resolveEmployeeDashboardSubTab,
+} from './employeeDashboard/employeeDashboardTabs';
 import './App.css';
 
 function App() {
@@ -31,6 +37,7 @@ function App() {
   const [salesOpen, setSalesOpen] = useState(false);
   const [hrOpen, setHrOpen] = useState(false);
   const [userManagementOpen, setUserManagementOpen] = useState(false);
+  const [employeeDashboardOpen, setEmployeeDashboardOpen] = useState(false);
 
   const visibleUserManagementTabs = USER_MANAGEMENT_TABS.filter(
     (tab) => hasPermission('admin.all') || hasPermission(tab.permission)
@@ -44,11 +51,14 @@ function App() {
   const isHrActive = activeTab === 'hr' || activeTab.startsWith('hr:');
   const isUserManagementActive =
     activeTab === 'user-management' || activeTab.startsWith('user-management:');
+  const isEmployeeDashboardActive =
+    activeTab === 'employee-dashboard' || activeTab.startsWith('employee-dashboard:');
   const activeMasterSubTab = resolveMasterSubTab(activeTab);
   const activeProcurementSubTab = resolveProcurementSubTab(activeTab);
   const activeSalesSubTab = resolveSalesSubTab(activeTab);
   const activeHrSubTab = resolveHrSubTab(activeTab);
   const activeUserManagementSubTab = resolveUserManagementSubTab(activeTab);
+  const activeEmployeeDashboardSubTab = resolveEmployeeDashboardSubTab(activeTab);
 
   useEffect(() => {
     if (isMasterActive) setMasterOpen(true);
@@ -70,12 +80,17 @@ function App() {
     if (isUserManagementActive) setUserManagementOpen(true);
   }, [isUserManagementActive]);
 
+  useEffect(() => {
+    if (isEmployeeDashboardActive) setEmployeeDashboardOpen(true);
+  }, [isEmployeeDashboardActive]);
+
   const closeModuleDropdowns = useCallback(() => {
     setMasterOpen(false);
     setProcurementOpen(false);
     setSalesOpen(false);
     setHrOpen(false);
     setUserManagementOpen(false);
+    setEmployeeDashboardOpen(false);
   }, []);
 
   const handleNavigate = useCallback(
@@ -87,6 +102,7 @@ function App() {
         setSalesOpen(false);
         setHrOpen(false);
         setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab.startsWith('procurement:')) {
@@ -96,6 +112,7 @@ function App() {
         setSalesOpen(false);
         setHrOpen(false);
         setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab.startsWith('sales-module:')) {
@@ -105,6 +122,7 @@ function App() {
         setProcurementOpen(false);
         setHrOpen(false);
         setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab.startsWith('hr:')) {
@@ -114,6 +132,7 @@ function App() {
         setProcurementOpen(false);
         setSalesOpen(false);
         setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab.startsWith('user-management:')) {
@@ -123,6 +142,17 @@ function App() {
         setProcurementOpen(false);
         setSalesOpen(false);
         setHrOpen(false);
+        setEmployeeDashboardOpen(false);
+        return;
+      }
+      if (tab.startsWith('employee-dashboard:')) {
+        setActiveTab(tab);
+        setEmployeeDashboardOpen(true);
+        setMasterOpen(false);
+        setProcurementOpen(false);
+        setSalesOpen(false);
+        setHrOpen(false);
+        setUserManagementOpen(false);
         return;
       }
       if (isMasterTab(tab)) {
@@ -132,6 +162,7 @@ function App() {
         setSalesOpen(false);
         setHrOpen(false);
         setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (isProcurementTab(tab)) {
@@ -141,6 +172,7 @@ function App() {
         setSalesOpen(false);
         setHrOpen(false);
         setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (isSalesModuleTab(tab)) {
@@ -150,6 +182,7 @@ function App() {
         setProcurementOpen(false);
         setHrOpen(false);
         setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (isHrTab(tab)) {
@@ -159,6 +192,7 @@ function App() {
         setProcurementOpen(false);
         setSalesOpen(false);
         setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (isUserManagementTab(tab)) {
@@ -168,6 +202,17 @@ function App() {
         setProcurementOpen(false);
         setSalesOpen(false);
         setHrOpen(false);
+        setEmployeeDashboardOpen(false);
+        return;
+      }
+      if (isEmployeeDashboardTab(tab)) {
+        setActiveTab(`employee-dashboard:${tab}`);
+        setEmployeeDashboardOpen(true);
+        setMasterOpen(false);
+        setProcurementOpen(false);
+        setSalesOpen(false);
+        setHrOpen(false);
+        setUserManagementOpen(false);
         return;
       }
       if (tab === 'master') {
@@ -177,6 +222,7 @@ function App() {
         setSalesOpen(false);
         setHrOpen(false);
         setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab === 'procurement') {
@@ -185,6 +231,8 @@ function App() {
         setMasterOpen(false);
         setSalesOpen(false);
         setHrOpen(false);
+        setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab === 'sales-module') {
@@ -194,6 +242,7 @@ function App() {
         setProcurementOpen(false);
         setHrOpen(false);
         setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab === 'dashboard' || tab === 'mis') {
@@ -208,6 +257,7 @@ function App() {
         setProcurementOpen(false);
         setSalesOpen(false);
         setUserManagementOpen(false);
+        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab === 'user-management') {
@@ -218,6 +268,17 @@ function App() {
         setProcurementOpen(false);
         setSalesOpen(false);
         setHrOpen(false);
+        setEmployeeDashboardOpen(false);
+        return;
+      }
+      if (tab === 'employee-dashboard') {
+        setActiveTab('employee-dashboard:home');
+        setEmployeeDashboardOpen(true);
+        setMasterOpen(false);
+        setProcurementOpen(false);
+        setSalesOpen(false);
+        setHrOpen(false);
+        setUserManagementOpen(false);
         return;
       }
       setActiveTab(tab);
@@ -251,6 +312,9 @@ function App() {
     }
     if (isUserManagementActive) {
       return <UserManagementModule subTab={activeUserManagementSubTab} />;
+    }
+    if (isEmployeeDashboardActive) {
+      return <EmployeeDashboardModule subTab={activeEmployeeDashboardSubTab} />;
     }
 
     switch (activeTab) {
@@ -389,6 +453,32 @@ function App() {
                     type="button"
                     className={`nav-subitem${activeHrSubTab === tab.id && isHrActive ? ' active' : ''}`}
                     onClick={() => handleNavigate(`hr:${tab.id}`)}
+                  >
+                    <span>{tab.icon}</span>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="nav-dropdown">
+            <button
+              type="button"
+              className={`nav-item nav-dropdown-toggle${isEmployeeDashboardActive ? ' active' : ''}`}
+              onClick={() => setEmployeeDashboardOpen((open) => !open)}
+              aria-expanded={employeeDashboardOpen}
+            >
+              <span>👤 Employee Dashboard</span>
+              <span className={`nav-chevron${employeeDashboardOpen ? ' open' : ''}`}>▾</span>
+            </button>
+            {employeeDashboardOpen && (
+              <div className="nav-dropdown-menu">
+                {EMPLOYEE_DASHBOARD_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={`nav-subitem${activeEmployeeDashboardSubTab === tab.id && isEmployeeDashboardActive ? ' active' : ''}`}
+                    onClick={() => handleNavigate(`employee-dashboard:${tab.id}`)}
                   >
                     <span>{tab.icon}</span>
                     {tab.label}

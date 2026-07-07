@@ -101,6 +101,14 @@ function resolvePeriodRange(period, customStart, customEnd) {
       const end = customEnd ? endOfDay(new Date(customEnd)) : endOfDay(now);
       return { start, end, label: 'Custom Range' };
     }
+    case 'allTime':
+    case 'all-time': {
+      return {
+        start: new Date(0),
+        end: endOfDay(now),
+        label: 'All Time',
+      };
+    }
     default:
       return resolvePeriodRange('month');
   }
@@ -592,6 +600,59 @@ function sortSkuRows(rows, sortBy = 'revenue', sortDir = 'desc') {
   });
 }
 
+function toSellingProductSummary(row) {
+  if (!row) return null;
+  return {
+    productId: row.productId,
+    sku: row.sku,
+    title: row.title,
+    name: row.name,
+    productName: row.productName,
+    images: row.images || [],
+    parentSkuOrAsin: row.parentSkuOrAsin,
+    variation: row.variation,
+    totalQuantity: row.totalQuantity,
+    totalRevenue: row.totalRevenue,
+  };
+}
+
+function pickSellingExtremes(skuRows) {
+  if (!skuRows || skuRows.length === 0) {
+    return { topSellingProducts: [], leastSellingProducts: [] };
+  }
+
+  const maxQuantity = Math.max(...skuRows.map((row) => row.totalQuantity || 0));
+  const minQuantity = Math.min(...skuRows.map((row) => row.totalQuantity || 0));
+
+  const compareTop = (a, b) => {
+    if ((b.totalRevenue || 0) !== (a.totalRevenue || 0)) {
+      return (b.totalRevenue || 0) - (a.totalRevenue || 0);
+    }
+    return String(a.productName || '').localeCompare(String(b.productName || ''));
+  };
+
+  const compareLeast = (a, b) => {
+    if ((a.totalRevenue || 0) !== (b.totalRevenue || 0)) {
+      return (a.totalRevenue || 0) - (b.totalRevenue || 0);
+    }
+    return String(a.productName || '').localeCompare(String(b.productName || ''));
+  };
+
+  const topRows = skuRows
+    .filter((row) => row.totalQuantity === maxQuantity)
+    .sort(compareTop);
+
+  const leastRows =
+    maxQuantity === minQuantity
+      ? []
+      : skuRows.filter((row) => row.totalQuantity === minQuantity).sort(compareLeast);
+
+  return {
+    topSellingProducts: topRows.map(toSellingProductSummary),
+    leastSellingProducts: leastRows.map(toSellingProductSummary),
+  };
+}
+
 async function fetchSalesDetailedReport(filters = {}) {
   const query = buildSaleFilterQuery(filters);
   const { sortBy = 'salesDate', sortDir = 'desc', page, limit } = filters;
@@ -609,7 +670,7 @@ async function fetchSalesDetailedReport(filters = {}) {
       populate: [
         { path: 'salesChannel', select: 'name code' },
         { path: 'salesLocation', select: 'name code' },
-        { path: 'items.product', select: 'name title sku' },
+        { path: 'items.product', select: 'name title sku images parentSkuOrAsin variation' },
       ],
     });
     if (sortBy === 'channel') {
@@ -621,7 +682,7 @@ async function fetchSalesDetailedReport(filters = {}) {
   let sales = await Sale.find(query)
     .populate('salesChannel', 'name code')
     .populate('salesLocation', 'name code')
-    .populate('items.product', 'name title sku')
+    .populate('items.product', 'name title sku images parentSkuOrAsin variation')
     .sort(resolveMongoSalesSort(sortBy === 'channel' ? 'salesDate' : sortBy, sortDir))
     .lean();
 
@@ -713,7 +774,12 @@ async function aggregateSalesBySku(filters = {}) {
       $group: {
         _id: '$items.product',
         sku: { $first: '$product.sku' },
+        title: { $first: '$product.title' },
+        name: { $first: '$product.name' },
         productName: { $first: { $ifNull: ['$product.title', '$product.name'] } },
+        images: { $first: '$product.images' },
+        parentSkuOrAsin: { $first: '$product.parentSkuOrAsin' },
+        variation: { $first: '$product.variation' },
         categoryId: { $first: '$product.category' },
         subCategoryId: { $first: '$product.subCategory' },
         hsnCode: { $first: '$product.hsnCode' },
@@ -727,7 +793,12 @@ async function aggregateSalesBySku(filters = {}) {
       $project: {
         productId: '$_id',
         sku: { $ifNull: ['$sku', '—'] },
+        title: { $ifNull: ['$title', ''] },
+        name: { $ifNull: ['$name', ''] },
         productName: { $ifNull: ['$productName', 'Unknown Product'] },
+        images: { $ifNull: ['$images', []] },
+        parentSkuOrAsin: { $ifNull: ['$parentSkuOrAsin', ''] },
+        variation: { $ifNull: ['$variation', ''] },
         categoryId: 1,
         subCategoryId: 1,
         hsnCode: { $ifNull: ['$hsnCode', ''] },
@@ -772,7 +843,12 @@ async function aggregateSalesBySku(filters = {}) {
   let skuRows = rows.map((row) => ({
     productId: row.productId,
     sku: row.sku,
+    title: row.title,
+    name: row.name,
     productName: row.productName,
+    images: row.images || [],
+    parentSkuOrAsin: row.parentSkuOrAsin,
+    variation: row.variation,
     category: categoryMap.get(String(row.categoryId)) || '—',
     subCategory: subCategoryMap.get(String(row.subCategoryId)) || '—',
     hsnCode: row.hsnCode || '—',
@@ -781,6 +857,8 @@ async function aggregateSalesBySku(filters = {}) {
     averageUnitPrice: row.averageUnitPrice,
     orderCount: row.orderCount,
   }));
+
+  const { topSellingProducts, leastSellingProducts } = pickSellingExtremes(skuRows);
 
   skuRows = sortSkuRows(skuRows, sortBy, sortDir);
 
@@ -851,6 +929,8 @@ async function aggregateSalesBySku(filters = {}) {
     totalRevenue: Math.round((orderSummary.totalRevenue || 0) * 100) / 100,
     totalOrders: orderSummary.totalOrders || 0,
     lineItemRevenue,
+    topSellingProducts,
+    leastSellingProducts,
   };
 
   return { summary, rows: skuRows };
@@ -918,18 +998,23 @@ router.get('/sales/dashboard', async (req, res) => {
   try {
     const { period = 'month', startDate, endDate, salesChannel, salesLocation, chartTimeline } = req.query;
     const currentRange = resolvePeriodRange(period, startDate, endDate);
-    const previousRange = resolvePreviousRange(currentRange.start, currentRange.end);
+    const isAllTime = period === 'allTime' || period === 'all-time';
+    const previousRange = isAllTime
+      ? { start: null, end: null, label: 'N/A' }
+      : resolvePreviousRange(currentRange.start, currentRange.end);
 
     const now = new Date();
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - now.getDay());
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const fetchStart = new Date(Math.min(
-      previousRange.start.getTime(),
-      startOfDay(weekStart).getTime(),
-      startOfDay(monthStart).getTime()
-    ));
+    const fetchStart = isAllTime
+      ? new Date(0)
+      : new Date(Math.min(
+          previousRange.start.getTime(),
+          startOfDay(weekStart).getTime(),
+          startOfDay(monthStart).getTime()
+        ));
 
     const baseQuery = {};
     if (salesChannel) baseQuery.salesChannel = salesChannel;
@@ -941,7 +1026,7 @@ router.get('/sales/dashboard', async (req, res) => {
     })
       .populate('salesChannel', 'name code')
       .populate('salesLocation', 'name code')
-      .populate('items.product', 'name title sku')
+      .populate('items.product', 'name title sku images parentSkuOrAsin variation')
       .sort({ salesDate: -1 });
 
     const allTimeQuery = { ...baseQuery };
@@ -953,7 +1038,9 @@ router.get('/sales/dashboard', async (req, res) => {
     const thisWeekSales = filterSalesInRange(sales, startOfDay(weekStart), endOfDay(now));
     const thisMonthSales = filterSalesInRange(sales, startOfDay(monthStart), endOfDay(now));
     const currentSales = filterSalesInRange(sales, currentRange.start, currentRange.end);
-    const previousSales = filterSalesInRange(sales, previousRange.start, previousRange.end);
+    const previousSales = isAllTime
+      ? []
+      : filterSalesInRange(sales, previousRange.start, previousRange.end);
 
     const currentPeriod = computeSaleStats(currentSales);
     const previousPeriod = computeSaleStats(previousSales);
@@ -965,14 +1052,16 @@ router.get('/sales/dashboard', async (req, res) => {
       averageOrderValue: pctChange(currentPeriod.averageOrderValue, previousPeriod.averageOrderValue),
     };
 
-    const comparison = buildComparisonChart(
-      period,
-      currentSales,
-      previousSales,
-      currentRange,
-      previousRange,
-      chartTimeline
-    );
+    const comparison = isAllTime
+      ? { timeline: chartTimeline || 'auto', chart: [] }
+      : buildComparisonChart(
+          period,
+          currentSales,
+          previousSales,
+          currentRange,
+          previousRange,
+          chartTimeline
+        );
 
     res.json({
       period,
@@ -983,10 +1072,12 @@ router.get('/sales/dashboard', async (req, res) => {
         start: toDateInputStr(currentRange.start),
         end: toDateInputStr(currentRange.end),
       },
-      previousRange: {
-        start: toDateInputStr(previousRange.start),
-        end: toDateInputStr(previousRange.end),
-      },
+      previousRange: isAllTime
+        ? { start: '', end: '' }
+        : {
+            start: toDateInputStr(previousRange.start),
+            end: toDateInputStr(previousRange.end),
+          },
       overview: {
         today: computeSaleStats(todaySales),
         thisWeek: computeSaleStats(thisWeekSales),
@@ -1022,7 +1113,7 @@ router.get('/sales/summary', async (req, res) => {
     const sales = await Sale.find(query)
       .populate('salesChannel', 'name code')
       .populate('salesLocation', 'name code')
-      .populate('items.product', 'name title sku')
+      .populate('items.product', 'name title sku images parentSkuOrAsin variation')
       .sort({ salesDate: -1 });
     
     const totalSales = sales.length;
@@ -1128,7 +1219,7 @@ router.get('/sales/statistics', async (req, res) => {
     
     const sales = await Sale.find(query)
       .populate('salesChannel', 'name code')
-      .populate('items.product', 'name title sku');
+      .populate('items.product', 'name title sku images parentSkuOrAsin variation');
     
     const totalRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
     const totalSales = sales.length;

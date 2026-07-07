@@ -4,6 +4,18 @@ import DetailModal from './DetailModal';
 import ExcelUpload from './ExcelUpload';
 import './SalesChannels.css';
 
+const MARKETPLACE_PRESETS = [
+  { country: 'IN', defaultCurrency: 'INR', label: 'India (IN / INR)' },
+  { country: 'US', defaultCurrency: 'USD', label: 'United States (US / USD)' },
+  { country: 'GB', defaultCurrency: 'GBP', label: 'United Kingdom (GB / GBP)' },
+  { country: 'AE', defaultCurrency: 'AED', label: 'UAE (AE / AED)' },
+  { country: 'DE', defaultCurrency: 'EUR', label: 'Germany (DE / EUR)' },
+  { country: 'FR', defaultCurrency: 'EUR', label: 'France (FR / EUR)' },
+  { country: 'CA', defaultCurrency: 'CAD', label: 'Canada (CA / CAD)' },
+  { country: 'AU', defaultCurrency: 'AUD', label: 'Australia (AU / AUD)' },
+  { country: 'JP', defaultCurrency: 'JPY', label: 'Japan (JP / JPY)' },
+];
+
 function SalesChannels() {
   const [salesChannels, setSalesChannels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +32,8 @@ function SalesChannels() {
     commissionRate: 0,
     paymentTerms: '',
     isActive: true,
+    country: '',
+    defaultCurrency: '',
   });
 
   useEffect(() => {
@@ -54,19 +68,67 @@ function SalesChannels() {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
+    let nextValue = type === 'checkbox' ? checked : value;
+
+    if (name === 'commissionRate') {
+      nextValue = parseFloat(value) || 0;
+    } else if (name === 'country') {
+      nextValue = value.toUpperCase().slice(0, 2);
+    } else if (name === 'defaultCurrency') {
+      nextValue = value.toUpperCase().slice(0, 3);
+    }
+
     setFormData((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : name === 'commissionRate' ? parseFloat(value) || 0 : value,
+      [name]: nextValue,
     }));
+  };
+
+  const handleMarketplacePresetChange = (e) => {
+    const preset = MARKETPLACE_PRESETS.find((item) => item.country === e.target.value);
+    if (!preset) return;
+    setFormData((prev) => ({
+      ...prev,
+      country: preset.country,
+      defaultCurrency: preset.defaultCurrency,
+    }));
+  };
+
+  const buildPayload = () => {
+    const payload = { ...formData };
+    if (payload.type === 'marketplace') {
+      payload.country = String(payload.country || '').trim().toUpperCase();
+      payload.defaultCurrency = String(payload.defaultCurrency || '').trim().toUpperCase();
+    } else {
+      delete payload.country;
+      delete payload.defaultCurrency;
+    }
+    return payload;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (formData.type === 'marketplace') {
+      const country = String(formData.country || '').trim().toUpperCase();
+      const defaultCurrency = String(formData.defaultCurrency || '').trim().toUpperCase();
+      if (country.length !== 2) {
+        alert('Country is required for marketplace channels (2-letter code, e.g. IN, US, AE).');
+        return;
+      }
+      if (defaultCurrency.length !== 3) {
+        alert('Default currency is required for marketplace channels (3-letter code, e.g. INR, USD, AED).');
+        return;
+      }
+    }
+
+    const payload = buildPayload();
+
     try {
       if (editingChannel) {
-        await salesChannelsAPI.update(editingChannel._id, formData);
+        await salesChannelsAPI.update(editingChannel._id, payload);
       } else {
-        await salesChannelsAPI.create(formData);
+        await salesChannelsAPI.create(payload);
       }
       setShowModal(false);
       setEditingChannel(null);
@@ -95,6 +157,8 @@ function SalesChannels() {
       commissionRate: channel.commissionRate || 0,
       paymentTerms: channel.paymentTerms || '',
       isActive: channel.isActive !== undefined ? channel.isActive : true,
+      country: channel.country || '',
+      defaultCurrency: channel.defaultCurrency || '',
     });
     setShowModal(true);
   };
@@ -128,6 +192,8 @@ function SalesChannels() {
       commissionRate: 0,
       paymentTerms: '',
       isActive: true,
+      country: '',
+      defaultCurrency: '',
     });
   };
 
@@ -246,6 +312,12 @@ function SalesChannels() {
             { label: 'Type', value: viewingChannel.type },
             { label: 'Commission Rate', value: `${viewingChannel.commissionRate || 0}%` },
             { label: 'Payment Terms', value: viewingChannel.paymentTerms },
+            ...(viewingChannel.type === 'marketplace'
+              ? [
+                  { label: 'Country', value: viewingChannel.country },
+                  { label: 'Default Currency', value: viewingChannel.defaultCurrency },
+                ]
+              : []),
             { label: 'Status', value: viewingChannel.isActive ? 'Active' : 'Inactive' },
             { label: 'Description', value: viewingChannel.description, full: true },
           ]}
@@ -334,6 +406,52 @@ function SalesChannels() {
                   />
                 </div>
               </div>
+              {formData.type === 'marketplace' && (
+                <>
+                  <div className="form-group">
+                    <label>Marketplace preset</label>
+                    <select
+                      value={formData.country || ''}
+                      onChange={handleMarketplacePresetChange}
+                    >
+                      <option value="">Select a common marketplace</option>
+                      {MARKETPLACE_PRESETS.map((preset) => (
+                        <option key={preset.country} value={preset.country}>
+                          {preset.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Country code *</label>
+                      <input
+                        type="text"
+                        name="country"
+                        value={formData.country}
+                        onChange={handleInputChange}
+                        required
+                        maxLength={2}
+                        placeholder="IN, US, AE"
+                        style={{ textTransform: 'uppercase' }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Default currency *</label>
+                      <input
+                        type="text"
+                        name="defaultCurrency"
+                        value={formData.defaultCurrency}
+                        onChange={handleInputChange}
+                        required
+                        maxLength={3}
+                        placeholder="INR, USD, AED"
+                        style={{ textTransform: 'uppercase' }}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
               <div className="form-group">
                 <label>Payment Terms</label>
                 <input

@@ -131,6 +131,75 @@
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
+.sales-dash-filter-apply {
+  display: flex;
+  align-items: flex-end;
+}
+
+.sales-dash-btn-apply {
+  padding: 0.55rem 1.25rem;
+  border: none;
+  border-radius: 6px;
+  background: #6366f1;
+  color: white;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sales-dash-btn-apply:hover {
+  background: #4f46e5;
+}
+
+.sales-dash-records-wrap {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: white;
+}
+
+.sales-dash-records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.sales-dash-records-table th,
+.sales-dash-records-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sales-dash-records-table th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.sales-dash-records-table td.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.sales-dash-records-table td.num {
+  text-align: right;
+}
+
+.sales-dash-records-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.sales-dash-record-row {
+  cursor: pointer;
+}
+
+.sales-dash-record-row:hover {
+  background: #eff6ff;
+}
+
 .sales-dash-loading,
 .sales-dash-empty {
   padding: 3rem;

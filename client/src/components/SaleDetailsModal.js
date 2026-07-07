@@ -1,6 +1,6 @@
 import React from 'react';
 import { formatMoney } from '../utils/locationCurrency';
-import { getCatalogSku, getParentSku, getChildSku } from '../utils/productDisplayUtils';
+import { getCatalogSku, getProductThumbnail, PRODUCT_IMAGE_PLACEHOLDER } from '../utils/productDisplayUtils';
 import './Products.css';
 import './SalesSkuReport.css';
 
@@ -96,30 +96,6 @@ function SaleDetailsModal({ sale, loading, onClose }) {
               </div>
             </div>
 
-            <div className="detail-section">
-              <h4>Status</h4>
-              <div className="detail-grid">
-                <div className="detail-field">
-                  <span className="detail-field-label">Payment Status</span>
-                  <span className="detail-field-value">
-                    <span className={`status-badge status-${sale.paymentStatus}`}>
-                      {sale.paymentStatus || '—'}
-                    </span>
-                  </span>
-                </div>
-                <div className="detail-field">
-                  <span className="detail-field-label">Order Status</span>
-                  <span className="detail-field-value">
-                    <span className={`status-badge status-${sale.orderStatus}`}>
-                      {sale.orderStatus || '—'}
-                    </span>
-                  </span>
-                </div>
-                <SaleDetailField label="Created" value={formatSaleDateTime(sale.createdAt)} />
-                <SaleDetailField label="Last Updated" value={formatSaleDateTime(sale.updatedAt)} />
-              </div>
-            </div>
-
             {sale.notes?.trim() && (
               <div className="detail-section">
                 <h4>Notes</h4>
@@ -136,9 +112,8 @@ function SaleDetailsModal({ sale, loading, onClose }) {
                   <table className="sales-detail-items-table">
                     <thead>
                       <tr>
-                        <th>Product SKU</th>
-                        <th>Parent SKU</th>
-                        <th>Child SKU</th>
+                        <th className="sale-line-image-col">Image</th>
+                        <th>SKU</th>
                         <th>Product</th>
                         <th>Qty</th>
                         <th>Unit Price</th>
@@ -146,17 +121,30 @@ function SaleDetailsModal({ sale, loading, onClose }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {sale.items.map((item, idx) => (
-                        <tr key={`${sale._id}-item-${idx}`}>
-                          <td className="mono">{getProductSku(item)}</td>
-                          <td className="mono">{getParentSku(item.product) || '—'}</td>
-                          <td className="mono">{getChildSku(item.product) || '—'}</td>
-                          <td>{getProductLabel(item)}</td>
-                          <td className="num">{item.quantity ?? '—'}</td>
-                          <td className="num">{formatSaleMoney(item.unitPrice)}</td>
-                          <td className="num">{formatSaleMoney(item.total)}</td>
-                        </tr>
-                      ))}
+                      {sale.items.map((item, idx) => {
+                        const thumbnail = getProductThumbnail(item.product) || PRODUCT_IMAGE_PLACEHOLDER;
+                        return (
+                          <tr key={`${sale._id}-item-${idx}`}>
+                            <td className="sale-line-image-col">
+                              <img
+                                className="sale-line-item-image"
+                                src={thumbnail}
+                                alt={getProductLabel(item)}
+                                loading="lazy"
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = PRODUCT_IMAGE_PLACEHOLDER;
+                                }}
+                              />
+                            </td>
+                            <td className="mono">{getProductSku(item)}</td>
+                            <td>{getProductLabel(item)}</td>
+                            <td className="num">{item.quantity ?? '—'}</td>
+                            <td className="num">{formatSaleMoney(item.unitPrice)}</td>
+                            <td className="num">{formatSaleMoney(item.total)}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

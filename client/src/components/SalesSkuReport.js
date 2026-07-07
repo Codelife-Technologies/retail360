@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { reportsAPI, salesAPI, salesChannelsAPI } from '../services/api';
+import { reportsAPI, salesAPI, salesChannelsAPI, productsAPI, pricesAPI } from '../services/api';
 import { formatMoney } from '../utils/locationCurrency';
-import { getCatalogSku } from '../utils/productDisplayUtils';
+import { getCatalogSku, getProductDisplayName, getProductThumbnail, PRODUCT_IMAGE_PLACEHOLDER } from '../utils/productDisplayUtils';
 import SalesMonthlyTrendCharts from './SalesMonthlyTrendCharts';
 import SaleDetailsModal from './SaleDetailsModal';
+import ProductDetailsModal from './ProductDetailsModal';
 import ExcelUpload from './ExcelUpload';
 import './SalesSkuReport.css';
 
@@ -47,6 +48,153 @@ function countActiveAppliedFilters(applied) {
   return count;
 }
 
+function ProductSkuSummary({ product, compact = false, onClick }) {
+  const displayName = getProductDisplayName(product) || product?.productName || 'Unknown Product';
+  const sku = getCatalogSku(product) || product?.sku || '—';
+  const thumbnailSrc = getProductThumbnail(product) || PRODUCT_IMAGE_PLACEHOLDER;
+  const clickable = typeof onClick === 'function';
+
+  const handleActivate = (event) => {
+    event?.stopPropagation?.();
+    onClick?.(product);
+  };
+
+  const handleKeyDown = (event) => {
+    if (!clickable) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleActivate(event);
+    }
+  };
+
+  return (
+    <div
+      className={`product-sku-summary${compact ? ' product-sku-summary-compact' : ''}${clickable ? ' product-sku-summary-clickable' : ''}`}
+      onClick={clickable ? handleActivate : undefined}
+      onKeyDown={clickable ? handleKeyDown : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      title={clickable ? 'View product details' : undefined}
+    >
+      <img
+        className="product-sku-summary-image"
+        src={thumbnailSrc}
+        alt={displayName}
+        loading="lazy"
+        onError={(e) => {
+          e.target.onerror = null;
+          e.target.src = PRODUCT_IMAGE_PLACEHOLDER;
+        }}
+      />
+      <div className="product-sku-summary-text">
+        <span className="product-sku-summary-name">{displayName}</span>
+        <span className="product-sku-summary-sku mono">{sku}</span>
+      </div>
+    </div>
+  );
+}
+
+function ProductExtremeCarousel({ label, products, variant, onOpenProduct }) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    setIndex(0);
+  }, [products]);
+
+  if (!products?.length) return null;
+
+  const product = products[index];
+  const hasMultiple = products.length > 1;
+  const displayLabel = hasMultiple ? label.replace(' Product', ' Products') : label;
+
+  const showPrev = (event) => {
+    event.stopPropagation();
+    setIndex((current) => (current - 1 + products.length) % products.length);
+  };
+
+  const showNext = (event) => {
+    event.stopPropagation();
+    setIndex((current) => (current + 1) % products.length);
+  };
+
+  const showAt = (dotIndex, event) => {
+    event.stopPropagation();
+    setIndex(dotIndex);
+  };
+
+  return (
+    <div className={`product-extreme-card product-extreme-${variant}`}>
+      <div className="product-extreme-card-header">
+        <span className="product-extreme-label">{displayLabel}</span>
+        {hasMultiple && (
+          <span className="product-extreme-counter">
+            {index + 1} of {products.length}
+          </span>
+        )}
+      </div>
+
+      <div className="product-extreme-carousel">
+        {hasMultiple && (
+          <button
+            type="button"
+            className="product-extreme-nav product-extreme-nav-prev"
+            onClick={showPrev}
+            aria-label="Previous product"
+          >
+            ‹
+          </button>
+        )}
+
+        <div
+          className="product-extreme-slide product-extreme-clickable"
+          onClick={() => onOpenProduct(product)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onOpenProduct(product);
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          title="View product details"
+        >
+          <ProductSkuSummary product={product} />
+          <span className="product-extreme-stats">
+            {product.totalQuantity} units · {formatAed(product.totalRevenue)}
+          </span>
+        </div>
+
+        {hasMultiple && (
+          <button
+            type="button"
+            className="product-extreme-nav product-extreme-nav-next"
+            onClick={showNext}
+            aria-label="Next product"
+          >
+            ›
+          </button>
+        )}
+      </div>
+
+      {hasMultiple && (
+        <div className="product-extreme-dots" role="tablist" aria-label={`${label} slides`}>
+          {products.map((item, dotIndex) => (
+            <button
+              key={item.productId || item.sku || dotIndex}
+              type="button"
+              className={`product-extreme-dot${dotIndex === index ? ' active' : ''}`}
+              onClick={(event) => showAt(dotIndex, event)}
+              aria-label={`Show product ${dotIndex + 1}`}
+              aria-selected={dotIndex === index}
+              role="tab"
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SalesSkuReport({ onClose }) {
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
@@ -61,6 +209,9 @@ function SalesSkuReport({ onClose }) {
   const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [viewingSale, setViewingSale] = useState(null);
   const [viewingSaleLoading, setViewingSaleLoading] = useState(false);
+  const [viewingProduct, setViewingProduct] = useState(null);
+  const [viewingProductPrice, setViewingProductPrice] = useState(null);
+  const [productDetailLoading, setProductDetailLoading] = useState(false);
 
   const isSkuView = appliedFilters.view === 'sku';
   const sortOptions = isSkuView ? SKU_SORT_OPTIONS : ORDER_SORT_OPTIONS;
@@ -108,16 +259,19 @@ function SalesSkuReport({ onClose }) {
         setOrderRows(orders);
         setMonthlyTrend(trendRes.data?.groupedData || []);
       } else {
-        const [response, trendRes] = await Promise.all([
+        const skuParams = { ...params, sortBy: 'quantity', sortDir: 'desc' };
+        const [response, trendRes, skuRes] = await Promise.all([
           ordersPromise,
           trendPromise,
+          reportsAPI.getSalesBySku(skuParams),
         ]);
         const orders = Array.isArray(response.data) ? response.data : response.data?.data || [];
+        const skuSummary = skuRes.data?.summary || {};
         setOrderRows(orders);
         setSkuRows([]);
         setMonthlyTrend(trendRes.data?.groupedData || []);
         setSummary({
-          totalSkus: null,
+          totalSkus: skuSummary.totalSkus ?? null,
           totalSales: orders.length,
           totalQuantitySold: orders.reduce(
             (sum, sale) =>
@@ -126,9 +280,13 @@ function SalesSkuReport({ onClose }) {
           ),
           totalRevenue: Math.round(orders.reduce((sum, sale) => sum + (sale.total || 0), 0) * 100) / 100,
           totalOrders: orders.length,
+          topSellingProducts: skuSummary.topSellingProducts || [],
+          leastSellingProducts: skuSummary.leastSellingProducts || [],
         });
       }
       setViewingSale(null);
+      setViewingProduct(null);
+      setViewingProductPrice(null);
     } catch (error) {
       console.error('Error fetching sales report:', error);
       alert(error.response?.data?.error || 'Failed to load sales report');
@@ -144,6 +302,8 @@ function SalesSkuReport({ onClose }) {
   useEffect(() => {
     setViewingSale(null);
     setViewingSaleLoading(false);
+    setViewingProduct(null);
+    setViewingProductPrice(null);
   }, [appliedFilters]);
 
   const handleFilterChange = (e) => {
@@ -294,6 +454,38 @@ function SalesSkuReport({ onClose }) {
   const closeSaleDetail = () => {
     setViewingSale(null);
     setViewingSaleLoading(false);
+  };
+
+  const closeProductDetail = () => {
+    setViewingProduct(null);
+    setViewingProductPrice(null);
+  };
+
+  const handleOpenProductDetail = async (product) => {
+    const productId = product?.productId;
+    if (!productId) return;
+
+    setProductDetailLoading(true);
+    setViewingProduct(null);
+    setViewingProductPrice(null);
+
+    try {
+      const [productRes, pricesRes] = await Promise.all([
+        productsAPI.getById(productId),
+        pricesAPI.getBulkCurrent([productId], 'AED'),
+      ]);
+      setViewingProduct(productRes.data);
+      const priceRow = (pricesRes.data || []).find(
+        (row) => String(row.product?._id || row.product) === String(productId)
+      );
+      setViewingProductPrice(priceRow || null);
+    } catch (error) {
+      console.error('Error loading product details:', error);
+      alert(error.response?.data?.error || 'Failed to load product details');
+      closeProductDetail();
+    } finally {
+      setProductDetailLoading(false);
+    }
   };
 
   const renderSalesDetailSection = () => {
@@ -547,6 +739,23 @@ function SalesSkuReport({ onClose }) {
         </div>
       )}
 
+      {summary && (summary.topSellingProducts?.length > 0 || summary.leastSellingProducts?.length > 0) && (
+        <div className="sales-product-extremes">
+          <ProductExtremeCarousel
+            label="Top Selling Product"
+            products={summary.topSellingProducts}
+            variant="top"
+            onOpenProduct={handleOpenProductDetail}
+          />
+          <ProductExtremeCarousel
+            label="Least Selling Product"
+            products={summary.leastSellingProducts}
+            variant="least"
+            onOpenProduct={handleOpenProductDetail}
+          />
+        </div>
+      )}
+
       <SalesMonthlyTrendCharts groupedData={monthlyTrend} formatCurrency={formatAed} />
 
       {loading ? (
@@ -561,7 +770,6 @@ function SalesSkuReport({ onClose }) {
               <table className="sales-sku-table">
                 <thead>
                   <tr>
-                    <th>SKU</th>
                     <th>Product</th>
                     <th>Category</th>
                     <th>Sub Category</th>
@@ -575,8 +783,13 @@ function SalesSkuReport({ onClose }) {
                 <tbody>
                   {skuRows.map((row) => (
                     <tr key={row.productId || row.sku}>
-                      <td className="mono">{row.sku}</td>
-                      <td>{row.productName}</td>
+                      <td className="product-sku-summary-cell">
+                        <ProductSkuSummary
+                          product={row}
+                          compact
+                          onClick={handleOpenProductDetail}
+                        />
+                      </td>
                       <td>{row.category}</td>
                       <td>{row.subCategory}</td>
                       <td>{row.hsnCode}</td>
@@ -600,6 +813,23 @@ function SalesSkuReport({ onClose }) {
           sale={viewingSale}
           loading={viewingSaleLoading}
           onClose={closeSaleDetail}
+        />
+      )}
+
+      {productDetailLoading && (
+        <div className="modal-overlay sales-product-detail-loading">
+          <div className="sales-product-detail-loading-box">
+            <p>Loading product details…</p>
+          </div>
+        </div>
+      )}
+
+      {viewingProduct && (
+        <ProductDetailsModal
+          product={viewingProduct}
+          price={viewingProductPrice}
+          priceCurrency="AED"
+          onClose={closeProductDetail}
         />
       )}
 
