@@ -6,16 +6,44 @@ import HrPagination from '../../hr/components/HrPagination';
 import HrStatusBadge from '../../hr/components/HrStatusBadge';
 import { extractList, extractPagination, formatDate } from '../../hr/utils/hrUtils';
 
+const formatTodayLabel = () =>
+  new Date().toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
 function EmployeeAttendanceContent({ employeeId }) {
   const [records, setRecords] = useState([]);
   const [summary, setSummary] = useState({ present: 0, absent: 0, late: 0, leave: 0 });
   const [loading, setLoading] = useState(true);
+  const [todayDefaults, setTodayDefaults] = useState(null);
+  const [loadingToday, setLoadingToday] = useState(true);
+  const [marking, setMarking] = useState(false);
+  const [notes, setNotes] = useState('');
   const [filters, setFilters] = useState({
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
   });
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState(null);
+
+  const loadTodayDefaults = useCallback(async () => {
+    try {
+      setLoadingToday(true);
+      const res = await hrAttendanceAPI.getMarkDefaults();
+      setTodayDefaults(res.data || null);
+      if (res.data?.existingRecord?.notes) {
+        setNotes(res.data.existingRecord.notes);
+      }
+    } catch (error) {
+      console.error('Error loading today attendance:', error);
+      setTodayDefaults(null);
+    } finally {
+      setLoadingToday(false);
+    }
+  }, []);
 
   const fetchRecords = useCallback(async () => {
     if (!employeeId) return;
@@ -30,6 +58,7 @@ function EmployeeAttendanceContent({ employeeId }) {
           limit: 15,
         }),
         hrAttendanceAPI.getSummary({
+          employee: employeeId,
           month: filters.month,
           year: filters.year,
         }),
@@ -46,17 +75,117 @@ function EmployeeAttendanceContent({ employeeId }) {
   }, [employeeId, filters, page]);
 
   useEffect(() => {
+    loadTodayDefaults();
+  }, [loadTodayDefaults]);
+
+  useEffect(() => {
     fetchRecords();
   }, [fetchRecords]);
+
+  const handleMarkAttendance = async () => {
+    if (!todayDefaults?.checkIn && !todayDefaults?.alreadyMarked) {
+      alert('No login recorded today. Log in to the app first, then mark attendance.');
+      return;
+    }
+
+    try {
+      setMarking(true);
+      await hrAttendanceAPI.create({ notes });
+      await Promise.all([loadTodayDefaults(), fetchRecords()]);
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to mark attendance');
+    } finally {
+      setMarking(false);
+    }
+  };
+
+  const todayRecord = todayDefaults?.existingRecord;
+  const alreadyMarked = Boolean(todayDefaults?.alreadyMarked);
 
   return (
     <>
       <header className="ed-section-header">
         <div>
           <h2>My Attendance</h2>
-          <p>View your attendance records and monthly summary.</p>
+          <p>Mark today&apos;s attendance using your app login time.</p>
         </div>
       </header>
+
+      <section className="ed-attendance-today ed-table-card">
+        <div className="ed-attendance-today-header">
+          <div>
+            <h3>Today — {formatTodayLabel()}</h3>
+            <p className="ed-attendance-today-subtitle">
+              Check-in and check-out are taken from when you log in and out of the app.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="ed-btn ed-btn-primary"
+            disabled={marking || loadingToday || (!todayDefaults?.checkIn && !alreadyMarked)}
+            onClick={handleMarkAttendance}
+          >
+            {marking
+              ? 'Saving…'
+              : alreadyMarked
+                ? 'Update Checkout Time'
+                : 'Mark Today\'s Attendance'}
+          </button>
+        </div>
+
+        {loadingToday ? (
+          <div className="ed-attendance-today-body ed-loading-inline">Loading today&apos;s session…</div>
+        ) : (
+          <div className="ed-attendance-today-body">
+            <div className="ed-attendance-times">
+              <div>
+                <span className="ed-attendance-time-label">Check In</span>
+                <strong>{todayDefaults?.checkIn || todayRecord?.checkIn || '—'}</strong>
+              </div>
+              <div>
+                <span className="ed-attendance-time-label">Check Out</span>
+                <strong>{todayDefaults?.checkOut || todayRecord?.checkOut || '—'}</strong>
+              </div>
+              <div>
+                <span className="ed-attendance-time-label">Working Hours</span>
+                <strong>
+                  {todayRecord?.workingHours ?? todayDefaults?.workingHours ?? 0}
+                </strong>
+              </div>
+              <div>
+                <span className="ed-attendance-time-label">Status</span>
+                {todayRecord?.status ? (
+                  <HrStatusBadge status={todayRecord.status} />
+                ) : (
+                  <strong>{alreadyMarked ? 'Present' : 'Not marked'}</strong>
+                )}
+              </div>
+            </div>
+
+            {!todayDefaults?.checkIn && !alreadyMarked && (
+              <p className="ed-attendance-hint">
+                Log in to the app first. Your check-in time will appear here automatically.
+              </p>
+            )}
+
+            {alreadyMarked && (
+              <p className="ed-attendance-hint success">
+                Attendance marked for today. Log out and click &quot;Update Checkout Time&quot; to refresh your checkout.
+              </p>
+            )}
+
+            <div className="ed-form-group">
+              <label>Notes (optional)</label>
+              <textarea
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Add a note for today"
+              />
+            </div>
+          </div>
+        )}
+      </section>
 
       <div className="ed-filters-row">
         <select

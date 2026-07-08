@@ -45,6 +45,30 @@ async function findEmployeeForUser(user) {
   return matches.length === 1 ? matches[0] : null;
 }
 
+async function findUserForEmployee(employee) {
+  if (!employee) return null;
+
+  const selectFields = 'email username lastLoginAt lastLogoutAt attendanceSession';
+
+  if (employee.email) {
+    const byEmail = await User.findOne({ email: employee.email.toLowerCase() }).select(selectFields).lean();
+    if (byEmail) return byEmail;
+  }
+
+  const fullName = employeeDisplayName(employee);
+  const candidates = await User.find({
+    $or: [
+      { username: { $regex: new RegExp(`^${escapeRegex(employee.firstName || '')}$`, 'i') } },
+      { username: { $regex: new RegExp(`^${escapeRegex(fullName)}$`, 'i') } },
+    ],
+  })
+    .select(selectFields)
+    .lean();
+
+  if (candidates.length === 1) return candidates[0];
+  return null;
+}
+
 async function getEmployeeIdForUser(userId) {
   const user = await User.findById(userId).select('email username').lean();
   if (!user) return null;
@@ -83,6 +107,7 @@ module.exports = {
   employeeDisplayName,
   findEmployeesByName,
   findEmployeeForUser,
+  findUserForEmployee,
   getEmployeeIdForUser,
   findUserByLoginIdentifier,
 };

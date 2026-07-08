@@ -34,6 +34,16 @@ const userSchema = new mongoose.Schema({
   lastLoginAt: {
     type: Date,
     default: null
+  },
+  lastLogoutAt: {
+    type: Date,
+    default: null
+  },
+  attendanceSession: {
+    date: { type: String, default: '' },
+    checkInAt: { type: Date, default: null },
+    checkOutAt: { type: Date, default: null },
+    lastLoginAt: { type: Date, default: null },
   }
 }, {
   timestamps: true

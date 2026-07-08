@@ -1,6 +1,9 @@
 const User = require('../../models/User');
 const Employee = require('../models/Employee');
 const { getEffectivePermissions } = require('../../middleware/auth');
+const { findUserForEmployee } = require('../../utils/userEmployeeLink');
+const { getDateKey } = require('../../utils/attendanceSession');
+const { startOfDay, endOfDay, formatTimeHHMM } = require('./employeeId');
 
 const ATTENDANCE_ADMIN_ROLE_CODES = new Set(['admin', 'super_admin', 'hr']);
 
@@ -37,27 +40,66 @@ async function getEmployeeIdForUser(userId) {
   return resolveEmployeeId(userId);
 }
 
-async function getEmployeeCheckInTime(employeeId, forDate = new Date()) {
-  const employee = await Employee.findById(employeeId).select('email').lean();
-  if (!employee?.email) {
-    return '';
+function readSessionTimes(user, forDate = new Date()) {
+  if (!user) {
+    return { checkIn: '', checkOut: '' };
   }
 
-  const user = await User.findOne({ email: employee.email.toLowerCase() }).select('lastLoginAt').lean();
-  if (!user?.lastLoginAt) {
-    return '';
+  const dateKey = getDateKey(forDate);
+  const session = user.attendanceSession;
+
+  if (session?.date === dateKey) {
+    const checkIn = session.checkInAt ? formatTimeHHMM(session.checkInAt) : '';
+    let checkOut = session.checkOutAt ? formatTimeHHMM(session.checkOutAt) : '';
+
+    if (!checkOut && session.lastLoginAt && session.checkInAt) {
+      const lastLogin = new Date(session.lastLoginAt);
+      const firstLogin = new Date(session.checkInAt);
+      if (lastLogin > firstLogin) {
+        checkOut = formatTimeHHMM(lastLogin);
+      }
+    }
+
+    return { checkIn, checkOut };
   }
 
-  const { startOfDay, endOfDay, formatTimeHHMM } = require('./employeeId');
-  const loginAt = new Date(user.lastLoginAt);
   const dayStart = startOfDay(forDate);
   const dayEnd = endOfDay(forDate);
+  let checkIn = '';
+  let checkOut = '';
 
-  if (loginAt < dayStart || loginAt > dayEnd) {
-    return '';
+  if (user.lastLoginAt) {
+    const loginAt = new Date(user.lastLoginAt);
+    if (loginAt >= dayStart && loginAt <= dayEnd) {
+      checkIn = formatTimeHHMM(loginAt);
+    }
   }
 
-  return formatTimeHHMM(loginAt);
+  if (user.lastLogoutAt) {
+    const logoutAt = new Date(user.lastLogoutAt);
+    if (logoutAt >= dayStart && logoutAt <= dayEnd) {
+      checkOut = formatTimeHHMM(logoutAt);
+    }
+  }
+
+  return { checkIn, checkOut };
+}
+
+async function getEmployeeAttendanceTimes(employeeId, forDate = new Date()) {
+  const employee = await Employee.findById(employeeId)
+    .select('email firstName lastName')
+    .lean();
+  if (!employee) {
+    return { checkIn: '', checkOut: '' };
+  }
+
+  const user = await findUserForEmployee(employee);
+  return readSessionTimes(user, forDate);
+}
+
+async function getEmployeeCheckInTime(employeeId, forDate = new Date()) {
+  const times = await getEmployeeAttendanceTimes(employeeId, forDate);
+  return times.checkIn;
 }
 
 async function resolveAttendanceScope(req) {
@@ -98,6 +140,7 @@ module.exports = {
   userCanManageAllAttendance,
   getEmployeeIdForUser,
   getEmployeeCheckInTime,
+  getEmployeeAttendanceTimes,
   resolveAttendanceScope,
   applyEmployeeScope,
   recordMatchesScope,

@@ -377,6 +377,7 @@ export const usersAPI = {
 // Auth API
 export const authAPI = {
   login: (credentials) => api.post('/auth/login', credentials),
+  logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   seed: () => api.post('/auth/seed'),
 };

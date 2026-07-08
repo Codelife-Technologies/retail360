@@ -7,6 +7,10 @@ const Permission = require('../models/Permission');
 const Group = require('../models/Group');
 const { authenticate, JWT_SECRET, getEffectivePermissions } = require('../middleware/auth');
 const { findUserByLoginIdentifier } = require('../utils/userEmployeeLink');
+const {
+  applyLoginToAttendanceSession,
+  applyLogoutToAttendanceSession,
+} = require('../utils/attendanceSession');
 
 // POST /login - no auth required
 router.post('/login', async (req, res) => {
@@ -23,7 +27,7 @@ router.post('/login', async (req, res) => {
     if (!valid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    user.lastLoginAt = new Date();
+    applyLoginToAttendanceSession(user);
     await user.save();
     const token = jwt.sign(
       { id: user._id, username: user.username },
@@ -51,6 +55,21 @@ router.get('/me', authenticate, async (req, res) => {
     }
     const permissions = await getEffectivePermissions(req.user.id);
     res.json({ ...user, permissions: Array.from(permissions) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /logout - record checkout time from app session
+router.post('/logout', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    applyLogoutToAttendanceSession(user);
+    await user.save();
+    res.json({ message: 'Logged out' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

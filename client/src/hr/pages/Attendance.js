@@ -68,6 +68,7 @@ function Attendance() {
         ...f,
         date: toInputDate(new Date()),
         checkIn: '',
+        checkOut: '',
       }));
       return;
     }
@@ -79,6 +80,8 @@ function Attendance() {
         ...f,
         date: res.data?.date || toInputDate(new Date()),
         checkIn: res.data?.checkIn || '',
+        checkOut: res.data?.checkOut || '',
+        workingHours: res.data?.workingHours ?? f.workingHours,
       }));
     } catch (error) {
       console.error('Error loading attendance defaults:', error);
@@ -86,6 +89,7 @@ function Attendance() {
         ...f,
         date: toInputDate(new Date()),
         checkIn: '',
+        checkOut: '',
       }));
     } finally {
       setLoadingDefaults(false);
@@ -505,11 +509,34 @@ function Attendance() {
                   </div>
                   <div className="hr-form-group">
                     <label>Check Out</label>
-                    <input type="time" value={formData.checkOut} onChange={(e) => setFormData((f) => ({ ...f, checkOut: e.target.value }))} />
+                    <input
+                      type="text"
+                      value={loadingDefaults ? 'Loading…' : (formData.checkOut || '—')}
+                      readOnly
+                      className="hr-input-readonly"
+                    />
+                    {!editingRecord && (
+                      <small className="hr-field-hint">
+                        {formData.checkOut
+                          ? 'Taken from the employee’s app session (logout or last login today).'
+                          : 'No app session recorded for this employee today.'}
+                      </small>
+                    )}
                   </div>
                   <div className="hr-form-group">
                     <label>Working Hours</label>
-                    <input type="number" min="0" step="0.5" value={formData.workingHours} onChange={(e) => setFormData((f) => ({ ...f, workingHours: parseFloat(e.target.value) || 0 }))} />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={formData.workingHours}
+                      readOnly={!editingRecord && Boolean(formData.checkIn && formData.checkOut)}
+                      className={!editingRecord && formData.checkIn && formData.checkOut ? 'hr-input-readonly' : undefined}
+                      onChange={(e) => setFormData((f) => ({ ...f, workingHours: parseFloat(e.target.value) || 0 }))}
+                    />
+                    {!editingRecord && formData.checkIn && formData.checkOut && (
+                      <small className="hr-field-hint">Calculated from login and logout times.</small>
+                    )}
                   </div>
                   <div className="hr-form-group">
                     <label>Status</label>

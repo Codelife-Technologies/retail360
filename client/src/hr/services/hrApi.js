@@ -15,7 +15,10 @@ export const hrEmployeesAPI = {
 
 export const hrAttendanceAPI = {
   getContext: () => api.get('/hr/attendance/context'),
-  getMarkDefaults: (employeeId) => api.get('/hr/attendance/mark-defaults', { params: { employee: employeeId } }),
+  getMarkDefaults: (employeeId) =>
+    api.get('/hr/attendance/mark-defaults', {
+      params: employeeId ? { employee: employeeId } : undefined,
+    }),
   getAll: (params) => api.get('/hr/attendance', { params }),
   getSummary: (params) => api.get('/hr/attendance/summary', { params }),
   getTrend: (params) => api.get('/hr/attendance/trend', { params }),
