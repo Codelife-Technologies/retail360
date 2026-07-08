@@ -130,11 +130,16 @@ async function getEmployeeCheckInTime(employeeId, forDate = new Date()) {
 
 async function resolveAttendanceScope(req) {
   const canManageAll = await userCanManageAllAttendance(req.user.id);
-  if (canManageAll) {
-    return { canManageAll: true, employeeId: null };
-  }
   const employeeId = await getEmployeeIdForUser(req.user.id);
-  return { canManageAll: false, employeeId };
+  return { canManageAll, employeeId };
+}
+
+function isSelfAttendanceRequest(scope, employeeId) {
+  return Boolean(
+    scope.employeeId &&
+    employeeId &&
+    String(scope.employeeId) === String(employeeId)
+  );
 }
 
 function applyEmployeeScope(query, scope, requestedEmployeeId) {
@@ -170,6 +175,7 @@ module.exports = {
   getAttendanceTimesForUser,
   ensureUserAttendanceSession,
   resolveAttendanceScope,
+  isSelfAttendanceRequest,
   applyEmployeeScope,
   recordMatchesScope,
 };

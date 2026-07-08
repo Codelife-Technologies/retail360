@@ -57,6 +57,9 @@ function EmployeeAttendanceContent({ employeeId }) {
     } catch (error) {
       console.error('Error loading today attendance:', error);
       setTodayDefaults(null);
+      if (error.response?.data?.error) {
+        alert(error.response.data.error);
+      }
     } finally {
       setLoadingToday(false);
     }

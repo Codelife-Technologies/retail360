@@ -36,6 +36,15 @@ const formatTodayLabel = () =>
     year: 'numeric',
   });
 
+function calcWorkingHoursFromTimes(checkIn, checkOut) {
+  if (!checkIn || !checkOut) return 0;
+  const [inH, inM] = checkIn.split(':').map(Number);
+  const [outH, outM] = checkOut.split(':').map(Number);
+  const minutes = outH * 60 + outM - (inH * 60 + inM);
+  if (minutes <= 0) return 0;
+  return Math.round((minutes / 60) * 10) / 10;
+}
+
 function Attendance() {
   const [viewMode, setViewMode] = useState('daily');
   const [canManageAll, setCanManageAll] = useState(false);
@@ -81,7 +90,7 @@ function Attendance() {
         date: res.data?.date || toInputDate(new Date()),
         checkIn: res.data?.checkIn || '',
         checkOut: res.data?.checkOut || '',
-        workingHours: res.data?.workingHours ?? f.workingHours,
+        workingHours: res.data?.workingHours ?? calcWorkingHoursFromTimes(res.data?.checkIn, res.data?.checkOut),
       }));
     } catch (error) {
       console.error('Error loading attendance defaults:', error);
@@ -190,6 +199,14 @@ function Attendance() {
     if (!editingRecord) {
       loadMarkDefaults(employeeId);
     }
+  };
+
+  const handleTimeChange = (field, value) => {
+    setFormData((f) => {
+      const next = { ...f, [field]: value };
+      next.workingHours = calcWorkingHoursFromTimes(next.checkIn, next.checkOut);
+      return next;
+    });
   };
 
   const openAdd = () => {
@@ -494,32 +511,32 @@ function Attendance() {
                   <div className="hr-form-group">
                     <label>Check In</label>
                     <input
-                      type="text"
-                      value={loadingDefaults ? 'Loading…' : (formData.checkIn || '—')}
-                      readOnly
-                      className="hr-input-readonly"
+                      type="time"
+                      value={formData.checkIn}
+                      disabled={loadingDefaults && !editingRecord}
+                      onChange={(e) => handleTimeChange('checkIn', e.target.value)}
                     />
                     {!editingRecord && (
                       <small className="hr-field-hint">
                         {formData.checkIn
-                          ? 'Taken from the employee’s login time today.'
-                          : 'No login recorded for this employee today.'}
+                          ? 'Prefilled from login time. You can change it if needed.'
+                          : 'No login recorded — enter check-in time manually.'}
                       </small>
                     )}
                   </div>
                   <div className="hr-form-group">
                     <label>Check Out</label>
                     <input
-                      type="text"
-                      value={loadingDefaults ? 'Loading…' : (formData.checkOut || '—')}
-                      readOnly
-                      className="hr-input-readonly"
+                      type="time"
+                      value={formData.checkOut}
+                      disabled={loadingDefaults && !editingRecord}
+                      onChange={(e) => handleTimeChange('checkOut', e.target.value)}
                     />
                     {!editingRecord && (
                       <small className="hr-field-hint">
                         {formData.checkOut
-                          ? 'Taken from the employee’s app session (logout or last login today).'
-                          : 'No app session recorded for this employee today.'}
+                          ? 'Prefilled from app session. You can change it if needed.'
+                          : 'No logout recorded — enter check-out time manually.'}
                       </small>
                     )}
                   </div>
@@ -530,13 +547,9 @@ function Attendance() {
                       min="0"
                       step="0.5"
                       value={formData.workingHours}
-                      readOnly={!editingRecord && Boolean(formData.checkIn && formData.checkOut)}
-                      className={!editingRecord && formData.checkIn && formData.checkOut ? 'hr-input-readonly' : undefined}
                       onChange={(e) => setFormData((f) => ({ ...f, workingHours: parseFloat(e.target.value) || 0 }))}
                     />
-                    {!editingRecord && formData.checkIn && formData.checkOut && (
-                      <small className="hr-field-hint">Calculated from login and logout times.</small>
-                    )}
+                    <small className="hr-field-hint">Auto-calculated from check-in/out; you can override manually.</small>
                   </div>
                   <div className="hr-form-group">
                     <label>Status</label>

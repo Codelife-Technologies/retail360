@@ -19,13 +19,18 @@ function applyLoginToAttendanceSession(user) {
       lastLoginAt: now,
     };
   } else {
-    user.attendanceSession.lastLoginAt = now;
-    if (!user.attendanceSession.checkInAt) {
-      user.attendanceSession.checkInAt = now;
-    }
+    user.attendanceSession = {
+      date: todayKey,
+      checkInAt: session.checkInAt || now,
+      checkOutAt: session.checkOutAt || null,
+      lastLoginAt: now,
+    };
   }
 
   user.lastLoginAt = now;
+  if (typeof user.markModified === 'function') {
+    user.markModified('attendanceSession');
+  }
 }
 
 function applyLogoutToAttendanceSession(user) {
@@ -54,8 +59,16 @@ function ensureTodayAttendanceSession(user, { allowCurrentTime = false } = {}) {
   const session = user.attendanceSession || {};
 
   if (session.date === todayKey && session.checkInAt) {
-    user.attendanceSession.lastLoginAt = session.lastLoginAt || session.checkInAt;
+    user.attendanceSession = {
+      date: todayKey,
+      checkInAt: session.checkInAt,
+      checkOutAt: session.checkOutAt || null,
+      lastLoginAt: session.lastLoginAt || session.checkInAt,
+    };
     user.lastLoginAt = user.lastLoginAt || session.checkInAt;
+    if (typeof user.markModified === 'function') {
+      user.markModified('attendanceSession');
+    }
     return false;
   }
 
@@ -66,6 +79,9 @@ function ensureTodayAttendanceSession(user, { allowCurrentTime = false } = {}) {
       checkOutAt: session.date === todayKey ? session.checkOutAt || null : null,
       lastLoginAt: user.lastLoginAt,
     };
+    if (typeof user.markModified === 'function') {
+      user.markModified('attendanceSession');
+    }
     return true;
   }
 

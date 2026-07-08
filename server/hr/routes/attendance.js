@@ -10,6 +10,7 @@ const {
   getEmployeeAttendanceTimes,
   getAttendanceTimesForUser,
   ensureUserAttendanceSession,
+  isSelfAttendanceRequest,
 } = require('../utils/attendanceAccess');
 const { calcWorkingHoursFromTimes } = require('../../utils/attendanceSession');
 
@@ -162,7 +163,10 @@ router.get('/mark-defaults', async (req, res) => {
 
     if (scope.canManageAll) {
       if (!employeeId) {
-        return res.status(400).json({ error: 'Employee is required' });
+        if (!scope.employeeId) {
+          return res.status(400).json({ error: 'Employee is required' });
+        }
+        employeeId = scope.employeeId;
       }
     } else if (!scope.employeeId) {
       return res.status(403).json({ error: 'Employee profile not linked' });
@@ -172,8 +176,9 @@ router.get('/mark-defaults', async (req, res) => {
 
     const today = startOfDay(new Date());
     let times = { checkIn: '', checkOut: '' };
+    const selfRequest = isSelfAttendanceRequest(scope, employeeId);
 
-    if (!scope.canManageAll) {
+    if (selfRequest || !scope.canManageAll) {
       await ensureUserAttendanceSession(req.user.id, { allowCurrentTime: true });
       times = await getAttendanceTimesForUser(req.user.id, today);
     } else {
@@ -239,25 +244,36 @@ router.post('/', async (req, res) => {
       }
       employeeId = scope.employeeId;
     } else if (!employeeId) {
-      return res.status(400).json({ error: 'Employee is required' });
+      if (!scope.employeeId) {
+        return res.status(400).json({ error: 'Employee is required' });
+      }
+      employeeId = scope.employeeId;
     }
 
+    const selfRequest = isSelfAttendanceRequest(scope, employeeId);
+
     let sessionTimes = { checkIn: '', checkOut: '' };
-    if (!scope.canManageAll) {
+    if (selfRequest || !scope.canManageAll) {
       await ensureUserAttendanceSession(req.user.id, { allowCurrentTime: true });
       sessionTimes = await getAttendanceTimesForUser(req.user.id, today);
     } else {
       sessionTimes = await getEmployeeAttendanceTimes(employeeId, today);
     }
 
-    const checkIn = req.body.checkIn || sessionTimes.checkIn;
-    const checkOut = req.body.checkOut || sessionTimes.checkOut;
+    const checkIn =
+      scope.canManageAll && req.body.checkIn != null && req.body.checkIn !== ''
+        ? req.body.checkIn
+        : (req.body.checkIn || sessionTimes.checkIn);
+    const checkOut =
+      scope.canManageAll && req.body.checkOut != null && req.body.checkOut !== ''
+        ? req.body.checkOut
+        : (req.body.checkOut || sessionTimes.checkOut);
     const workingHours =
       req.body.workingHours != null && req.body.workingHours !== ''
         ? req.body.workingHours
         : calcWorkingHoursFromTimes(checkIn, checkOut);
 
-    if (!scope.canManageAll && !checkIn) {
+    if ((selfRequest || !scope.canManageAll) && !checkIn) {
       return res.status(400).json({
         error: 'No login recorded today. Log in to the app first, then mark attendance.',
       });
@@ -269,7 +285,7 @@ router.post('/', async (req, res) => {
     });
 
     if (existing) {
-      if (!scope.canManageAll) {
+      if (selfRequest || !scope.canManageAll) {
         if (checkOut) existing.checkOut = checkOut;
         if (checkIn && !existing.checkIn) existing.checkIn = checkIn;
         existing.workingHours = calcWorkingHoursFromTimes(existing.checkIn, existing.checkOut);
@@ -284,9 +300,9 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Attendance already marked for this employee today' });
     }
 
-    const defaultStatus = scope.canManageAll
-      ? (req.body.status || 'Present')
-      : resolveEmployeeSelfStatus(req.body.status, 'Present');
+    const defaultStatus = selfRequest || !scope.canManageAll
+      ? resolveEmployeeSelfStatus(req.body.status, 'Present')
+      : (req.body.status || 'Present');
 
     const payload = {
       employee: employeeId,
@@ -319,8 +335,12 @@ router.put('/:id', async (req, res) => {
 
     const payload = { ...req.body };
     delete payload.date;
-    delete payload.checkIn;
-    delete payload.checkOut;
+
+    const checkIn = payload.checkIn != null ? payload.checkIn : existing.checkIn;
+    const checkOut = payload.checkOut != null ? payload.checkOut : existing.checkOut;
+    if (payload.workingHours == null || payload.workingHours === '') {
+      payload.workingHours = calcWorkingHoursFromTimes(checkIn, checkOut);
+    }
 
     const record = await Attendance.findByIdAndUpdate(req.params.id, payload, {
       new: true,
