@@ -208,6 +208,15 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+const EMPLOYEE_SELF_STATUSES = new Set(['Present', 'Work From Home']);
+
+function resolveEmployeeSelfStatus(status, fallback = 'Present') {
+  if (EMPLOYEE_SELF_STATUSES.has(status)) {
+    return status;
+  }
+  return fallback;
+}
+
 router.post('/', async (req, res) => {
   try {
     const scope = await resolveAttendanceScope(req);
@@ -249,6 +258,9 @@ router.post('/', async (req, res) => {
         if (checkIn && !existing.checkIn) existing.checkIn = checkIn;
         existing.workingHours = calcWorkingHoursFromTimes(existing.checkIn, existing.checkOut);
         if (req.body.notes != null) existing.notes = req.body.notes;
+        if (req.body.status != null) {
+          existing.status = resolveEmployeeSelfStatus(req.body.status, existing.status);
+        }
         await existing.save();
         await existing.populate('employee', 'employeeId firstName lastName department photo');
         return res.json(existing);
@@ -256,13 +268,17 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Attendance already marked for this employee today' });
     }
 
+    const defaultStatus = scope.canManageAll
+      ? (req.body.status || 'Present')
+      : resolveEmployeeSelfStatus(req.body.status, 'Present');
+
     const payload = {
       employee: employeeId,
       date: today,
       checkIn,
       checkOut,
       workingHours,
-      status: req.body.status || 'Present',
+      status: defaultStatus,
       notes: req.body.notes || '',
     };
 

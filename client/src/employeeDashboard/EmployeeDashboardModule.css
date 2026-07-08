@@ -472,6 +472,37 @@
   border-color: #a7f3d0;
 }
 
+.ed-work-location-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.ed-work-location-option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #fff;
+  color: #374151;
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ed-work-location-option.active {
+  border-color: #4f46e5;
+  background: #eef2ff;
+  color: #312e81;
+  box-shadow: inset 0 0 0 1px #4f46e5;
+}
+
+.ed-work-location-icon {
+  font-size: 1.1rem;
+}
+
 .ed-leave-layout {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

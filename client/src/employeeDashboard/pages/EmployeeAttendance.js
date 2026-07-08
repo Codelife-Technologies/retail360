@@ -6,6 +6,19 @@ import HrPagination from '../../hr/components/HrPagination';
 import HrStatusBadge from '../../hr/components/HrStatusBadge';
 import { extractList, extractPagination, formatDate } from '../../hr/utils/hrUtils';
 
+const WORK_LOCATIONS = [
+  { id: 'office', label: 'Office', status: 'Present', icon: '🏢' },
+  { id: 'home', label: 'Work From Home', status: 'Work From Home', icon: '🏠' },
+];
+
+function statusToWorkLocation(status) {
+  return status === 'Work From Home' ? 'home' : 'office';
+}
+
+function workLocationToStatus(workLocation) {
+  return workLocation === 'home' ? 'Work From Home' : 'Present';
+}
+
 const formatTodayLabel = () =>
   new Date().toLocaleDateString('en-IN', {
     weekday: 'long',
@@ -21,6 +34,7 @@ function EmployeeAttendanceContent({ employeeId }) {
   const [todayDefaults, setTodayDefaults] = useState(null);
   const [loadingToday, setLoadingToday] = useState(true);
   const [marking, setMarking] = useState(false);
+  const [workLocation, setWorkLocation] = useState('office');
   const [notes, setNotes] = useState('');
   const [filters, setFilters] = useState({
     month: new Date().getMonth() + 1,
@@ -34,8 +48,11 @@ function EmployeeAttendanceContent({ employeeId }) {
       setLoadingToday(true);
       const res = await hrAttendanceAPI.getMarkDefaults();
       setTodayDefaults(res.data || null);
-      if (res.data?.existingRecord?.notes) {
-        setNotes(res.data.existingRecord.notes);
+      if (res.data?.existingRecord) {
+        setWorkLocation(statusToWorkLocation(res.data.existingRecord.status));
+        if (res.data.existingRecord.notes) {
+          setNotes(res.data.existingRecord.notes);
+        }
       }
     } catch (error) {
       console.error('Error loading today attendance:', error);
@@ -90,7 +107,10 @@ function EmployeeAttendanceContent({ employeeId }) {
 
     try {
       setMarking(true);
-      await hrAttendanceAPI.create({ notes });
+      await hrAttendanceAPI.create({
+        notes,
+        status: workLocationToStatus(workLocation),
+      });
       await Promise.all([loadTodayDefaults(), fetchRecords()]);
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to mark attendance');
@@ -107,7 +127,7 @@ function EmployeeAttendanceContent({ employeeId }) {
       <header className="ed-section-header">
         <div>
           <h2>My Attendance</h2>
-          <p>Mark today&apos;s attendance using your app login time.</p>
+          <p>Mark today&apos;s attendance and select whether you are working from office or home.</p>
         </div>
       </header>
 
@@ -128,7 +148,7 @@ function EmployeeAttendanceContent({ employeeId }) {
             {marking
               ? 'Saving…'
               : alreadyMarked
-                ? 'Update Checkout Time'
+                ? 'Update Attendance'
                 : 'Mark Today\'s Attendance'}
           </button>
         </div>
@@ -162,6 +182,23 @@ function EmployeeAttendanceContent({ employeeId }) {
               </div>
             </div>
 
+            <div className="ed-form-group">
+              <label>Working From</label>
+              <div className="ed-work-location-options">
+                {WORK_LOCATIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`ed-work-location-option${workLocation === option.id ? ' active' : ''}`}
+                    onClick={() => setWorkLocation(option.id)}
+                  >
+                    <span className="ed-work-location-icon">{option.icon}</span>
+                    <span>{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {!todayDefaults?.checkIn && !alreadyMarked && (
               <p className="ed-attendance-hint">
                 Log in to the app first. Your check-in time will appear here automatically.
@@ -170,7 +207,7 @@ function EmployeeAttendanceContent({ employeeId }) {
 
             {alreadyMarked && (
               <p className="ed-attendance-hint success">
-                Attendance marked for today. Log out and click &quot;Update Checkout Time&quot; to refresh your checkout.
+                Attendance marked for today. You can change office/home or log out and click &quot;Update Attendance&quot; to refresh checkout.
               </p>
             )}
 
