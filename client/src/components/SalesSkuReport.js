@@ -376,38 +376,11 @@ function SalesSkuReport({ onClose }) {
     const imported = result?.imported || 0;
     const updated = result?.updated || 0;
     const failed = result?.failed || 0;
-    const skipped = result?.skipped || 0;
-    const totalRows = result?.totalRows || 0;
+    const notUploaded = failed + (result?.skipped || 0);
 
-    const summary = [
-      `Total Excel rows: ${totalRows}`,
-      `New sales: ${imported}`,
-      `Updated: ${updated}`,
-      `Failed: ${failed}`,
-      skipped ? `Skipped: ${skipped}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    if (result?.errors?.length > 0 && (failed > 0 || skipped > 0)) {
-      const topErrors = result.errors
-        .slice(0, 5)
-        .map((err) => `• Row ${err.row}: ${err.message}`)
-        .join('\n');
-      alert(`${summary}\n\nTop issues:\n${topErrors}\n\nSee upload dialog for full details.`);
-    } else if (failed > 0 && imported + updated === 0) {
-      const firstError = result?.errors?.[0]?.message || 'Check column headers and required fields.';
-      alert(`${summary}\n\n${firstError}`);
-      return;
-    } else if (failed > 0 || updated > 0 || imported > 0) {
-      alert(summary);
+    if (notUploaded === 0 && (imported > 0 || updated > 0)) {
+      setShowExcelUpload(false);
     }
-
-    if (failed > 0 && imported + updated === 0) {
-      return;
-    }
-
-    setShowExcelUpload(false);
   };
 
   const sortDirLabel = (sortBy = appliedFilters.sortBy, sortDir = appliedFilters.sortDir) => {

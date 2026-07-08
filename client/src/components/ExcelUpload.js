@@ -2,6 +2,38 @@ import React, { useState } from 'react';
 import api from '../services/api';
 import './ExcelUpload.css';
 
+const buildErrorSummary = (errors = []) =>
+  errors.reduce((acc, err) => {
+    const key = (err.message || 'Unknown error').split('.')[0].slice(0, 120);
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+const getImportTotals = (result) => {
+  const imported = result?.imported || 0;
+  const updated = result?.updated || 0;
+  const failed = result?.failed || 0;
+  const skipped = result?.skipped || 0;
+  const totalRows = result?.totalRows ?? result?.processed ?? imported + updated + failed + skipped;
+  const uploaded = imported + updated;
+  const notUploaded = failed + skipped;
+  const errorSummary =
+    result?.errorSummary && Object.keys(result.errorSummary).length > 0
+      ? result.errorSummary
+      : buildErrorSummary(result?.errors || []);
+
+  return {
+    imported,
+    updated,
+    failed,
+    skipped,
+    totalRows,
+    uploaded,
+    notUploaded,
+    errorSummary,
+  };
+};
+
 const ExcelUpload = ({ 
   moduleName, 
   onUploadComplete, 
@@ -13,8 +45,10 @@ const ExcelUpload = ({
   const [importMode, setImportMode] = useState('both');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [processingOnServer, setProcessingOnServer] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [showAllErrors, setShowAllErrors] = useState(false);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -31,6 +65,7 @@ const ExcelUpload = ({
       setFile(selectedFile);
       setError(null);
       setResult(null);
+      setShowAllErrors(false);
     }
   };
 
@@ -114,6 +149,8 @@ const ExcelUpload = ({
     setUploading(true);
     setError(null);
     setUploadProgress(0);
+    setProcessingOnServer(false);
+    setShowAllErrors(false);
 
     try {
       const formData = new FormData();
@@ -132,12 +169,16 @@ const ExcelUpload = ({
               (progressEvent.loaded * 100) / progressEvent.total
             );
             setUploadProgress(percentCompleted);
+            if (percentCompleted >= 100) {
+              setProcessingOnServer(true);
+            }
           }
         }
       );
 
       setResult(response.data);
       setUploading(false);
+      setProcessingOnServer(false);
       
       if (onUploadComplete) {
         onUploadComplete(response.data);
@@ -145,9 +186,17 @@ const ExcelUpload = ({
     } catch (error) {
       setError(error.response?.data?.error || error.message || 'Upload failed');
       setUploading(false);
+      setProcessingOnServer(false);
       setUploadProgress(0);
     }
   };
+
+  const totals = result ? getImportTotals(result) : null;
+  const visibleErrors = result?.errors
+    ? showAllErrors
+      ? result.errors
+      : result.errors.slice(0, 25)
+    : [];
 
   return (
     <div className="excel-upload-modal">
@@ -250,11 +299,21 @@ const ExcelUpload = ({
               <div className="progress-bar">
                 <div 
                   className="progress-fill" 
-                  style={{ width: `${uploadProgress}%` }}
+                  style={{ width: `${processingOnServer ? 100 : uploadProgress}%` }}
                 ></div>
               </div>
-              <span>{uploadProgress}%</span>
+              <span>
+                {processingOnServer
+                  ? 'Processing records...'
+                  : `${uploadProgress}%`}
+              </span>
             </div>
+          )}
+
+          {uploading && processingOnServer && (
+            <p className="import-report-hint">
+              File uploaded. Checking each row and building the import summary...
+            </p>
           )}
 
           {error && (
@@ -263,43 +322,65 @@ const ExcelUpload = ({
             </div>
           )}
 
-          {result && (
+          {result && totals && (
             <div className="result-message">
-              <h3>Import Results:</h3>
+              <h3>Import Summary</h3>
+
+              <p
+                className={`result-summary ${
+                  totals.notUploaded > 0 ? 'has-failures' : ''
+                }`}
+              >
+                {totals.notUploaded > 0
+                  ? `${totals.uploaded} of ${totals.totalRows} record(s) uploaded successfully. ${totals.notUploaded} could not be uploaded.`
+                  : `All ${totals.totalRows} record(s) uploaded successfully.`}
+              </p>
+
+              {totals.notUploaded > 0 && (
+                <div className="failed-rows-hint">
+                  <strong>Not uploaded:</strong>
+                  {totals.failed > 0 ? ` ${totals.failed} failed` : ''}
+                  {totals.failed > 0 && totals.skipped > 0 ? ',' : ''}
+                  {totals.skipped > 0 ? ` ${totals.skipped} skipped` : ''}
+                  {totals.failed > (result.errors?.length || 0)
+                    ? ` (showing first ${result.errors.length} of ${totals.failed} failed rows)`
+                    : ''}
+                </div>
+              )}
+
               <div className="result-stats">
+                <div className="stat-item info">
+                  <span className="stat-label">Total rows</span>
+                  <span className="stat-value">{totals.totalRows}</span>
+                </div>
                 <div className="stat-item success">
-                  <span className="stat-label">Imported:</span>
-                  <span className="stat-value">{result.imported || 0}</span>
+                  <span className="stat-label">Imported</span>
+                  <span className="stat-value">{totals.imported}</span>
                 </div>
                 <div className="stat-item info">
-                  <span className="stat-label">Updated:</span>
-                  <span className="stat-value">{result.updated || 0}</span>
+                  <span className="stat-label">Updated</span>
+                  <span className="stat-value">{totals.updated}</span>
                 </div>
                 <div className="stat-item error">
-                  <span className="stat-label">Failed:</span>
-                  <span className="stat-value">{result.failed || 0}</span>
+                  <span className="stat-label">Failed</span>
+                  <span className="stat-value">{totals.failed}</span>
                 </div>
-                {result.skipped > 0 && (
+                {totals.skipped > 0 && (
                   <div className="stat-item info">
-                    <span className="stat-label">Skipped:</span>
-                    <span className="stat-value">{result.skipped}</span>
-                  </div>
-                )}
-                {result.totalRows != null && (
-                  <div className="stat-item info">
-                    <span className="stat-label">Total rows:</span>
-                    <span className="stat-value">{result.totalRows}</span>
+                    <span className="stat-label">Skipped</span>
+                    <span className="stat-value">{totals.skipped}</span>
                   </div>
                 )}
               </div>
 
-              {result.errorSummary && Object.keys(result.errorSummary).length > 0 && (
-                <div className="errors-list">
-                  <h4>Error summary:</h4>
+              {Object.keys(totals.errorSummary).length > 0 && (
+                <div className="errors-list errors-list-prominent">
+                  <h4>Issue summary ({totals.notUploaded || Object.values(totals.errorSummary).reduce((sum, n) => sum + n, 0)} total)</h4>
                   <div className="errors-scroll">
-                    {Object.entries(result.errorSummary).map(([message, count]) => (
+                    {Object.entries(totals.errorSummary).map(([message, count]) => (
                       <div key={message} className="error-item">
-                        <strong>{count}×</strong> {message}
+                        <strong>{count}×</strong>
+                        <span className="error-message-text">{message}</span>
                       </div>
                     ))}
                   </div>
@@ -308,17 +389,26 @@ const ExcelUpload = ({
               
               {result.errors && result.errors.length > 0 && (
                 <div className="errors-list">
-                  <h4>Row errors ({result.errors.length}{result.failed > result.errors.length ? '+' : ''}):</h4>
+                  <h4>
+                    Row details ({result.errors.length}
+                    {totals.failed > result.errors.length ? ` of ${totals.failed}` : ''})
+                  </h4>
                   <div className="errors-scroll">
-                    {result.errors.slice(0, 25).map((err, index) => (
+                    {visibleErrors.map((err, index) => (
                       <div key={index} className="error-item">
-                        <strong>Row {err.row}:</strong> {err.field} — {err.message}
+                        <span className="error-row">Row {err.row}</span>
+                        {err.field ? <span className="error-field">{err.field}</span> : null}
+                        <span className="error-message-text">{err.message}</span>
                       </div>
                     ))}
-                    {result.errors.length > 25 && (
-                      <div className="more-errors">
-                        ... and {result.errors.length - 25} more errors shown in summary
-                      </div>
+                    {result.errors.length > 25 && !showAllErrors && (
+                      <button
+                        type="button"
+                        className="show-more-errors-btn"
+                        onClick={() => setShowAllErrors(true)}
+                      >
+                        Show all {result.errors.length} row issues
+                      </button>
                     )}
                   </div>
                 </div>
@@ -340,7 +430,7 @@ const ExcelUpload = ({
             onClick={handleUpload}
             disabled={!file || uploading}
           >
-            {uploading ? 'Uploading...' : 'Upload'}
+            {uploading ? (processingOnServer ? 'Processing...' : 'Uploading...') : 'Upload'}
           </button>
         </div>
       </div>

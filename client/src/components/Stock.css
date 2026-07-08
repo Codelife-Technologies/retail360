@@ -297,6 +297,12 @@
   background: #fef3c7;
 }
 
+.stock-sold-current-month {
+  text-align: center;
+  font-weight: 600;
+  color: #2563eb;
+}
+
 .no-data {
   text-align: center;
   color: #666;

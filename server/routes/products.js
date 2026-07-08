@@ -8,7 +8,7 @@ const Category = require('../models/Category');
 const Subcategory = require('../models/Subcategory');
 const logger = require('../utils/logger');
 const { paginate } = require('../utils/pagination');
-const { parseExcel, validateExcelData } = require('../utils/excelParser');
+const { parseExcel, validateExcelData, buildImportErrorSummary } = require('../utils/excelParser');
 const { generateTemplate, exportToExcel } = require('../utils/excelGenerator');
 const { parseSupplierLinksPayload } = require('../utils/productSuppliers');
 
@@ -1163,11 +1163,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
       }
     }
 
-    const errorSummary = errors.reduce((acc, err) => {
-      const key = err.message.split('.')[0].slice(0, 80);
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {});
+    const errorSummary = buildImportErrorSummary(errors);
 
     res.json({
       success: true,

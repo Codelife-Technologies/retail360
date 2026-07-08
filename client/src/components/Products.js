@@ -462,44 +462,15 @@ function Products() {
 
   const handleExcelUploadComplete = (result) => {
     fetchProducts(pagination.page, pagination.limit);
+
     const imported = result?.imported || 0;
     const updated = result?.updated || 0;
     const failed = result?.failed || 0;
-    const skipped = result?.skipped || 0;
-    const totalRows = result?.totalRows || 0;
+    const notUploaded = failed + (result?.skipped || 0);
 
-    const summary = [
-      `Total Excel rows: ${totalRows}`,
-      `New products: ${imported}`,
-      `Updated: ${updated}`,
-      `Failed: ${failed}`,
-      skipped ? `Skipped (empty rows): ${skipped}` : null,
-      result?.categoriesCreated
-        ? `Categories auto-created: ${result.categoriesCreated}`
-        : null,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    if (result?.errorSummary && Object.keys(result.errorSummary).length > 0) {
-      const topErrors = Object.entries(result.errorSummary)
-        .slice(0, 5)
-        .map(([msg, count]) => `• ${count}× ${msg}`)
-        .join('\n');
-      alert(`${summary}\n\nTop issues:\n${topErrors}\n\nSee upload dialog for row details.`);
-    } else if (failed > 0 && imported + updated === 0) {
-      const firstError = result?.errors?.[0]?.message || 'Check column headers and required fields.';
-      alert(`${summary}\n\n${firstError}`);
-      return;
-    } else if (failed > 0 || updated > 0) {
-      alert(summary);
+    if (notUploaded === 0 && (imported > 0 || updated > 0)) {
+      setShowExcelUpload(false);
     }
-
-    if (failed > 0 && imported + updated === 0) {
-      return;
-    }
-
-    setShowExcelUpload(false);
   };
 
   const handleInputChange = (e) => {

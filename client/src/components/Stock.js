@@ -60,6 +60,10 @@ function StockProductCell({ product }) {
 }
 
 function Stock() {
+  const currentMonthLabel = new Date().toLocaleDateString('en-IN', {
+    month: 'short',
+    year: 'numeric',
+  });
   const [stock, setStock] = useState([]);
   const [products, setProducts] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -204,6 +208,19 @@ function Stock() {
       fetchStock();
     }
     fetchLowStockAlerts();
+  };
+
+  const handleExcelUploadComplete = (result) => {
+    refreshStock();
+
+    const imported = result?.imported || 0;
+    const updated = result?.updated || 0;
+    const failed = result?.failed || 0;
+    const notUploaded = failed + (result?.skipped || 0);
+
+    if (notUploaded === 0 && (imported > 0 || updated > 0)) {
+      setShowExcelUpload(false);
+    }
   };
 
   const handleAdjustStock = (stockRecord) => {
@@ -386,10 +403,7 @@ function Stock() {
     }
   };
 
-  const getAvailableUnits = (record) => {
-    if (record.availableQuantity != null) return record.availableQuantity;
-    return Math.max(0, (record.quantity || 0) - (record.reservedQuantity || 0));
-  };
+  const getSoldCurrentMonth = (record) => record.soldCurrentMonth ?? 0;
 
   const filteredStock = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -410,14 +424,17 @@ function Stock() {
 
   const stockSummary = useMemo(() => {
     const recordCount = filteredStock.length;
-    const totalAvailable = filteredStock.reduce((sum, record) => sum + getAvailableUnits(record), 0);
+    const totalSoldCurrentMonth = filteredStock.reduce(
+      (sum, record) => sum + getSoldCurrentMonth(record),
+      0
+    );
     const totalQuantity = filteredStock.reduce((sum, record) => sum + (record.quantity || 0), 0);
     const totalReserved = filteredStock.reduce((sum, record) => sum + (record.reservedQuantity || 0), 0);
     const lowStockCount = filteredStock.filter(
       (record) => (record.quantity || 0) <= (record.minStockLevel || 0)
     ).length;
 
-    return { recordCount, totalAvailable, totalQuantity, totalReserved, lowStockCount };
+    return { recordCount, totalSoldCurrentMonth, totalQuantity, totalReserved, lowStockCount };
   }, [filteredStock]);
 
   const getSummaryScopeLabel = () => {
@@ -531,9 +548,9 @@ function Stock() {
         <div className="stock-status-stats">
           <div className="stock-stat stock-stat-primary">
             <span className="stock-stat-value">
-              {loading ? '—' : stockSummary.totalAvailable.toLocaleString()}
+              {loading ? '—' : stockSummary.totalSoldCurrentMonth.toLocaleString()}
             </span>
-            <span className="stock-stat-label">Total Available Units</span>
+            <span className="stock-stat-label">Sold ({currentMonthLabel})</span>
           </div>
           <div className="stock-stat">
             <span className="stock-stat-value">
@@ -595,7 +612,7 @@ function Stock() {
                 <th>SKU</th>
                 <th>Location</th>
                 <th>Quantity</th>
-                <th>Available</th>
+                <th>Sold ({currentMonthLabel})</th>
                 <th>Min Level</th>
                 <th>Last Updated</th>
                 <th>Actions</th>
@@ -640,7 +657,7 @@ function Stock() {
                       )}
                     </td>
                     <td>{stockRecord.quantity}</td>
-                    <td>{stockRecord.availableQuantity || stockRecord.quantity}</td>
+                    <td className="stock-sold-current-month">{getSoldCurrentMonth(stockRecord)}</td>
                     <td>{stockRecord.minStockLevel}</td>
                     <td>
                       {new Date(stockRecord.lastUpdated).toLocaleDateString()}
@@ -671,7 +688,7 @@ function Stock() {
         <ExcelUpload
           moduleName="stock"
           templateEndpoint="/stock/template"
-          onUploadComplete={() => refreshStock()}
+          onUploadComplete={handleExcelUploadComplete}
           onClose={() => setShowExcelUpload(false)}
         />
       )}
@@ -703,7 +720,10 @@ function Stock() {
             { label: 'Location', value: viewingStock.location?.name },
             { label: 'Location Code', value: viewingStock.location?.code },
             { label: 'Quantity', value: viewingStock.quantity },
-            { label: 'Available', value: viewingStock.availableQuantity ?? viewingStock.quantity },
+            {
+              label: `Sold (${currentMonthLabel})`,
+              value: getSoldCurrentMonth(viewingStock),
+            },
             { label: 'Min Stock Level', value: viewingStock.minStockLevel },
             {
               label: 'Last Updated',

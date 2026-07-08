@@ -117,6 +117,18 @@ function ProductDetailsModal({
                 label={`Sold (${replenishContext.pastThreeMonthsLabel || 'Past 3 months'})`}
                 value={replenishContext.salesPastThreeMonths}
               />
+              <ProductDetailField
+                label="Highest Monthly Sale (3 mo)"
+                value={replenishContext.highestMonthlySale}
+              />
+              <ProductDetailField
+                label="Req. Stock (Next Month)"
+                value={
+                  (replenishContext.requiredStockNextMonth ?? 0) > 0
+                    ? replenishContext.requiredStockNextMonth
+                    : '—'
+                }
+              />
               {replenishContext.showDateColumn && (
                 <ProductDetailField
                   label={`Sold (${replenishContext.specificDateLabel || 'Date'})`}
@@ -124,13 +136,7 @@ function ProductDetailsModal({
                 />
               )}
               <ProductDetailField label="Replenish Status" value={replenishContext.replenishStatus} />
-              {(replenishContext.refillQty ?? 0) > 0 && (
-                <ProductDetailField
-                  label={`Refill from Home (${replenishContext.homeLocationCode || 'Home'})`}
-                  value={replenishContext.refillQty}
-                />
-              )}
-              <ProductDetailField label="Reorder (after refill)" value={replenishContext.suggestedReorder} />
+              <ProductDetailField label="Reorder Qty" value={replenishContext.suggestedReorder} />
             </div>
           </div>
         )}

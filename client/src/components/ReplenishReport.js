@@ -150,7 +150,15 @@ function ReplenishReport({ onNavigate }) {
   const specificDateInfo = reportData?.specificDate;
   const dateWindow = reportData?.dateWindow;
   const showDateColumn = Boolean(specificDateInfo?.value);
-  const tableColSpan = showDateColumn ? 12 : 11;
+  const tableColSpan = showDateColumn ? 11 : 10;
+
+  const needsReplenishHighlight = (item) =>
+    item.replenishStatus === 'REORDER' || item.replenishStatus === 'LOW';
+
+  const formatRequiredStockNextMonth = (value) => {
+    if (value == null || Number.isNaN(value) || value <= 0) return '—';
+    return value;
+  };
 
   const getRowKey = (item) => `${item.location?._id}-${item.product?._id}`;
 
@@ -372,7 +380,10 @@ function ReplenishReport({ onNavigate }) {
     items.map((item) => {
       const rowKey = getRowKey(item);
       return (
-      <tr key={rowKey}>
+      <tr
+        key={rowKey}
+        className={needsReplenishHighlight(item) ? 'replenish-row-warning' : undefined}
+      >
         <td className="font-semibold">{item.location?.name || '-'}</td>
         <td
           className="font-monospace font-semibold replenish-product-link"
@@ -403,20 +414,11 @@ function ReplenishReport({ onNavigate }) {
             {item.salesOnDate ?? 0}
           </td>
         )}
-        <td className="text-center">
-          <span className={`replenish-badge status-${item.replenishStatus.toLowerCase()}`}>
-            {item.replenishStatus}
-          </span>
-        </td>
         <td
-          className="text-center font-bold refill-qty-cell"
-          title={
-            item.refillQty > 0
-              ? `Transfer ${item.refillQty} unit(s) from Home`
-              : 'No home stock available to refill'
-          }
+          className="text-center font-bold required-stock-cell"
+          title={`Peak monthly sale (${item.highestMonthlySale ?? 0}) minus available stock (${item.inventory.availableStock ?? 0})`}
         >
-          {item.refillQty > 0 ? item.refillQty : '-'}
+          {formatRequiredStockNextMonth(item.requiredStockNextMonth)}
         </td>
         <td
           className="text-center font-bold text-violet"
@@ -469,14 +471,13 @@ function ReplenishReport({ onNavigate }) {
             {sortField === 'salesOnDate' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
           </th>
         )}
-        <th className="text-center">Status</th>
         <th
-          onClick={() => handleSort('refillQty')}
+          onClick={() => handleSort('requiredStockNextMonth')}
           className="sortable text-center"
-          title="Units that can be restocked from Home"
+          title="Units needed for next month: highest monthly sale minus available stock"
         >
-          Refill
-          {sortField === 'refillQty' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
+          Req. Stock (Next Mo.)
+          {sortField === 'requiredStockNextMonth' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
         </th>
         <th
           onClick={() => handleSort('reorderQty')}
@@ -510,8 +511,10 @@ function ReplenishReport({ onNavigate }) {
         <div className="title-area">
           <h1>Inventory Replenish Report</h1>
           <p>
-            Location-wise stock with sales for the previous month and the past 3 months
-            combined. Pick a specific date to see daily sold units.
+            Location-wise stock with sales for the previous month and past 3 months total.
+            Required stock for next month is how many units are still
+            needed after available stock to cover peak monthly demand. Rows in yellow need
+            reorder or are low stock.
           </p>
         </div>
         <div className="replenish-header-actions">
@@ -1057,9 +1060,10 @@ function ReplenishReport({ onNavigate }) {
             homeLocationCode: viewingReplenishItem.homeInventory?.locationCode || reportData?.homeBranch?.code,
             salesCurrent: viewingReplenishItem.salesCurrent ?? 0,
             salesPastThreeMonths: viewingReplenishItem.salesPastThreeMonths ?? 0,
+            highestMonthlySale: viewingReplenishItem.highestMonthlySale ?? 0,
+            requiredStockNextMonth: viewingReplenishItem.requiredStockNextMonth ?? 0,
             salesOnDate: viewingReplenishItem.salesOnDate,
             replenishStatus: viewingReplenishItem.replenishStatus,
-            refillQty: viewingReplenishItem.refillQty ?? 0,
             suggestedReorder:
               (viewingReplenishItem.reorderQty ?? 0) > 0
                 ? viewingReplenishItem.reorderQty

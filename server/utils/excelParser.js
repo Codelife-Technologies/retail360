@@ -87,5 +87,13 @@ function validateExcelData(data, schema) {
   };
 }
 
-module.exports = { parseExcel, validateExcelData };
+function buildImportErrorSummary(errors = []) {
+  return errors.reduce((acc, err) => {
+    const key = (err.message || 'Unknown error').split('.')[0].slice(0, 120);
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+module.exports = { parseExcel, validateExcelData, buildImportErrorSummary };
 

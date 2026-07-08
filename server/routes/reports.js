@@ -312,6 +312,13 @@ function sumPastThreeMonthsSales(salesByMonth, monthBuckets) {
   );
 }
 
+function highestMonthlySaleInPastThreeMonths(salesByMonth, monthBuckets) {
+  return [0, 1, 2].reduce(
+    (max, idx) => Math.max(max, salesByMonth[monthBuckets[idx]?.key] || 0),
+    0
+  );
+}
+
 function computeSuggestedReorderQty(lastMonthSales, pastThreeMonthsSales) {
   const avgThreeMonthsSales = pastThreeMonthsSales / 3;
   return Math.max(lastMonthSales, Math.ceil(avgThreeMonthsSales));
@@ -361,6 +368,8 @@ function buildProductRow(product, loc, stockRec, monthBuckets, salesMonthlyMap, 
 
   const lastMonthSales = salesByMonth[monthBuckets[0].key] || 0;
   const pastThreeMonthsSales = sumPastThreeMonthsSales(salesByMonth, monthBuckets);
+  const highestMonthlySale = highestMonthlySaleInPastThreeMonths(salesByMonth, monthBuckets);
+  const requiredStockNextMonth = Math.max(0, highestMonthlySale - availableStock);
 
   let suggestedReorder = 0;
   if (status === 'REORDER' || status === 'LOW') {
@@ -393,7 +402,8 @@ function buildProductRow(product, loc, stockRec, monthBuckets, salesMonthlyMap, 
     salesByMonth,
     salesCurrent: lastMonthSales,
     salesPastThreeMonths: pastThreeMonthsSales,
-    salesAvgThreeMonths: Math.ceil(pastThreeMonthsSales / 3),
+    highestMonthlySale,
+    requiredStockNextMonth,
     ...(salesOnDate !== undefined ? { salesOnDate } : {}),
     replenishStatus: status,
     suggestedReorder,

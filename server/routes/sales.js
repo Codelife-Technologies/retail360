@@ -4,7 +4,7 @@ const multer = require('multer');
 const Sale = require('../models/Sale');
 const logger = require('../utils/logger');
 const { paginate } = require('../utils/pagination');
-const { parseExcel } = require('../utils/excelParser');
+const { parseExcel, buildImportErrorSummary } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
 const { computeCategoryTax } = require('../utils/taxRates');
 const { isUaeSalesLocation } = require('../utils/locationCurrency');
@@ -502,6 +502,8 @@ router.post('/import', upload.single('file'), async (req, res) => {
       skipped,
       failed,
       totalRows: rows.length,
+      processed: imported + updated + failed + skipped,
+      errorSummary: buildImportErrorSummary(errors),
       errors: errors.slice(0, 100),
     });
   } catch (error) {

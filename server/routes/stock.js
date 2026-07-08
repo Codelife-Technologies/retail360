@@ -5,9 +5,14 @@ const Stock = require('../models/Stock');
 const Product = require('../models/Product');
 const Location = require('../models/Location');
 const { paginate } = require('../utils/pagination');
-const { parseExcel } = require('../utils/excelParser');
+const { parseExcel, buildImportErrorSummary } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
 const logger = require('../utils/logger');
+const {
+  getCurrentMonthRange,
+  buildSoldCurrentMonthMap,
+  enrichStockWithSoldCurrentMonth,
+} = require('../utils/stockSalesUtils');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -15,6 +20,13 @@ const upload = multer({
 });
 
 const PRODUCT_POPULATE_FIELDS = 'name title sku brandName images';
+
+async function attachSoldCurrentMonth(stockRecords) {
+  const records = Array.isArray(stockRecords) ? stockRecords : [stockRecords];
+  const salesMap = await buildSoldCurrentMonthMap();
+  const enriched = enrichStockWithSoldCurrentMonth(records, salesMap);
+  return Array.isArray(stockRecords) ? enriched : enriched[0];
+}
 
 // GET all stock with filters (with pagination)
 router.get('/', async (req, res) => {
@@ -40,13 +52,17 @@ router.get('/', async (req, res) => {
           { path: 'location', select: 'name code city' }
         ]
       });
-      res.json(result);
+      result.data = await attachSoldCurrentMonth(result.data);
+      res.json({
+        ...result,
+        currentMonthLabel: getCurrentMonthRange().label,
+      });
     } else {
       const stock = await Stock.find(query)
         .populate('product', PRODUCT_POPULATE_FIELDS)
         .populate('location', 'name code city')
         .sort({ createdAt: -1 });
-      res.json(stock);
+      res.json(await attachSoldCurrentMonth(stock));
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -60,7 +76,7 @@ router.get('/product/:productId', async (req, res) => {
       .populate('product', PRODUCT_POPULATE_FIELDS)
       .populate('location', 'name code city')
       .sort({ location: 1 });
-    res.json(stock);
+    res.json(await attachSoldCurrentMonth(stock));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -72,7 +88,7 @@ router.get('/location/:locationId', async (req, res) => {
     const stock = await Stock.find({ location: req.params.locationId })
       .populate('product', PRODUCT_POPULATE_FIELDS)
       .sort({ product: 1 });
-    res.json(stock);
+    res.json(await attachSoldCurrentMonth(stock));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -91,7 +107,7 @@ router.get('/:productId/:locationId', async (req, res) => {
     if (!stock) {
       return res.status(404).json({ error: 'Stock record not found' });
     }
-    res.json(stock);
+    res.json(await attachSoldCurrentMonth(stock));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -333,7 +349,17 @@ router.post('/import', upload.single('file'), async (req, res) => {
       }
     }
 
-    res.json({ success: true, imported, updated, failed, errors: errors.slice(0, 100) });
+    res.json({
+      success: true,
+      totalRows: excelData.length,
+      imported,
+      updated,
+      failed,
+      skipped: 0,
+      processed: imported + updated + failed,
+      errorSummary: buildImportErrorSummary(errors),
+      errors: errors.slice(0, 100),
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

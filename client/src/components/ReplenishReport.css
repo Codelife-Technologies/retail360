@@ -450,6 +450,18 @@
   font-weight: 600;
 }
 
+.report-table tbody tr.replenish-row-warning {
+  background: #fef3c7;
+}
+
+.report-table tbody tr.replenish-row-warning:hover {
+  background: #fde68a;
+}
+
+.required-stock-cell {
+  min-width: 5.5rem;
+}
+
 .refill-qty-cell {
   color: #0369a1;
 }
