@@ -8,6 +8,8 @@ const {
   applyEmployeeScope,
   recordMatchesScope,
   getEmployeeAttendanceTimes,
+  getAttendanceTimesForUser,
+  ensureUserAttendanceSession,
 } = require('../utils/attendanceAccess');
 const { calcWorkingHoursFromTimes } = require('../../utils/attendanceSession');
 
@@ -169,7 +171,14 @@ router.get('/mark-defaults', async (req, res) => {
     }
 
     const today = startOfDay(new Date());
-    const times = await getEmployeeAttendanceTimes(employeeId, today);
+    let times = { checkIn: '', checkOut: '' };
+
+    if (!scope.canManageAll) {
+      await ensureUserAttendanceSession(req.user.id, { allowCurrentTime: true });
+      times = await getAttendanceTimesForUser(req.user.id, today);
+    } else {
+      times = await getEmployeeAttendanceTimes(employeeId, today);
+    }
     const existing = await Attendance.findOne({
       employee: employeeId,
       date: { $gte: today, $lte: endOfDay(today) },
@@ -233,7 +242,14 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Employee is required' });
     }
 
-    const sessionTimes = await getEmployeeAttendanceTimes(employeeId, today);
+    let sessionTimes = { checkIn: '', checkOut: '' };
+    if (!scope.canManageAll) {
+      await ensureUserAttendanceSession(req.user.id, { allowCurrentTime: true });
+      sessionTimes = await getAttendanceTimesForUser(req.user.id, today);
+    } else {
+      sessionTimes = await getEmployeeAttendanceTimes(employeeId, today);
+    }
+
     const checkIn = req.body.checkIn || sessionTimes.checkIn;
     const checkOut = req.body.checkOut || sessionTimes.checkOut;
     const workingHours =

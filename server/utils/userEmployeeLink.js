@@ -60,6 +60,7 @@ async function findUserForEmployee(employee) {
     $or: [
       { username: { $regex: new RegExp(`^${escapeRegex(employee.firstName || '')}$`, 'i') } },
       { username: { $regex: new RegExp(`^${escapeRegex(fullName)}$`, 'i') } },
+      { username: { $regex: new RegExp(`^${escapeRegex(employee.employeeId || '')}$`, 'i') } },
     ],
   })
     .select(selectFields)

@@ -2,7 +2,7 @@ const User = require('../../models/User');
 const Employee = require('../models/Employee');
 const { getEffectivePermissions } = require('../../middleware/auth');
 const { findUserForEmployee } = require('../../utils/userEmployeeLink');
-const { getDateKey } = require('../../utils/attendanceSession');
+const { getDateKey, ensureTodayAttendanceSession } = require('../../utils/attendanceSession');
 const { startOfDay, endOfDay, formatTimeHHMM } = require('./employeeId');
 
 const ATTENDANCE_ADMIN_ROLE_CODES = new Set(['admin', 'super_admin', 'hr']);
@@ -85,15 +85,41 @@ function readSessionTimes(user, forDate = new Date()) {
   return { checkIn, checkOut };
 }
 
+async function getAttendanceTimesForUser(userId, forDate = new Date()) {
+  const user = await User.findById(userId)
+    .select('lastLoginAt lastLogoutAt attendanceSession')
+    .lean();
+  return readSessionTimes(user, forDate);
+}
+
+async function ensureUserAttendanceSession(userId, options = {}) {
+  const user = await User.findById(userId);
+  if (!user) {
+    return null;
+  }
+  const changed = ensureTodayAttendanceSession(user, options);
+  if (changed) {
+    await user.save();
+  }
+  return user;
+}
+
 async function getEmployeeAttendanceTimes(employeeId, forDate = new Date()) {
   const employee = await Employee.findById(employeeId)
-    .select('email firstName lastName')
+    .select('email firstName lastName employeeId')
     .lean();
   if (!employee) {
     return { checkIn: '', checkOut: '' };
   }
 
-  const user = await findUserForEmployee(employee);
+  let user = await findUserForEmployee(employee);
+  if (user?._id) {
+    await ensureUserAttendanceSession(user._id, { allowCurrentTime: false });
+    user = await User.findById(user._id)
+      .select('lastLoginAt lastLogoutAt attendanceSession')
+      .lean();
+  }
+
   return readSessionTimes(user, forDate);
 }
 
@@ -141,6 +167,8 @@ module.exports = {
   getEmployeeIdForUser,
   getEmployeeCheckInTime,
   getEmployeeAttendanceTimes,
+  getAttendanceTimesForUser,
+  ensureUserAttendanceSession,
   resolveAttendanceScope,
   applyEmployeeScope,
   recordMatchesScope,

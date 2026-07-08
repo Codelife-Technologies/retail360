@@ -48,6 +48,35 @@ function applyLogoutToAttendanceSession(user) {
   user.lastLogoutAt = now;
 }
 
+function ensureTodayAttendanceSession(user, { allowCurrentTime = false } = {}) {
+  const now = new Date();
+  const todayKey = getDateKey(now);
+  const session = user.attendanceSession || {};
+
+  if (session.date === todayKey && session.checkInAt) {
+    user.attendanceSession.lastLoginAt = session.lastLoginAt || session.checkInAt;
+    user.lastLoginAt = user.lastLoginAt || session.checkInAt;
+    return false;
+  }
+
+  if (user.lastLoginAt && getDateKey(user.lastLoginAt) === todayKey) {
+    user.attendanceSession = {
+      date: todayKey,
+      checkInAt: user.lastLoginAt,
+      checkOutAt: session.date === todayKey ? session.checkOutAt || null : null,
+      lastLoginAt: user.lastLoginAt,
+    };
+    return true;
+  }
+
+  if (allowCurrentTime) {
+    applyLoginToAttendanceSession(user);
+    return true;
+  }
+
+  return false;
+}
+
 function calcWorkingHoursFromTimes(checkIn, checkOut) {
   if (!checkIn || !checkOut) return 0;
   const [inH, inM] = checkIn.split(':').map(Number);
@@ -61,5 +90,6 @@ module.exports = {
   getDateKey,
   applyLoginToAttendanceSession,
   applyLogoutToAttendanceSession,
+  ensureTodayAttendanceSession,
   calcWorkingHoursFromTimes,
 };

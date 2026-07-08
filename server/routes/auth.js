@@ -10,6 +10,7 @@ const { findUserByLoginIdentifier } = require('../utils/userEmployeeLink');
 const {
   applyLoginToAttendanceSession,
   applyLogoutToAttendanceSession,
+  ensureTodayAttendanceSession,
 } = require('../utils/attendanceSession');
 
 // POST /login - no auth required
@@ -45,14 +46,20 @@ router.post('/login', async (req, res) => {
 // GET /me - requires auth
 router.get('/me', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id)
+    const userDoc = await User.findById(req.user.id)
       .populate('roles', 'name code')
-      .populate('groups', 'name code')
-      .select('-password')
-      .lean();
-    if (!user) {
+      .populate('groups', 'name code');
+    if (!userDoc) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    const sessionChanged = ensureTodayAttendanceSession(userDoc, { allowCurrentTime: false });
+    if (sessionChanged) {
+      await userDoc.save();
+    }
+
+    const user = userDoc.toObject();
+    delete user.password;
     const permissions = await getEffectivePermissions(req.user.id);
     res.json({ ...user, permissions: Array.from(permissions) });
   } catch (error) {

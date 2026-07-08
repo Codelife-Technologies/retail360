@@ -201,7 +201,7 @@ function EmployeeAttendanceContent({ employeeId }) {
 
             {!todayDefaults?.checkIn && !alreadyMarked && (
               <p className="ed-attendance-hint">
-                Log in to the app first. Your check-in time will appear here automatically.
+                Check-in time is recorded when you log in. If it is missing, log out and sign in again, then return to this page.
               </p>
             )}
 
