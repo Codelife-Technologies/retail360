@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Attendance = require('../models/Attendance');
 const { paginate } = require('../../utils/pagination');
-const { startOfDay, endOfDay } = require('../utils/employeeId');
+const { startOfDay, endOfDay, formatTimeHHMM } = require('../utils/employeeId');
 const {
   resolveAttendanceScope,
   applyEmployeeScope,
@@ -11,8 +11,21 @@ const {
   getAttendanceTimesForUser,
   ensureUserAttendanceSession,
   isSelfAttendanceRequest,
+  withComputedWorkingHours,
 } = require('../utils/attendanceAccess');
-const { calcWorkingHoursFromTimes } = require('../../utils/attendanceSession');
+const { calcWorkingHoursFromTimes, getDateKey } = require('../../utils/attendanceSession');
+
+function enrichAttendanceRecord(record) {
+  if (!record) return record;
+  if (Array.isArray(record)) {
+    return record.map(enrichAttendanceRecord);
+  }
+  const plain = withComputedWorkingHours(record);
+  if (plain.employee && typeof plain.employee.toObject === 'function') {
+    plain.employee = plain.employee.toObject();
+  }
+  return plain;
+}
 
 function parseDateRange(date, month, year) {
   if (date) {
@@ -137,6 +150,7 @@ router.get('/', async (req, res) => {
           return name.includes(term) || (emp.employeeId || '').toLowerCase().includes(term);
         });
       }
+      result.data = enrichAttendanceRecord(result.data);
       return res.json(result);
     }
 
@@ -150,7 +164,7 @@ router.get('/', async (req, res) => {
         return name.includes(term) || (emp.employeeId || '').toLowerCase().includes(term);
       });
     }
-    res.json(records);
+    res.json(enrichAttendanceRecord(records));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -189,13 +203,18 @@ router.get('/mark-defaults', async (req, res) => {
       date: { $gte: today, $lte: endOfDay(today) },
     }).lean();
 
+    const isToday = getDateKey(today) === getDateKey(new Date());
+    const effectiveCheckOut = times.checkOut
+      || (isToday && times.checkIn ? formatTimeHHMM(new Date()) : '');
+
     res.json({
       date: today.toISOString().slice(0, 10),
       checkIn: times.checkIn,
       checkOut: times.checkOut,
-      workingHours: calcWorkingHoursFromTimes(times.checkIn, times.checkOut),
+      workingHours: calcWorkingHoursFromTimes(times.checkIn, effectiveCheckOut),
+      hoursInProgress: isToday && Boolean(times.checkIn) && !times.checkOut,
       alreadyMarked: Boolean(existing),
-      existingRecord: existing,
+      existingRecord: existing ? withComputedWorkingHours(existing) : null,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -216,7 +235,7 @@ router.get('/:id', async (req, res) => {
     if (!recordMatchesScope(record.employee?._id || record.employee, scope)) {
       return res.status(403).json({ error: 'You can only view your own attendance records' });
     }
-    res.json(record);
+    res.json(enrichAttendanceRecord(record));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -268,10 +287,9 @@ router.post('/', async (req, res) => {
       scope.canManageAll && req.body.checkOut != null && req.body.checkOut !== ''
         ? req.body.checkOut
         : (req.body.checkOut || sessionTimes.checkOut);
-    const workingHours =
-      req.body.workingHours != null && req.body.workingHours !== ''
-        ? req.body.workingHours
-        : calcWorkingHoursFromTimes(checkIn, checkOut);
+    const nowTime = formatTimeHHMM(new Date());
+    const resolvedCheckOut = checkOut
+      || ((selfRequest || !scope.canManageAll) ? nowTime : '');
 
     if ((selfRequest || !scope.canManageAll) && !checkIn) {
       return res.status(400).json({
@@ -286,16 +304,15 @@ router.post('/', async (req, res) => {
 
     if (existing) {
       if (selfRequest || !scope.canManageAll) {
-        if (checkOut) existing.checkOut = checkOut;
+        if (resolvedCheckOut) existing.checkOut = resolvedCheckOut;
         if (checkIn && !existing.checkIn) existing.checkIn = checkIn;
-        existing.workingHours = calcWorkingHoursFromTimes(existing.checkIn, existing.checkOut);
         if (req.body.notes != null) existing.notes = req.body.notes;
         if (req.body.status != null) {
           existing.status = resolveEmployeeSelfStatus(req.body.status, existing.status);
         }
         await existing.save();
         await existing.populate('employee', 'employeeId firstName lastName department photo');
-        return res.json(existing);
+        return res.json(enrichAttendanceRecord(existing));
       }
       return res.status(400).json({ error: 'Attendance already marked for this employee today' });
     }
@@ -308,8 +325,7 @@ router.post('/', async (req, res) => {
       employee: employeeId,
       date: today,
       checkIn,
-      checkOut,
-      workingHours,
+      checkOut: resolvedCheckOut,
       status: defaultStatus,
       notes: req.body.notes || '',
     };
@@ -317,7 +333,7 @@ router.post('/', async (req, res) => {
     const record = new Attendance(payload);
     await record.save();
     await record.populate('employee', 'employeeId firstName lastName department photo');
-    res.status(201).json(record);
+    res.status(201).json(enrichAttendanceRecord(record));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -335,19 +351,16 @@ router.put('/:id', async (req, res) => {
 
     const payload = { ...req.body };
     delete payload.date;
+    delete payload.workingHours;
 
     const checkIn = payload.checkIn != null ? payload.checkIn : existing.checkIn;
     const checkOut = payload.checkOut != null ? payload.checkOut : existing.checkOut;
-    if (payload.workingHours == null || payload.workingHours === '') {
-      payload.workingHours = calcWorkingHoursFromTimes(checkIn, checkOut);
-    }
+    payload.workingHours = calcWorkingHoursFromTimes(checkIn, checkOut);
 
-    const record = await Attendance.findByIdAndUpdate(req.params.id, payload, {
-      new: true,
-      runValidators: true,
-    }).populate('employee', 'employeeId firstName lastName department photo');
-    if (!record) return res.status(404).json({ error: 'Attendance record not found' });
-    res.json(record);
+    Object.assign(existing, payload);
+    await existing.save();
+    await existing.populate('employee', 'employeeId firstName lastName department photo');
+    res.json(enrichAttendanceRecord(existing));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

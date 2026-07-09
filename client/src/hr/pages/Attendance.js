@@ -14,7 +14,9 @@ import HrKpiCard from '../components/HrKpiCard';
 import HrPagination from '../components/HrPagination';
 import HrStatusBadge from '../components/HrStatusBadge';
 import HrEmployeeAvatar from '../components/HrEmployeeAvatar';
+import TimeInput12 from '../components/TimeInput12';
 import { extractList, extractPagination, formatDate, employeeName, toInputDate } from '../utils/hrUtils';
+import { calcWorkingHoursFromTimes, resolveWorkingHours, formatWorkingHoursDisplay, isWorkingHoursInProgress, formatTime12Hour } from '../utils/attendanceUtils';
 
 const STATUS_OPTIONS = ['Present', 'Absent', 'Half Day', 'Leave', 'Holiday', 'Work From Home'];
 
@@ -23,7 +25,6 @@ const emptyForm = () => ({
   date: toInputDate(new Date()),
   checkIn: '',
   checkOut: '',
-  workingHours: 0,
   status: 'Present',
   notes: '',
 });
@@ -35,15 +36,6 @@ const formatTodayLabel = () =>
     month: 'short',
     year: 'numeric',
   });
-
-function calcWorkingHoursFromTimes(checkIn, checkOut) {
-  if (!checkIn || !checkOut) return 0;
-  const [inH, inM] = checkIn.split(':').map(Number);
-  const [outH, outM] = checkOut.split(':').map(Number);
-  const minutes = outH * 60 + outM - (inH * 60 + inM);
-  if (minutes <= 0) return 0;
-  return Math.round((minutes / 60) * 10) / 10;
-}
 
 function Attendance() {
   const [viewMode, setViewMode] = useState('daily');
@@ -90,7 +82,6 @@ function Attendance() {
         date: res.data?.date || toInputDate(new Date()),
         checkIn: res.data?.checkIn || '',
         checkOut: res.data?.checkOut || '',
-        workingHours: res.data?.workingHours ?? calcWorkingHoursFromTimes(res.data?.checkIn, res.data?.checkOut),
       }));
     } catch (error) {
       console.error('Error loading attendance defaults:', error);
@@ -202,12 +193,10 @@ function Attendance() {
   };
 
   const handleTimeChange = (field, value) => {
-    setFormData((f) => {
-      const next = { ...f, [field]: value };
-      next.workingHours = calcWorkingHoursFromTimes(next.checkIn, next.checkOut);
-      return next;
-    });
+    setFormData((f) => ({ ...f, [field]: value }));
   };
+
+  const formWorkingHours = calcWorkingHoursFromTimes(formData.checkIn, formData.checkOut);
 
   const openAdd = () => {
     setEditingRecord(null);
@@ -222,7 +211,6 @@ function Attendance() {
       date: toInputDate(record.date),
       checkIn: record.checkIn || '',
       checkOut: record.checkOut || '',
-      workingHours: record.workingHours || 0,
       status: record.status || 'Present',
       notes: record.notes || '',
     });
@@ -236,10 +224,17 @@ function Attendance() {
       return;
     }
     try {
+      const payload = {
+        employee: formData.employee,
+        checkIn: formData.checkIn,
+        checkOut: formData.checkOut,
+        status: formData.status,
+        notes: formData.notes,
+      };
       if (editingRecord) {
-        await hrAttendanceAPI.update(editingRecord._id, formData);
+        await hrAttendanceAPI.update(editingRecord._id, payload);
       } else {
-        await hrAttendanceAPI.create(formData);
+        await hrAttendanceAPI.create(payload);
       }
       setShowModal(false);
       fetchRecords();
@@ -451,9 +446,13 @@ function Attendance() {
                       </span>
                     </td>
                     <td>{formatDate(row.date)}</td>
-                    <td>{row.checkIn || '—'}</td>
-                    <td>{row.checkOut || '—'}</td>
-                    <td>{row.workingHours ?? '—'}</td>
+                    <td>{formatTime12Hour(row.checkIn)}</td>
+                    <td>{formatTime12Hour(row.checkOut)}</td>
+                    <td>
+                      {formatWorkingHoursDisplay(resolveWorkingHours(row), {
+                        inProgress: isWorkingHoursInProgress(row),
+                      })}
+                    </td>
                     <td><HrStatusBadge status={row.status} /></td>
                     {canManageAll && (
                       <td>
@@ -510,11 +509,10 @@ function Attendance() {
                   </div>
                   <div className="hr-form-group">
                     <label>Check In</label>
-                    <input
-                      type="time"
+                    <TimeInput12
                       value={formData.checkIn}
                       disabled={loadingDefaults && !editingRecord}
-                      onChange={(e) => handleTimeChange('checkIn', e.target.value)}
+                      onChange={(value) => handleTimeChange('checkIn', value)}
                     />
                     {!editingRecord && (
                       <small className="hr-field-hint">
@@ -526,11 +524,10 @@ function Attendance() {
                   </div>
                   <div className="hr-form-group">
                     <label>Check Out</label>
-                    <input
-                      type="time"
+                    <TimeInput12
                       value={formData.checkOut}
                       disabled={loadingDefaults && !editingRecord}
-                      onChange={(e) => handleTimeChange('checkOut', e.target.value)}
+                      onChange={(value) => handleTimeChange('checkOut', value)}
                     />
                     {!editingRecord && (
                       <small className="hr-field-hint">
@@ -543,13 +540,12 @@ function Attendance() {
                   <div className="hr-form-group">
                     <label>Working Hours</label>
                     <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={formData.workingHours}
-                      onChange={(e) => setFormData((f) => ({ ...f, workingHours: parseFloat(e.target.value) || 0 }))}
+                      type="text"
+                      readOnly
+                      className="hr-input-readonly"
+                      value={formatWorkingHoursDisplay(formWorkingHours)}
                     />
-                    <small className="hr-field-hint">Auto-calculated from check-in/out; you can override manually.</small>
+                    <small className="hr-field-hint">Calculated automatically from check-in and check-out times.</small>
                   </div>
                   <div className="hr-form-group">
                     <label>Status</label>

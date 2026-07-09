@@ -1,25 +1,29 @@
 .mis-container {
-  padding: 2rem;
+  padding: 1.5rem 1.5rem 0;
   height: 100%;
   width: 100%;
   box-sizing: border-box;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
 }
 
 @media (min-width: 1024px) {
   .mis-container {
-    padding: 2rem 3rem;
+    padding: 1.5rem 2rem 0;
   }
 }
 
 @media (min-width: 1440px) {
   .mis-container {
-    padding: 2.5rem 4rem;
+    padding: 2rem 2.5rem 0;
   }
 }
 
 .mis-header {
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
+  flex-shrink: 0;
 }
 
 .mis-header h1 {
@@ -30,13 +34,15 @@
 
 .mis-tabs {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 2rem;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
   border-bottom: 2px solid #e5e7eb;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .mis-tab {
-  padding: 1rem 2rem;
+  padding: 0.75rem 1.25rem;
   background: none;
   border: none;
   border-bottom: 3px solid transparent;
@@ -59,7 +65,39 @@
 }
 
 .mis-content {
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   box-sizing: border-box;
+  overflow: hidden;
+}
+
+.mis-report-panel {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+
+.mis-report-panel .sales-container.sales-report-page,
+.mis-report-panel .stock-container,
+.mis-report-panel .replenish-report-container {
+  height: auto;
+  min-height: 100%;
+}
+
+.mis-report-panel .sales-container.sales-report-page {
+  padding: 0;
+}
+
+.mis-report-panel .stock-container {
+  padding: 1rem 0 2rem;
+}
+
+.mis-report-panel .replenish-report-container {
+  padding: 0;
+}
+
+.mis-report-panel .purchase-report {
+  padding: 0 0 2rem;
 }
 

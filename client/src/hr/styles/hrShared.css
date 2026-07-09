@@ -457,6 +457,33 @@
   line-height: 1.35;
 }
 
+.hr-time-display {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 0.35rem;
+}
+
+.hr-time-input-12-fields {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.hr-time-input-12-fields select {
+  min-width: 4.5rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  background: #fff;
+}
+
+.hr-time-input-12-sep {
+  font-weight: 700;
+  color: #6b7280;
+}
+
 .hr-form-error {
   color: #ef4444;
   font-size: 0.8rem;

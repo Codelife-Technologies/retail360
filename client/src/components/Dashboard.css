@@ -4,6 +4,7 @@
   width: 100%;
   box-sizing: border-box;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .dashboard h1 {

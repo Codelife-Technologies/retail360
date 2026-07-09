@@ -5,6 +5,7 @@ import HrKpiCard from '../../hr/components/HrKpiCard';
 import HrPagination from '../../hr/components/HrPagination';
 import HrStatusBadge from '../../hr/components/HrStatusBadge';
 import { extractList, extractPagination, formatDate } from '../../hr/utils/hrUtils';
+import { resolveWorkingHours, formatWorkingHoursDisplay, isWorkingHoursInProgress, formatTime12Hour } from '../../hr/utils/attendanceUtils';
 
 const WORK_LOCATIONS = [
   { id: 'office', label: 'Office', status: 'Present', icon: '🏢' },
@@ -42,6 +43,7 @@ function EmployeeAttendanceContent({ employeeId }) {
   });
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState(null);
+  const [liveTick, setLiveTick] = useState(0);
 
   const loadTodayDefaults = useCallback(async () => {
     try {
@@ -102,6 +104,18 @@ function EmployeeAttendanceContent({ employeeId }) {
     fetchRecords();
   }, [fetchRecords]);
 
+  useEffect(() => {
+    const inProgress = todayDefaults?.hoursInProgress
+      || isWorkingHoursInProgress(todayDefaults?.existingRecord || {});
+    if (!inProgress) return undefined;
+
+    const timer = setInterval(() => {
+      setLiveTick((tick) => tick + 1);
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, [todayDefaults]);
+
   const handleMarkAttendance = async () => {
     if (!todayDefaults?.checkIn && !todayDefaults?.alreadyMarked) {
       alert('No login recorded today. Log in to the app first, then mark attendance.');
@@ -124,6 +138,23 @@ function EmployeeAttendanceContent({ employeeId }) {
 
   const todayRecord = todayDefaults?.existingRecord;
   const alreadyMarked = Boolean(todayDefaults?.alreadyMarked);
+  const todayCheckIn = todayDefaults?.checkIn || todayRecord?.checkIn || '';
+  const todayCheckOut = todayRecord?.checkOut || todayDefaults?.checkOut || '';
+  const todayHoursInProgress = Boolean(
+    todayDefaults?.hoursInProgress
+    || isWorkingHoursInProgress({
+      checkIn: todayCheckIn,
+      checkOut: todayCheckOut,
+      date: todayDefaults?.date || new Date(),
+    })
+  );
+  const todayWorkingHours = resolveWorkingHours({
+    checkIn: todayCheckIn,
+    checkOut: todayCheckOut,
+    date: todayDefaults?.date || new Date(),
+    workingHours: todayRecord?.workingHours ?? todayDefaults?.workingHours,
+  });
+  void liveTick;
 
   return (
     <>
@@ -163,16 +194,16 @@ function EmployeeAttendanceContent({ employeeId }) {
             <div className="ed-attendance-times">
               <div>
                 <span className="ed-attendance-time-label">Check In</span>
-                <strong>{todayDefaults?.checkIn || todayRecord?.checkIn || '—'}</strong>
+                <strong>{formatTime12Hour(todayCheckIn)}</strong>
               </div>
               <div>
                 <span className="ed-attendance-time-label">Check Out</span>
-                <strong>{todayDefaults?.checkOut || todayRecord?.checkOut || '—'}</strong>
+                <strong>{formatTime12Hour(todayCheckOut)}</strong>
               </div>
               <div>
                 <span className="ed-attendance-time-label">Working Hours</span>
                 <strong>
-                  {todayRecord?.workingHours ?? todayDefaults?.workingHours ?? 0}
+                  {formatWorkingHoursDisplay(todayWorkingHours, { inProgress: todayHoursInProgress })}
                 </strong>
               </div>
               <div>
@@ -283,9 +314,13 @@ function EmployeeAttendanceContent({ employeeId }) {
                 records.map((record) => (
                   <tr key={record._id}>
                     <td>{formatDate(record.date)}</td>
-                    <td>{record.checkIn || '—'}</td>
-                    <td>{record.checkOut || '—'}</td>
-                    <td>{record.workingHours || 0}</td>
+                    <td>{formatTime12Hour(record.checkIn)}</td>
+                    <td>{formatTime12Hour(record.checkOut)}</td>
+                    <td>
+                      {formatWorkingHoursDisplay(resolveWorkingHours(record), {
+                        inProgress: isWorkingHoursInProgress(record),
+                      })}
+                    </td>
                     <td><HrStatusBadge status={record.status} /></td>
                     <td>{record.notes || '—'}</td>
                   </tr>

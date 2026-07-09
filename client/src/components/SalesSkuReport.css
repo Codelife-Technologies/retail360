@@ -2,6 +2,26 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.sales-sku-report-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0 1rem 1rem;
+}
+
+.sales-sku-report .sales-business-report {
+  height: auto;
+  overflow: visible;
+  background: transparent;
+  flex: 1;
+  min-height: 0;
 }
 
 .sales-sku-report-header {
@@ -10,6 +30,11 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--app-bg);
+  padding: 1rem 1rem 0.25rem;
 }
 
 .sales-sku-report-header h2 {
@@ -129,6 +154,55 @@
   background: #2563eb;
   border-color: #2563eb;
   color: white;
+}
+
+.sales-detail-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.sales-detail-section-header .sales-detail-heading {
+  margin: 0;
+}
+
+.sales-detail-date-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.sales-detail-date-filters .filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 150px;
+}
+
+.sales-detail-date-filters label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.sales-detail-date-filters input[type='date'] {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.sales-detail-date-apply {
+  min-height: 2.25rem;
+}
+
+.sales-detail-loading,
+.sales-detail-empty {
+  margin-top: 0.25rem;
 }
 
 .sales-sku-sort-hint {
@@ -457,9 +531,8 @@
 }
 
 .sales-sku-table-wrap {
-  overflow: auto;
-  flex: 1;
-  min-height: 0;
+  overflow-x: auto;
+  overflow-y: visible;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
 }

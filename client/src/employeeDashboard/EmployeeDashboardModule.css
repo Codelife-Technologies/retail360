@@ -456,6 +456,11 @@
   margin-bottom: 0.2rem;
 }
 
+.ed-attendance-times strong {
+  font-size: 1rem;
+  color: #111827;
+}
+
 .ed-attendance-hint {
   margin: 0;
   font-size: 0.875rem;

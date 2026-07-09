@@ -4,6 +4,7 @@ import EmployeeContextGate, { EmployeeWelcome } from '../components/EmployeeCont
 import HrStatusBadge from '../../hr/components/HrStatusBadge';
 import { formatDate, formatCurrency } from '../../hr/utils/hrUtils';
 import { formatLeaveRemaining } from '../../hr/utils/leavePolicies';
+import { formatTime12Hour } from '../../hr/utils/attendanceUtils';
 
 function EmployeeHome() {
   const [data, setData] = useState(null);
@@ -40,8 +41,10 @@ function EmployeeHome() {
                   </strong>
                   {data?.todayAttendance?.checkIn && (
                     <p className="ed-card-meta">
-                      In: {data.todayAttendance.checkIn}
-                      {data.todayAttendance.checkOut ? ` · Out: ${data.todayAttendance.checkOut}` : ''}
+                      In: {formatTime12Hour(data.todayAttendance.checkIn)}
+                      {data.todayAttendance.checkOut
+                        ? ` · Out: ${formatTime12Hour(data.todayAttendance.checkOut)}`
+                        : ''}
                     </p>
                   )}
                 </div>

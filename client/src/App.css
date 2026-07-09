@@ -174,11 +174,21 @@
   flex: 1;
   margin-left: 280px;
   height: 100vh;
+  max-height: 100vh;
   background: var(--app-bg);
   width: calc(100% - 280px);
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.main-content > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
 }
 
 @media (max-width: 768px) {

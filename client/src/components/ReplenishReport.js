@@ -9,6 +9,7 @@ import './Products.css';
 function ReplenishReport({ onNavigate }) {
   const [activeTab, setActiveTab] = useState('locations');
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [creatingPR, setCreatingPR] = useState(false);
   const [showPrModal, setShowPrModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -72,7 +73,7 @@ function ReplenishReport({ onNavigate }) {
 
   const fetchLocations = async () => {
     try {
-      const response = await locationsAPI.getAll();
+      const response = await locationsAPI.getAll({ isActive: 'true' });
       setLocations(response.data || []);
     } catch (error) {
       console.error('Error fetching locations:', error);
@@ -124,6 +125,49 @@ function ReplenishReport({ onNavigate }) {
       alert('Failed to load replenishment report');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (activeTab === 'categories') {
+      if (!reportData?.groupedByCategory?.length) {
+        alert('No data to export for the selected filters');
+        return;
+      }
+    } else if (!getAllVisibleItems().length) {
+      alert('No data to export for the selected filters');
+      return;
+    }
+    try {
+      setExporting(true);
+      const params = {
+        category: filters.category,
+        subCategory: filters.subCategory,
+        location: filters.location,
+        status: filters.status,
+        view: activeTab,
+      };
+      if (filters.specificDate) {
+        params.specificDate = filters.specificDate;
+      }
+      if (searchTerm.trim()) {
+        params.search = searchTerm.trim();
+      }
+      const response = await reportsAPI.exportReplenishReport(params);
+      const filename = `replenish_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting replenishment report:', error);
+      alert(error.response?.data?.error || 'Failed to export report');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -498,7 +542,6 @@ function ReplenishReport({ onNavigate }) {
     prCandidateItems.every((item) => selectedKeys.has(getRowKey(item)));
 
   const activeFilterCount = [
-    filters.location,
     filters.category,
     filters.subCategory,
     filters.status !== 'ALL' ? filters.status : '',
@@ -507,15 +550,10 @@ function ReplenishReport({ onNavigate }) {
 
   return (
     <div className="replenish-report-container">
+      <div className="replenish-report-inner">
       <div className="replenish-header">
         <div className="title-area">
           <h1>Inventory Replenish Report</h1>
-          <p>
-            Location-wise stock with sales for the previous month and past 3 months total.
-            Required stock for next month is how many units are still
-            needed after available stock to cover peak monthly demand. Rows in yellow need
-            reorder or are low stock.
-          </p>
         </div>
         <div className="replenish-header-actions">
           <button
@@ -527,6 +565,14 @@ function ReplenishReport({ onNavigate }) {
             {activeFilterCount > 0 && (
               <span className="filter-count-badge">{activeFilterCount}</span>
             )}
+          </button>
+          <button
+            type="button"
+            className="btn-export"
+            onClick={handleExport}
+            disabled={loading || exporting || !reportData}
+          >
+            {exporting ? 'Exporting…' : '📤 Export Excel'}
           </button>
           <button
             type="button"
@@ -546,17 +592,6 @@ function ReplenishReport({ onNavigate }) {
       <div className="report-filters">
         <h3>Filters</h3>
         <div className="filters-grid">
-          <div className="filter-group">
-            <label>Location</label>
-            <select name="location" value={filters.location} onChange={handleFilterChange}>
-              <option value="">All Locations</option>
-              {locations.map((loc) => (
-                <option key={loc._id} value={loc._id}>
-                  {loc.name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="filter-group">
             <label>Category</label>
             <select name="category" value={filters.category} onChange={handleFilterChange}>
@@ -657,25 +692,44 @@ function ReplenishReport({ onNavigate }) {
       )}
 
       <div className="report-actions-row">
-        <div className="view-toggle">
-          <button
-            className={activeTab === 'locations' ? 'active' : ''}
-            onClick={() => setActiveTab('locations')}
-          >
-            Location-wise
-          </button>
-          <button
-            className={activeTab === 'products' ? 'active' : ''}
-            onClick={() => setActiveTab('products')}
-          >
-            All Products
-          </button>
-          <button
-            className={activeTab === 'categories' ? 'active' : ''}
-            onClick={() => setActiveTab('categories')}
-          >
-            Category Summary
-          </button>
+        <div className="report-actions-left">
+          <div className="view-toggle">
+            <button
+              className={activeTab === 'locations' ? 'active' : ''}
+              onClick={() => setActiveTab('locations')}
+            >
+              Location-wise
+            </button>
+            <button
+              className={activeTab === 'products' ? 'active' : ''}
+              onClick={() => setActiveTab('products')}
+            >
+              All Products
+            </button>
+            <button
+              className={activeTab === 'categories' ? 'active' : ''}
+              onClick={() => setActiveTab('categories')}
+            >
+              Category Summary
+            </button>
+          </div>
+
+          <div className="replenish-location-select">
+            <label htmlFor="replenish-location">Location</label>
+            <select
+              id="replenish-location"
+              name="location"
+              value={filters.location}
+              onChange={handleFilterChange}
+            >
+              <option value="">All Locations</option>
+              {locations.map((loc) => (
+                <option key={loc._id} value={loc._id}>
+                  {loc.name}{loc.code ? ` (${loc.code})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {(activeTab === 'products' || activeTab === 'locations') && (
@@ -826,6 +880,8 @@ function ReplenishReport({ onNavigate }) {
           <p>No replenishment data. Adjust filters or add stock/sales records.</p>
         </div>
       )}
+
+      </div>
 
       {showPrModal && (
         <div className="modal-overlay replenish-pr-modal-overlay" onClick={closePrModal}>

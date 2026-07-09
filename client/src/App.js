@@ -38,6 +38,7 @@ import {
   isEmployeeDashboardTab,
   resolveEmployeeDashboardSubTab,
 } from './employeeDashboard/employeeDashboardTabs';
+import PageZoomShell from './components/PageZoomShell';
 import './App.css';
 
 function App() {
@@ -637,7 +638,9 @@ function App() {
           )}
         </nav>
       </div>
-      <div className="main-content">{renderContent()}</div>
+      <div className="main-content">
+        <PageZoomShell contentKey={activeTab}>{renderContent()}</PageZoomShell>
+      </div>
     </div>
   );
 }

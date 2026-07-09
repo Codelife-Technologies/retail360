@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { reportsAPI, salesAPI, salesChannelsAPI, productsAPI, pricesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { formatMoney } from '../utils/locationCurrency';
@@ -7,6 +7,7 @@ import SalesMonthlyTrendCharts from './SalesMonthlyTrendCharts';
 import SaleDetailsModal from './SaleDetailsModal';
 import ProductDetailsModal from './ProductDetailsModal';
 import ExcelUpload from './ExcelUpload';
+import SalesBusinessReport from './SalesBusinessReport';
 import './SalesSkuReport.css';
 
 const formatAed = (amount) => formatMoney(amount, 'AED');
@@ -17,9 +18,14 @@ const defaultFilters = () => ({
   paymentStatus: '',
   orderStatus: '',
   search: '',
-  view: 'orders',
+  view: 'business',
   sortBy: 'salesDate',
   sortDir: 'desc',
+});
+
+const defaultDetailDateFilters = () => ({
+  startDate: defaultFilters().startDate,
+  endDate: defaultFilters().endDate,
 });
 
 const SKU_SORT_OPTIONS = [
@@ -201,6 +207,8 @@ function SalesSkuReport({ onClose }) {
   const isAdmin = hasPermission('admin.all');
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
+  const [detailDateFilters, setDetailDateFilters] = useState(defaultDetailDateFilters);
+  const [appliedDetailDateFilters, setAppliedDetailDateFilters] = useState(defaultDetailDateFilters);
   const [showFilters, setShowFilters] = useState(false);
   const [salesChannels, setSalesChannels] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -208,6 +216,7 @@ function SalesSkuReport({ onClose }) {
   const [orderRows, setOrderRows] = useState([]);
   const [monthlyTrend, setMonthlyTrend] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deletingAllSales, setDeletingAllSales] = useState(false);
   const [showExcelUpload, setShowExcelUpload] = useState(false);
@@ -216,10 +225,31 @@ function SalesSkuReport({ onClose }) {
   const [viewingProduct, setViewingProduct] = useState(null);
   const [viewingProductPrice, setViewingProductPrice] = useState(null);
   const [productDetailLoading, setProductDetailLoading] = useState(false);
+  const businessReportRef = useRef(null);
 
+  const isBusinessView = appliedFilters.view === 'business';
   const isSkuView = appliedFilters.view === 'sku';
+  const isOrdersView = appliedFilters.view === 'orders';
   const sortOptions = isSkuView ? SKU_SORT_OPTIONS : ORDER_SORT_OPTIONS;
   const activeFilterCount = countActiveAppliedFilters(appliedFilters);
+
+  const buildSalesDetailParams = useCallback(() => {
+    const params = {
+      ...appliedFilters,
+      startDate: appliedDetailDateFilters.startDate,
+      endDate: appliedDetailDateFilters.endDate,
+      sortBy: 'salesDate',
+      sortDir: 'desc',
+    };
+    delete params.view;
+    delete params.search;
+    return params;
+  }, [appliedFilters, appliedDetailDateFilters]);
+
+  const fetchSalesDetailOrders = useCallback(async () => {
+    const response = await reportsAPI.getSalesDetailed(buildSalesDetailParams());
+    return Array.isArray(response.data) ? response.data : response.data?.data || [];
+  }, [buildSalesDetailParams]);
 
   useEffect(() => {
     salesChannelsAPI.getAll({ isActive: 'true' }).then((res) => {
@@ -228,6 +258,11 @@ function SalesSkuReport({ onClose }) {
   }, []);
 
   const fetchReport = useCallback(async () => {
+    if (appliedFilters.view === 'business') {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const params = { ...appliedFilters };
@@ -239,37 +274,26 @@ function SalesSkuReport({ onClose }) {
       delete trendParams.sortDir;
       delete trendParams.search;
 
-      const trendPromise = reportsAPI.getSalesSummary({ ...trendParams, groupBy: 'month' });
-
-      const detailParams = { ...params };
-      delete detailParams.view;
-      delete detailParams.search;
       if (appliedFilters.view === 'sku') {
-        detailParams.sortBy = 'salesDate';
-        detailParams.sortDir = 'desc';
-      }
-
-      const ordersPromise = reportsAPI.getSalesDetailed(detailParams);
-
-      if (appliedFilters.view === 'sku') {
-        const [response, trendRes, ordersRes] = await Promise.all([
+        const [response, trendRes] = await Promise.all([
           reportsAPI.getSalesBySku(params),
-          trendPromise,
-          ordersPromise,
+          reportsAPI.getSalesSummary({ ...trendParams, groupBy: 'month' }),
         ]);
-        const orders = Array.isArray(ordersRes.data) ? ordersRes.data : ordersRes.data?.data || [];
         setSummary(response.data.summary);
         setSkuRows(response.data.rows || []);
-        setOrderRows(orders);
         setMonthlyTrend(trendRes.data?.groupedData || []);
       } else {
+        const detailParams = buildSalesDetailParams();
+        const trendDetailParams = { ...detailParams };
+        delete trendDetailParams.sortBy;
+        delete trendDetailParams.sortDir;
+
         const skuParams = { ...params, sortBy: 'quantity', sortDir: 'desc' };
-        const [response, trendRes, skuRes] = await Promise.all([
-          ordersPromise,
-          trendPromise,
+        const [orders, trendRes, skuRes] = await Promise.all([
+          fetchSalesDetailOrders(),
+          reportsAPI.getSalesSummary({ ...trendDetailParams, groupBy: 'month' }),
           reportsAPI.getSalesBySku(skuParams),
         ]);
-        const orders = Array.isArray(response.data) ? response.data : response.data?.data || [];
         const skuSummary = skuRes.data?.summary || {};
         setOrderRows(orders);
         setSkuRows([]);
@@ -297,11 +321,36 @@ function SalesSkuReport({ onClose }) {
     } finally {
       setLoading(false);
     }
-  }, [appliedFilters]);
+  }, [appliedFilters, buildSalesDetailParams, fetchSalesDetailOrders]);
 
   useEffect(() => {
     fetchReport();
   }, [fetchReport]);
+
+  useEffect(() => {
+    if (appliedFilters.view !== 'sku') return undefined;
+
+    let cancelled = false;
+    const loadDetail = async () => {
+      try {
+        setDetailLoading(true);
+        const orders = await fetchSalesDetailOrders();
+        if (!cancelled) setOrderRows(orders);
+      } catch (error) {
+        console.error('Error fetching sales detail:', error);
+        if (!cancelled) {
+          alert(error.response?.data?.error || 'Failed to load sales detail');
+        }
+      } finally {
+        if (!cancelled) setDetailLoading(false);
+      }
+    };
+
+    loadDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [appliedFilters.view, appliedDetailDateFilters, appliedFilters.salesChannel, appliedFilters.paymentStatus, appliedFilters.orderStatus, fetchSalesDetailOrders]);
 
   useEffect(() => {
     setViewingSale(null);
@@ -318,18 +367,45 @@ function SalesSkuReport({ onClose }) {
     }));
   };
 
+  const handleApplyFilters = () => {
+    if (filters.startDate && filters.endDate && filters.startDate > filters.endDate) {
+      alert('Start date must be on or before end date.');
+      return;
+    }
+    setAppliedFilters({ ...filters });
+  };
+
+  const handleDetailDateFilterChange = (e) => {
+    const { name, value } = e.target;
+    setDetailDateFilters((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleApplyDetailDateFilters = () => {
+    if (
+      detailDateFilters.startDate
+      && detailDateFilters.endDate
+      && detailDateFilters.startDate > detailDateFilters.endDate
+    ) {
+      alert('Start date must be on or before end date.');
+      return;
+    }
+    setAppliedDetailDateFilters({ ...detailDateFilters });
+  };
+
   const handleViewChange = (view) => {
+    const sortBy = view === 'sku' ? 'revenue' : view === 'orders' ? 'salesDate' : undefined;
     setFilters((prev) => ({
       ...prev,
       view,
-      sortBy: view === 'sku' ? 'revenue' : 'salesDate',
-      sortDir: 'desc',
+      ...(sortBy ? { sortBy, sortDir: 'desc' } : {}),
     }));
     setAppliedFilters((prev) => ({
       ...prev,
       view,
-      sortBy: view === 'sku' ? 'revenue' : 'salesDate',
-      sortDir: 'desc',
+      ...(sortBy ? { sortBy, sortDir: 'desc' } : {}),
     }));
   };
 
@@ -348,30 +424,72 @@ function SalesSkuReport({ onClose }) {
       let response;
       let filename;
       if (isSkuView) {
-        response = await reportsAPI.exportSalesBySku(params);
+        response = await reportsAPI.exportSalesBySku({
+          ...params,
+          detailStartDate: appliedDetailDateFilters.startDate,
+          detailEndDate: appliedDetailDateFilters.endDate,
+        });
         filename = `sales_report_${appliedFilters.endDate}.xlsx`;
       } else {
-        const orderParams = { ...params };
+        const orderParams = {
+          ...params,
+          startDate: appliedDetailDateFilters.startDate,
+          endDate: appliedDetailDateFilters.endDate,
+        };
         delete orderParams.sortBy;
         delete orderParams.sortDir;
         response = await reportsAPI.exportSalesDetailed(orderParams);
-        filename = `sales_report_by_sale_${appliedFilters.endDate}.xlsx`;
+        filename = `sales_report_by_sale_${appliedDetailDateFilters.endDate}.xlsx`;
       }
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      downloadBlob(response.data, filename);
     } catch (error) {
       console.error('Error exporting sales report:', error);
       alert(error.response?.data?.error || 'Failed to export report');
     } finally {
       setExporting(false);
     }
+  };
+
+  const downloadBlob = (blobData, filename) => {
+    const url = window.URL.createObjectURL(new Blob([blobData]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadReport = async () => {
+    if (isBusinessView) {
+      if (!businessReportRef.current?.hasData?.()) {
+        alert('No data to download for the selected filters');
+        return;
+      }
+      try {
+        setExporting(true);
+        const params = businessReportRef.current.getExportParams();
+        const response = await reportsAPI.exportSalesBusinessReport(params);
+        downloadBlob(response.data, `sales_business_report_${params.startDate}_${params.endDate}.xlsx`);
+      } catch (error) {
+        console.error('Error downloading business report:', error);
+        alert(error.response?.data?.error || 'Failed to download report');
+      } finally {
+        setExporting(false);
+      }
+      return;
+    }
+    await handleExport();
+  };
+
+  const handleDownloadCsv = () => {
+    if (!businessReportRef.current?.hasData?.()) {
+      alert('No data to download for the selected filters');
+      return;
+    }
+    businessReportRef.current.downloadCsv();
   };
 
   const handleDeleteAllSales = async () => {
@@ -504,44 +622,83 @@ function SalesSkuReport({ onClose }) {
   };
 
   const renderSalesDetailSection = () => {
-    if (!hasOrderRows) return null;
+    if (isBusinessView) return null;
 
     return (
       <div className="sales-detail-section">
-        <h3 className="sales-detail-heading">Sales Detail</h3>
-        <div className="sales-sku-table-wrap">
-          <table className="sales-sku-table sales-detail-table">
-            <thead>
-              <tr>
-                <th>Product SKU</th>
-                <th>Amazon Order ID</th>
-                <th>Sale Date</th>
-                <th>Channel</th>
-                <th>Items</th>
-                <th>Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orderRows.map((sale) => {
-                const itemCount = sale.items?.length || 0;
-                return (
-                  <tr
-                    key={sale._id}
-                    className="sales-detail-row"
-                    onClick={() => openSaleDetail(sale)}
-                  >
-                    <td className="mono">{getSaleProductSkus(sale)}</td>
-                    <td className="mono">{sale.amazonOrderId || '—'}</td>
-                    <td>{new Date(sale.salesDate).toLocaleDateString('en-IN')}</td>
-                    <td>{sale.salesChannel?.name || '—'}</td>
-                    <td className="num">{itemCount}</td>
-                    <td className="num">{formatAed(sale.subtotal)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="sales-detail-section-header">
+          <h3 className="sales-detail-heading">Sales Detail</h3>
+          <div className="sales-detail-date-filters">
+            <div className="filter-group">
+              <label htmlFor="sales-detail-start">Start Date</label>
+              <input
+                id="sales-detail-start"
+                type="date"
+                name="startDate"
+                value={detailDateFilters.startDate}
+                onChange={handleDetailDateFilterChange}
+              />
+            </div>
+            <div className="filter-group">
+              <label htmlFor="sales-detail-end">End Date</label>
+              <input
+                id="sales-detail-end"
+                type="date"
+                name="endDate"
+                value={detailDateFilters.endDate}
+                onChange={handleDetailDateFilterChange}
+              />
+            </div>
+            <button
+              type="button"
+              className="btn-primary sales-detail-date-apply"
+              onClick={handleApplyDetailDateFilters}
+            >
+              Apply
+            </button>
+          </div>
         </div>
+        {detailLoading || (isOrdersView && loading) ? (
+          <div className="sales-sku-loading sales-detail-loading">Loading sales detail…</div>
+        ) : !hasOrderRows ? (
+          <div className="sales-sku-empty sales-detail-empty">
+            No sales detail found for the selected date range.
+          </div>
+        ) : (
+          <div className="sales-sku-table-wrap">
+            <table className="sales-sku-table sales-detail-table">
+              <thead>
+                <tr>
+                  <th>Product SKU</th>
+                  <th>Amazon Order ID</th>
+                  <th>Sale Date</th>
+                  <th>Channel</th>
+                  <th>Items</th>
+                  <th>Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orderRows.map((sale) => {
+                  const itemCount = sale.items?.length || 0;
+                  return (
+                    <tr
+                      key={sale._id}
+                      className="sales-detail-row"
+                      onClick={() => openSaleDetail(sale)}
+                    >
+                      <td className="mono">{getSaleProductSkus(sale)}</td>
+                      <td className="mono">{sale.amazonOrderId || '—'}</td>
+                      <td>{new Date(sale.salesDate).toLocaleDateString('en-IN')}</td>
+                      <td>{sale.salesChannel?.name || '—'}</td>
+                      <td className="num">{itemCount}</td>
+                      <td className="num">{formatAed(sale.subtotal)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     );
   };
@@ -552,12 +709,42 @@ function SalesSkuReport({ onClose }) {
         <div>
           <h2>Sales Report</h2>
           <p className="sales-sku-report-subtitle">
-            {isSkuView
+            {isBusinessView
+              ? 'Ordered product sales by day, week, or month'
+              : isSkuView
               ? 'SKU summary with full sales detail below'
               : 'Sales orders — click a row to open order details'}
           </p>
         </div>
         <div className="sales-sku-report-header-actions">
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={exporting || (!isBusinessView && !canExport)}
+            onClick={handleDownloadReport}
+            title={
+              isBusinessView
+                ? 'Download business report as Excel'
+                : isSkuView
+                  ? 'Download Excel with By SKU and Sales Detail sheets'
+                  : 'Download Excel with sales orders'
+            }
+          >
+            {exporting ? 'Downloading…' : 'Download Report'}
+          </button>
+          {isBusinessView && (
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={exporting}
+              onClick={handleDownloadCsv}
+              title="Download business report as CSV"
+            >
+              Download CSV
+            </button>
+          )}
+          {!isBusinessView && (
+            <>
           <button
             type="button"
             className={`btn-filters${showFilters ? ' active' : ''}`}
@@ -576,15 +763,6 @@ function SalesSkuReport({ onClose }) {
           >
             ⬆ Import Excel
           </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            disabled={exporting || !canExport}
-            onClick={handleExport}
-            title={isSkuView ? 'Download Excel with By SKU and Sales Detail sheets' : 'Download Excel with sales orders'}
-          >
-            {exporting ? 'Exporting…' : 'Export Excel'}
-          </button>
           {isAdmin && (
             <button
               type="button"
@@ -596,6 +774,8 @@ function SalesSkuReport({ onClose }) {
               {deletingAllSales ? 'Deleting…' : '🗑 Delete All Sales'}
             </button>
           )}
+            </>
+          )}
           {onClose && (
             <button type="button" className="btn-close-report" onClick={onClose}>
               ×
@@ -604,7 +784,15 @@ function SalesSkuReport({ onClose }) {
         </div>
       </div>
 
+      <div className="sales-sku-report-body">
       <div className="sales-sku-view-toggle">
+        <button
+          type="button"
+          className={filters.view === 'business' ? 'active' : ''}
+          onClick={() => handleViewChange('business')}
+        >
+          Business Report
+        </button>
         <button
           type="button"
           className={filters.view === 'orders' ? 'active' : ''}
@@ -621,10 +809,16 @@ function SalesSkuReport({ onClose }) {
         </button>
       </div>
 
+      {isBusinessView ? (
+        <SalesBusinessReport ref={businessReportRef} onViewSkuPerformance={() => handleViewChange('sku')} />
+      ) : (
+        <>
       {showFilters && (
       <div className="sales-sku-filters">
         <h3 className="sales-sku-filters-title">Filters</h3>
         <div className="sales-sku-filters-grid">
+        {!isOrdersView && (
+          <>
         <div className="filter-group">
           <label>Start Date</label>
           <input type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} />
@@ -633,6 +827,8 @@ function SalesSkuReport({ onClose }) {
           <label>End Date</label>
           <input type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} />
         </div>
+          </>
+        )}
         <div className="filter-group">
           <label>Channel</label>
           <select name="salesChannel" value={filters.salesChannel} onChange={handleFilterChange}>
@@ -673,7 +869,7 @@ function SalesSkuReport({ onClose }) {
               value={filters.search}
               onChange={handleFilterChange}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') setAppliedFilters({ ...filters });
+                if (e.key === 'Enter') handleApplyFilters();
               }}
               placeholder="Search by SKU or product name"
             />
@@ -710,7 +906,7 @@ function SalesSkuReport({ onClose }) {
         </div>
         <div className="filter-group filter-apply">
           <label>&nbsp;</label>
-          <button type="button" className="btn-primary" onClick={() => setAppliedFilters({ ...filters })}>
+          <button type="button" className="btn-primary" onClick={handleApplyFilters}>
             Apply
           </button>
         </div>
@@ -784,13 +980,10 @@ function SalesSkuReport({ onClose }) {
 
       <SalesMonthlyTrendCharts groupedData={monthlyTrend} formatCurrency={formatAed} />
 
-      {loading ? (
+      {isSkuView && loading ? (
         <div className="sales-sku-loading">Loading report…</div>
-      ) : !hasSkuRows && !hasOrderRows ? (
-        <div className="sales-sku-empty">No sales data found for the selected filters.</div>
       ) : (
-        <>
-          {isSkuView && hasSkuRows && (
+        isSkuView && hasSkuRows && (
             <div className="sales-sku-table-wrap">
               <h3 className="sales-detail-heading">By SKU</h3>
               <table className="sales-sku-table">
@@ -828,11 +1021,15 @@ function SalesSkuReport({ onClose }) {
                 </tbody>
               </table>
             </div>
-          )}
+        )
+      )}
 
-          {renderSalesDetailSection()}
+      {renderSalesDetailSection()}
+
         </>
       )}
+
+      </div>
 
       {(viewingSale || viewingSaleLoading) && (
         <SaleDetailsModal

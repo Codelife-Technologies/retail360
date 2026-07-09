@@ -53,8 +53,9 @@ const Pagination = ({
         <span>Items per page:</span>
         <select 
           value={itemsPerPage} 
-          onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+          onChange={(e) => onItemsPerPageChange?.(Number(e.target.value))}
           className="items-per-page-select"
+          disabled={!onItemsPerPageChange}
         >
           <option value={10}>10</option>
           <option value={25}>25</option>

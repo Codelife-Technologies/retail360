@@ -1,8 +1,13 @@
 const User = require('../../models/User');
 const Employee = require('../models/Employee');
+const Attendance = require('../models/Attendance');
 const { getEffectivePermissions } = require('../../middleware/auth');
 const { findUserForEmployee } = require('../../utils/userEmployeeLink');
-const { getDateKey, ensureTodayAttendanceSession } = require('../../utils/attendanceSession');
+const {
+  getDateKey,
+  ensureTodayAttendanceSession,
+  calcWorkingHoursFromTimes,
+} = require('../../utils/attendanceSession');
 const { startOfDay, endOfDay, formatTimeHHMM } = require('./employeeId');
 
 const ATTENDANCE_ADMIN_ROLE_CODES = new Set(['admin', 'super_admin', 'hr']);
@@ -167,6 +172,51 @@ function recordMatchesScope(recordEmployeeId, scope) {
   return String(recordEmployeeId) === String(scope.employeeId);
 }
 
+function withComputedWorkingHours(record, { allowLiveNow = true } = {}) {
+  if (!record) return record;
+  const plain = typeof record.toObject === 'function' ? record.toObject() : { ...record };
+  let checkOut = plain.checkOut;
+  const isToday = getDateKey(plain.date) === getDateKey(new Date());
+
+  if (allowLiveNow && isToday && plain.checkIn && !checkOut) {
+    checkOut = formatTimeHHMM(new Date());
+    plain.hoursInProgress = true;
+  }
+
+  plain.workingHours = calcWorkingHoursFromTimes(plain.checkIn, checkOut);
+  return plain;
+}
+
+async function syncAttendanceRecordOnLogout(userId) {
+  const employeeId = await getEmployeeIdForUser(userId);
+  if (!employeeId) return null;
+
+  const user = await User.findById(userId)
+    .select('lastLoginAt lastLogoutAt attendanceSession')
+    .lean();
+  if (!user) return null;
+
+  const today = startOfDay(new Date());
+  const times = readSessionTimes(user, today);
+  if (!times.checkIn && !times.checkOut) return null;
+
+  const existing = await Attendance.findOne({
+    employee: employeeId,
+    date: { $gte: today, $lte: endOfDay(today) },
+  });
+
+  if (!existing) return null;
+
+  if (times.checkIn && !existing.checkIn) {
+    existing.checkIn = times.checkIn;
+  }
+  if (times.checkOut) {
+    existing.checkOut = times.checkOut;
+  }
+  await existing.save();
+  return existing;
+}
+
 module.exports = {
   userCanManageAllAttendance,
   getEmployeeIdForUser,
@@ -178,4 +228,6 @@ module.exports = {
   isSelfAttendanceRequest,
   applyEmployeeScope,
   recordMatchesScope,
+  withComputedWorkingHours,
+  syncAttendanceRecordOnLogout,
 };

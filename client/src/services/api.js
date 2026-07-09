@@ -302,6 +302,8 @@ export const reportsAPI = {
     api.get('/reports/sales/by-sku/export', { params, responseType: 'blob' }),
   exportSalesDetailed: (params) =>
     api.get('/reports/sales/detailed/export', { params, responseType: 'blob' }),
+  exportSalesBusinessReport: (params) =>
+    api.get('/reports/sales/business-report/export', { params, responseType: 'blob' }),
   exportSales: (data) => api.post('/reports/sales/export', data),
   
   // Purchase Reports
@@ -312,6 +314,8 @@ export const reportsAPI = {
   
   // Replenishment Reports
   getReplenishReport: (params) => api.get('/reports/replenish', { params }),
+  exportReplenishReport: (params) =>
+    api.get('/reports/replenish/export', { params, responseType: 'blob' }),
 };
 
 // Health check

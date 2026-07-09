@@ -93,13 +93,25 @@ function ensureTodayAttendanceSession(user, { allowCurrentTime = false } = {}) {
   return false;
 }
 
+function parseTimeToMinutes(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const parts = timeStr.trim().split(':').map(Number);
+  if (parts.length < 2 || parts.some((n) => Number.isNaN(n))) return null;
+  return parts[0] * 60 + parts[1];
+}
+
 function calcWorkingHoursFromTimes(checkIn, checkOut) {
-  if (!checkIn || !checkOut) return 0;
-  const [inH, inM] = checkIn.split(':').map(Number);
-  const [outH, outM] = checkOut.split(':').map(Number);
-  const minutes = outH * 60 + outM - (inH * 60 + inM);
-  if (minutes <= 0) return 0;
-  return Math.round((minutes / 60) * 10) / 10;
+  const inMinutes = parseTimeToMinutes(checkIn);
+  const outMinutes = parseTimeToMinutes(checkOut);
+  if (inMinutes == null || outMinutes == null) return 0;
+
+  let diffMinutes = outMinutes - inMinutes;
+  if (diffMinutes <= 0) {
+    diffMinutes += 24 * 60;
+  }
+  if (diffMinutes <= 0) return 0;
+
+  return Math.round((diffMinutes / 60) * 100) / 100;
 }
 
 module.exports = {
@@ -107,5 +119,6 @@ module.exports = {
   applyLoginToAttendanceSession,
   applyLogoutToAttendanceSession,
   ensureTodayAttendanceSession,
+  parseTimeToMinutes,
   calcWorkingHoursFromTimes,
 };

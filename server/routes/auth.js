@@ -12,6 +12,7 @@ const {
   applyLogoutToAttendanceSession,
   ensureTodayAttendanceSession,
 } = require('../utils/attendanceSession');
+const { syncAttendanceRecordOnLogout } = require('../hr/utils/attendanceAccess');
 
 // POST /login - no auth required
 router.post('/login', async (req, res) => {
@@ -76,6 +77,7 @@ router.post('/logout', authenticate, async (req, res) => {
     }
     applyLogoutToAttendanceSession(user);
     await user.save();
+    await syncAttendanceRecordOnLogout(req.user.id);
     res.json({ message: 'Logged out' });
   } catch (error) {
     res.status(500).json({ error: error.message });

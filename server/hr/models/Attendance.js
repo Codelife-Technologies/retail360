@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { calcWorkingHoursFromTimes } = require('../../utils/attendanceSession');
 
 const attendanceSchema = new mongoose.Schema(
   {
@@ -19,5 +20,22 @@ const attendanceSchema = new mongoose.Schema(
 
 attendanceSchema.index({ employee: 1, date: 1 }, { unique: true });
 attendanceSchema.index({ date: 1, status: 1 });
+
+attendanceSchema.pre('save', function applyWorkingHours(next) {
+  this.workingHours = calcWorkingHoursFromTimes(this.checkIn, this.checkOut);
+  next();
+});
+
+attendanceSchema.pre('findOneAndUpdate', function applyWorkingHoursOnUpdate(next) {
+  const update = this.getUpdate() || {};
+  const payload = update.$set || update;
+  const checkIn = payload.checkIn;
+  const checkOut = payload.checkOut;
+  if (checkIn != null || checkOut != null) {
+    const setTarget = update.$set ? update.$set : update;
+    setTarget.workingHours = calcWorkingHoursFromTimes(checkIn, checkOut);
+  }
+  next();
+});
 
 module.exports = mongoose.model('HrAttendance', attendanceSchema);

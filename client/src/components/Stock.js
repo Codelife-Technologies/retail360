@@ -477,6 +477,7 @@ function Stock() {
         </div>
       </div>
 
+      <div className="stock-scroll-area">
       {/* View Mode Selector */}
       <div className="view-selector">
         <button
@@ -694,6 +695,8 @@ function Stock() {
           </table>
         </div>
       )}
+
+      </div>
 
       {showExcelUpload && (
         <ExcelUpload

@@ -65,37 +65,44 @@ function formatComparisonPeriodLabel(startStr, endStr, periodFilter, isPrevious)
   const span = formatRangeSpan(startStr, endStr);
   if (!span) return isPrevious ? 'Previous period' : 'Current period';
 
+  if (isPrevious) {
+    const start = parseDateStr(startStr);
+    if (start && periodFilter !== 'day' && periodFilter !== 'allTime') {
+      return `Previous month (${formatMonthYear(start)})`;
+    }
+  }
+
   switch (periodFilter) {
     case 'day':
       return isPrevious ? `Yesterday (${span})` : `Today (${span})`;
     case 'week':
-      return isPrevious ? `Last week (${span})` : `This week (${span})`;
+      return isPrevious ? `Previous month (${span})` : `This week (${span})`;
     case 'fortnight':
-      return isPrevious ? `Prior 14 days (${span})` : `Last 14 days (${span})`;
-    case 'month': {
-      const start = parseDateStr(startStr);
-      if (start && startStr !== endStr) {
-        return isPrevious
-          ? `${formatMonthYear(start)} (${span})`
-          : `${formatMonthYear(start)} MTD (${span})`;
-      }
-      return isPrevious ? `Previous month (${span})` : `This month (${span})`;
-    }
+      return isPrevious ? `Previous month (${span})` : `Last 14 days (${span})`;
+    case 'month':
+      return isPrevious ? `Previous month (${span})` : `Past 3 months (${span})`;
     case 'custom':
-      return isPrevious ? `Previous range (${span})` : `Selected range (${span})`;
+      return isPrevious ? `Previous month (${span})` : `Selected range (${span})`;
     case 'allTime':
-      return isPrevious ? 'Previous period' : 'All time';
+      return isPrevious ? `Last year YTD (${span})` : `This year (${span})`;
     default:
       return isPrevious ? `Previous (${span})` : `Current (${span})`;
   }
 }
 
+const QUICK_STAT_TILES = [
+  { key: 'past3Days', label: 'Past 3 days' },
+  { key: 'past3Weeks', label: 'Past 3 weeks' },
+  { key: 'past3Months', label: 'Past 3 months', period: 'month' },
+  { key: 'thisYear', label: 'This year', period: 'allTime' },
+];
+
 const PERIOD_OPTIONS = [
-  { id: 'day', label: 'Day' },
-  { id: 'week', label: 'Week' },
+  { id: 'day', label: 'Today' },
+  { id: 'week', label: 'This Week' },
   { id: 'fortnight', label: 'Fortnight' },
-  { id: 'month', label: 'Month' },
-  { id: 'allTime', label: 'All Time' },
+  { id: 'month', label: 'Past 3 Months' },
+  { id: 'allTime', label: 'This Year' },
   { id: 'custom', label: 'Custom' },
 ];
 
@@ -120,13 +127,13 @@ function buildDashboardParams(applied) {
   return params;
 }
 
-function buildRecordParams(applied, currentRange, page) {
+function buildRecordParams(applied, currentRange, page, limit = 25) {
   const params = {
     salesChannel: applied.salesChannel || undefined,
     sortBy: 'salesDate',
     sortDir: 'desc',
     page,
-    limit: 25,
+    limit,
   };
   if (applied.period === 'allTime') {
     return params;
@@ -150,20 +157,33 @@ const CHART_TIMELINE_OPTIONS = [
   { id: 'month', label: 'Monthly' },
 ];
 
-const PIE_COLORS = ['#667eea', '#764ba2', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899'];
+const AMAZON_CHART_CURRENT = '#007185';
+const AMAZON_CHART_PREVIOUS = '#aab7b8';
 
-const COMPARISON_CHART_HEIGHT = 440;
-const PIE_CHART_HEIGHT = 380;
+const CHANNEL_PIE_COLORS = [
+  '#007185',
+  '#232f3e',
+  '#ff9900',
+  '#10b981',
+  '#3b82f6',
+  '#8b5cf6',
+  '#ef4444',
+  '#14b8a6',
+  '#6366f1',
+  '#f59e0b',
+];
+
+const COMPARISON_CHART_HEIGHT = 320;
 
 const emptyDashboard = {
   periodLabel: '',
   currentRange: { start: '', end: '' },
   previousRange: { start: '', end: '' },
   overview: {
-    today: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
-    thisWeek: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
-    thisMonth: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
-    allTime: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
+    past3Days: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
+    past3Weeks: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
+    past3Months: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
+    thisYear: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
   },
   currentPeriod: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
   previousPeriod: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
@@ -174,25 +194,117 @@ const emptyDashboard = {
   chartTimelineLabel: 'Auto',
 };
 
-function ChangeBadge({ value }) {
+function ChangeBadge({ value, compact }) {
   if (value === 0 || value == null) {
-    return <span className="sales-dash-change neutral">—</span>;
+    return <span className="sales-dash-change neutral">{compact ? '—' : 'No change'}</span>;
   }
   const positive = value > 0;
   return (
     <span className={`sales-dash-change ${positive ? 'up' : 'down'}`}>
-      {positive ? '▲' : '▼'} {Math.abs(value).toFixed(1)}%
+      {positive ? '↑' : '↓'} {Math.abs(value).toFixed(1)}%
+      {!compact && ' vs prior period'}
     </span>
   );
 }
 
-function KpiCard({ label, value, subValue, change, highlight }) {
+function SnapshotTile({ label, value, sub, highlight }) {
   return (
-    <div className={`sales-dash-kpi${highlight ? ' highlight' : ''}`}>
-      <span className="sales-dash-kpi-label">{label}</span>
-      <strong className="sales-dash-kpi-value">{value}</strong>
-      {subValue != null && <span className="sales-dash-kpi-sub">{subValue}</span>}
-      {change != null && <ChangeBadge value={change} />}
+    <div className={`sales-dash-snapshot-tile${highlight ? ' highlight' : ''}`}>
+      <span className="tile-label">{label}</span>
+      <strong className="tile-value">{value}</strong>
+      {sub && <span className="tile-sub">{sub}</span>}
+    </div>
+  );
+}
+
+function RevenueByChannelSection({ channelBreakdown, periodLabel, formatAed }) {
+  if (!channelBreakdown.length) {
+    return (
+      <div className="sales-dash-card sales-dash-section">
+        <div className="sales-dash-card-header">
+          <div>
+            <h2>Revenue per channel</h2>
+            {periodLabel && <p>{periodLabel}</p>}
+          </div>
+        </div>
+        <p className="sales-dash-empty" style={{ padding: '1.5rem', border: 'none' }}>
+          No channel data for the selected period.
+        </p>
+      </div>
+    );
+  }
+
+  const totalRevenue = channelBreakdown.reduce((sum, row) => sum + (row.revenue || 0), 0);
+
+  return (
+    <div className="sales-dash-card sales-dash-section sales-dash-channel-revenue-section">
+      <div className="sales-dash-card-header">
+        <div>
+          <h2>Revenue per channel</h2>
+          {periodLabel && <p>{periodLabel}</p>}
+        </div>
+      </div>
+      <div className="sales-dash-channel-revenue-body">
+        <div className="sales-dash-channel-chart-wrap">
+          <ResponsiveContainer width="100%" height={320}>
+            <PieChart>
+              <Pie
+                data={channelBreakdown}
+                dataKey="revenue"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={105}
+                label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
+              >
+                {channelBreakdown.map((entry, index) => (
+                  <Cell
+                    key={entry.name}
+                    fill={CHANNEL_PIE_COLORS[index % CHANNEL_PIE_COLORS.length]}
+                  />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(value) => [formatAed(value), 'Revenue']}
+                contentStyle={{ border: '1px solid #d5d9d9', borderRadius: 4, fontSize: 12 }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="sales-dash-channel-table-wrap">
+          <table className="sales-dash-channel-revenue-table">
+            <thead>
+              <tr>
+                <th>Channel</th>
+                <th>Orders</th>
+                <th>Revenue</th>
+                <th>Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {channelBreakdown.map((row) => {
+                const sharePct = totalRevenue ? (row.revenue / totalRevenue) * 100 : 0;
+                return (
+                  <tr key={row.name}>
+                    <td>{row.name}</td>
+                    <td>{row.orders.toLocaleString()}</td>
+                    <td className="sales-dash-channel-revenue-amount">{formatAed(row.revenue)}</td>
+                    <td>{sharePct.toFixed(1)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td>{channelBreakdown.reduce((sum, row) => sum + row.orders, 0).toLocaleString()}</td>
+                <td className="sales-dash-channel-revenue-amount">{formatAed(totalRevenue)}</td>
+                <td>100%</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -205,6 +317,7 @@ function SalesDashboard() {
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState([]);
   const [recordsPage, setRecordsPage] = useState(1);
+  const [recordsLimit, setRecordsLimit] = useState(25);
   const [recordsPagination, setRecordsPagination] = useState(null);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [viewingSale, setViewingSale] = useState(null);
@@ -222,8 +335,8 @@ function SalesDashboard() {
     return { ...emptyDashboard, ...response.data };
   }, [appliedFilters]);
 
-  const fetchSalesRecords = useCallback(async (currentRange, page) => {
-    const recordParams = buildRecordParams(appliedFilters, currentRange, page);
+  const fetchSalesRecords = useCallback(async (currentRange, page, limit) => {
+    const recordParams = buildRecordParams(appliedFilters, currentRange, page, limit);
     const response = await reportsAPI.getSalesDetailed(recordParams);
     if (response.data?.pagination) {
       return {
@@ -246,7 +359,7 @@ function SalesDashboard() {
       const dashboardData = await fetchDashboardData();
       setData(dashboardData);
 
-      const { rows, pagination } = await fetchSalesRecords(dashboardData.currentRange, recordsPage);
+      const { rows, pagination } = await fetchSalesRecords(dashboardData.currentRange, recordsPage, recordsLimit);
       setRecords(rows);
       setRecordsPagination(pagination);
     } catch (error) {
@@ -258,28 +371,52 @@ function SalesDashboard() {
       setLoading(false);
       setRecordsLoading(false);
     }
-  }, [appliedFilters, recordsPage, fetchDashboardData, fetchSalesRecords]);
+  }, [appliedFilters, recordsPage, recordsLimit, fetchDashboardData, fetchSalesRecords]);
 
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
 
-  const handleApplyFilters = () => {
-    if (filters.period === 'custom' && (!filters.customStart || !filters.customEnd)) {
+  const applyFilters = (next) => {
+    if (next.period === 'custom' && (!next.customStart || !next.customEnd)) {
       alert('Select both start and end dates for a custom range.');
       return;
     }
     setRecordsPage(1);
-    setAppliedFilters({ ...filters });
+    setFilters(next);
+    setAppliedFilters(next);
+  };
+
+  const handleApplyFilters = () => {
+    applyFilters({ ...filters });
+  };
+
+  const handleRecordsItemsPerPageChange = (limit) => {
+    setRecordsLimit(limit);
+    setRecordsPage(1);
   };
 
   const handlePeriodChange = (nextPeriod) => {
-    setFilters((prev) => ({
-      ...prev,
+    const next = {
+      ...filters,
       period: nextPeriod,
-      customStart: nextPeriod === 'custom' ? prev.customStart : '',
-      customEnd: nextPeriod === 'custom' ? prev.customEnd : '',
-    }));
+      customStart: nextPeriod === 'custom' ? filters.customStart : '',
+      customEnd: nextPeriod === 'custom' ? filters.customEnd : '',
+    };
+    setFilters(next);
+    if (nextPeriod !== 'custom' || (next.customStart && next.customEnd)) {
+      setRecordsPage(1);
+      setAppliedFilters(next);
+    }
+  };
+
+  const handleCustomDateChange = (field, value) => {
+    const next = { ...filters, [field]: value };
+    setFilters(next);
+    if (next.period === 'custom' && next.customStart && next.customEnd) {
+      setRecordsPage(1);
+      setAppliedFilters(next);
+    }
   };
 
   const openSaleDetail = async (sale) => {
@@ -336,321 +473,298 @@ function SalesDashboard() {
   const currentRevenueLegend = `${currentLegendLabel} — revenue`;
   const previousRevenueLegend = `${previousLegendLabel} — revenue`;
 
+  const channelPeriodLabel = isAllTimeView
+    ? 'All-time ordered product sales by channel'
+    : `${currentLegendLabel} — ordered product sales by channel`;
+
   return (
     <div className="sales-dashboard">
-      <header className="sales-dash-header">
+      <header className="sales-dash-topbar">
         <div>
           <h1>Sales Dashboard</h1>
-          <p className="sales-dash-subtitle">
-            Revenue, orders, and trends with period-over-period comparison
-          </p>
+          <div className="sales-dash-topbar-meta">
+            {isAllTimeView
+              ? 'This year performance'
+              : `${data.periodLabel || 'Sales'} · ${formatRangeSpan(data.currentRange?.start, data.currentRange?.end)}`}
+          </div>
         </div>
         <button type="button" className="sales-dash-btn-refresh" onClick={loadDashboard} disabled={loading}>
-          Refresh
+          Refresh data
         </button>
       </header>
 
-      <section className="sales-dash-filters">
-        <div className="sales-dash-period-toggle">
-          {PERIOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              className={filters.period === opt.id ? 'active' : ''}
-              onClick={() => handlePeriodChange(opt.id)}
-            >
-              {opt.label}
-            </button>
-          ))}
+      <div className="sales-dash-body">
+        <div className="sales-dash-quick-stats">
+          {QUICK_STAT_TILES.map((tile) => {
+            const stats = overview[tile.key] || {};
+            const isActive = tile.period && appliedFilters.period === tile.period;
+            const tileProps = tile.period
+              ? {
+                  role: 'button',
+                  tabIndex: 0,
+                  onClick: () => handlePeriodChange(tile.period),
+                  onKeyDown: (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handlePeriodChange(tile.period);
+                    }
+                  },
+                }
+              : {};
+            return (
+              <div
+                key={tile.key}
+                className={`sales-dash-quick-stat${isActive ? ' active' : ''}${tile.period ? '' : ' static'}`}
+                {...tileProps}
+              >
+                <div className="sales-dash-quick-stat-label">{tile.label}</div>
+                <div className="sales-dash-quick-stat-value">
+                  {loading ? '—' : formatAed(stats.totalRevenue)}
+                </div>
+                <div className="sales-dash-quick-stat-sub">
+                  {loading
+                    ? 'Loading…'
+                    : `${stats.totalSales || 0} orders · ${stats.totalItemsSold || 0} units`}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        <div className="sales-dash-filter-row">
-          {filters.period === 'custom' && (
-            <>
-              <label className="sales-dash-filter-field">
-                <span>From</span>
-                <input
-                  type="date"
-                  value={filters.customStart}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, customStart: e.target.value }))}
-                />
-              </label>
-              <label className="sales-dash-filter-field">
-                <span>To</span>
-                <input
-                  type="date"
-                  value={filters.customEnd}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, customEnd: e.target.value }))}
-                />
-              </label>
-            </>
-          )}
-          <label className="sales-dash-filter-field">
-            <span>Channel</span>
-            <select
-              value={filters.salesChannel}
-              onChange={(e) => setFilters((prev) => ({ ...prev, salesChannel: e.target.value }))}
-            >
-              <option value="">All channels</option>
-              {channels.map((ch) => (
-                <option key={ch._id} value={ch._id}>{ch.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="sales-dash-filter-field">
-            <span>Comparison timeline</span>
-            <select
-              value={filters.chartTimeline}
-              onChange={(e) => setFilters((prev) => ({ ...prev, chartTimeline: e.target.value }))}
-            >
-              {CHART_TIMELINE_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>{opt.label}</option>
-              ))}
-            </select>
-          </label>
-          <div className="sales-dash-filter-apply">
-            <button type="button" className="sales-dash-btn-apply" onClick={handleApplyFilters}>
-              Apply
-            </button>
+        <section className="sales-dash-filters">
+          <div className="sales-dash-period-toggle">
+            {PERIOD_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={appliedFilters.period === opt.id ? 'active' : ''}
+                onClick={() => handlePeriodChange(opt.id)}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
-        </div>
-      </section>
 
-      {loading ? (
-        <div className="sales-dash-loading">Loading dashboard...</div>
-      ) : (
-        <>
-          <section className="sales-dash-section">
-            <h2>Overview</h2>
-            <div className="sales-dash-kpi-grid">
-              <KpiCard
-                label="Today"
-                value={formatAed(overview.today.totalRevenue)}
-                subValue={`${overview.today.totalSales} orders · ${overview.today.totalItemsSold} units`}
-              />
-              <KpiCard
-                label="This Week"
-                value={formatAed(overview.thisWeek.totalRevenue)}
-                subValue={`${overview.thisWeek.totalSales} orders · ${overview.thisWeek.totalItemsSold} units`}
-              />
-              <KpiCard
-                label="This Month"
-                value={formatAed(overview.thisMonth.totalRevenue)}
-                subValue={`${overview.thisMonth.totalSales} orders · ${overview.thisMonth.totalItemsSold} units`}
-              />
-              <KpiCard
-                label="All Time"
-                value={formatAed(overview.allTime.totalRevenue)}
-                subValue={`${overview.allTime.totalSales} orders · ${overview.allTime.totalItemsSold} units`}
-                highlight
-              />
-            </div>
-          </section>
-
-          <section className="sales-dash-section">
-            <h2>{isAllTimeView ? 'All Time Summary' : (data.periodLabel || 'Selected Period')}</h2>
-            {!isAllTimeView && (
-              <p className="sales-dash-range-hint">
-                <span className="sales-dash-range-chip current">{currentLegendLabel}</span>
-                {' vs '}
-                <span className="sales-dash-range-chip previous">{previousLegendLabel}</span>
-              </p>
-            )}
-            {isAllTimeView && (
-              <p className="sales-dash-range-hint">
-                Complete sales history — period comparison is not shown for all-time view.
-              </p>
-            )}
-            <div className="sales-dash-kpi-grid period-compare">
-              <KpiCard
-                label="Revenue"
-                value={formatAed(currentPeriod.totalRevenue)}
-                subValue={isAllTimeView ? `${currentPeriod.totalSales} orders` : `${previousLegendLabel}: ${formatAed(previousPeriod.totalRevenue)}`}
-                change={isAllTimeView ? null : change.totalRevenue}
-              />
-              <KpiCard
-                label="Orders"
-                value={currentPeriod.totalSales}
-                subValue={isAllTimeView ? `${currentPeriod.totalItemsSold} units sold` : `${previousLegendLabel}: ${previousPeriod.totalSales}`}
-                change={isAllTimeView ? null : change.totalSales}
-              />
-              <KpiCard
-                label="Units Sold"
-                value={currentPeriod.totalItemsSold}
-                subValue={isAllTimeView ? `Avg order ${formatAed(currentPeriod.averageOrderValue)}` : `${previousLegendLabel}: ${previousPeriod.totalItemsSold}`}
-                change={isAllTimeView ? null : change.totalItemsSold}
-              />
-              <KpiCard
-                label="Avg Order Value"
-                value={formatAed(currentPeriod.averageOrderValue)}
-                subValue={isAllTimeView ? 'All-time average' : `${previousLegendLabel}: ${formatAed(previousPeriod.averageOrderValue)}`}
-                change={isAllTimeView ? null : change.averageOrderValue}
-              />
-            </div>
-          </section>
-
-          {!isAllTimeView && (
-          <section className="sales-dash-section">
-            <div className="sales-dash-section-header">
-              <div>
-                <h2>Period Comparison</h2>
-                <p className="sales-dash-range-hint">
-                  {currentLegendLabel} vs {previousLegendLabel}
-                  {data.chartTimelineLabel && (
-                    <> · Grouped by <strong>{data.chartTimelineLabel}</strong></>
-                  )}
-                </p>
-              </div>
-            </div>
-            {comparisonChart.length === 0 ? (
-              <p className="sales-dash-empty">No comparison data for the selected period.</p>
-            ) : (
-              <div className="sales-dash-chart-grid comparison">
-                <div className="sales-dash-chart-legend-row">
-                  <span className="sales-dash-range-chip current">{currentLegendLabel}</span>
-                  <span className="sales-dash-range-chip previous">{previousLegendLabel}</span>
-                </div>
-                <div className="sales-dash-chart-card">
-                  <h3>Revenue Comparison</h3>
-                  <ResponsiveContainer width="100%" height={COMPARISON_CHART_HEIGHT}>
-                    <BarChart data={comparisonChart} barGap={4} barCategoryGap="18%">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} angle={-20} textAnchor="end" height={60} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                      <Tooltip formatter={chartTooltipFormatter} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="currentRevenue" fill="#667eea" name={currentRevenueLegend} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="previousRevenue" fill="#94a3b8" name={previousRevenueLegend} radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="sales-dash-chart-card">
-                  <h3>Orders Comparison</h3>
-                  <ResponsiveContainer width="100%" height={COMPARISON_CHART_HEIGHT}>
-                    <LineChart data={comparisonChart}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} angle={-20} textAnchor="end" height={60} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Line type="monotone" dataKey="currentOrders" stroke="#10b981" strokeWidth={2} name={currentOrdersLegend} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="previousOrders" stroke="#f59e0b" strokeWidth={2} name={previousOrdersLegend} dot={{ r: 3 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-          </section>
-          )}
-
-          <section className="sales-dash-section">
-            <h2>Sales Records — {data.periodLabel || 'Selected Period'}</h2>
-            <p className="sales-dash-range-hint">
-              {isAllTimeView
-                ? 'All sales orders in the system — click a row to view full order details'
-                : `Orders from ${formatRangeSpan(data.currentRange?.start, data.currentRange?.end) || 'selected period'} — click a row to view details`}
-            </p>
-            {recordsLoading ? (
-              <p className="sales-dash-empty">Loading sales records…</p>
-            ) : records.length === 0 ? (
-              <p className="sales-dash-empty">No sales records for the selected filters.</p>
-            ) : (
+          <div className="sales-dash-filter-row">
+            {filters.period === 'custom' && (
               <>
-                <div className="sales-dash-records-wrap">
-                  <table className="sales-dash-records-table">
-                    <thead>
-                      <tr>
-                        <th>Product SKU</th>
-                        <th>Amazon Order ID</th>
-                        <th>Sale Date</th>
-                        <th>Channel</th>
-                        <th>Items</th>
-                        <th>Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {records.map((sale) => (
-                        <tr
-                          key={sale._id}
-                          className="sales-dash-record-row"
-                          onClick={() => openSaleDetail(sale)}
-                        >
-                          <td className="mono">{getSaleProductSkus(sale)}</td>
-                          <td className="mono">{sale.amazonOrderId || '—'}</td>
-                          <td>{new Date(sale.salesDate).toLocaleDateString('en-IN')}</td>
-                          <td>{sale.salesChannel?.name || '—'}</td>
-                          <td className="num">{sale.items?.length || 0}</td>
-                          <td className="num">{formatAed(sale.total)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {recordsPagination && (
-                  <Pagination
-                    currentPage={recordsPagination.page}
-                    totalPages={recordsPagination.totalPages}
-                    totalItems={recordsPagination.total}
-                    itemsPerPage={recordsPagination.limit}
-                    onPageChange={setRecordsPage}
+                <label className="sales-dash-filter-field">
+                  <span>Start date</span>
+                  <input
+                    type="date"
+                    value={filters.customStart}
+                    onChange={(e) => handleCustomDateChange('customStart', e.target.value)}
                   />
-                )}
+                </label>
+                <label className="sales-dash-filter-field">
+                  <span>End date</span>
+                  <input
+                    type="date"
+                    value={filters.customEnd}
+                    onChange={(e) => handleCustomDateChange('customEnd', e.target.value)}
+                  />
+                </label>
               </>
             )}
-          </section>
+            <label className="sales-dash-filter-field">
+              <span>Marketplace / Channel</span>
+              <select
+                value={filters.salesChannel}
+                onChange={(e) => setFilters((prev) => ({ ...prev, salesChannel: e.target.value }))}
+              >
+                <option value="">All channels</option>
+                {channels.map((ch) => (
+                  <option key={ch._id} value={ch._id}>{ch.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="sales-dash-filter-field">
+              <span>Chart grouping</span>
+              <select
+                value={filters.chartTimeline}
+                onChange={(e) => setFilters((prev) => ({ ...prev, chartTimeline: e.target.value }))}
+              >
+                {CHART_TIMELINE_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
+              </select>
+            </label>
+            <div className="sales-dash-filter-apply">
+              <button type="button" className="sales-dash-btn-apply" onClick={handleApplyFilters}>
+                Apply filters
+              </button>
+            </div>
+          </div>
+        </section>
 
-          <section className="sales-dash-section">
-            <h2>Revenue by Channel</h2>
-            {channelBreakdown.length === 0 ? (
-              <p className="sales-dash-empty">No channel data for the selected period.</p>
-            ) : (
-              <div className="sales-dash-chart-grid single">
-                <div className="sales-dash-chart-card">
-                  <ResponsiveContainer width="100%" height={PIE_CHART_HEIGHT}>
-                    <PieChart>
-                      <Pie
-                        data={channelBreakdown}
-                        dataKey="revenue"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                      >
-                        {channelBreakdown.map((entry, index) => (
-                          <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => [formatAed(value), 'Revenue']} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="sales-dash-channel-table-wrap">
-                  <table className="sales-dash-channel-table">
-                    <thead>
-                      <tr>
-                        <th>Channel</th>
-                        <th>Orders</th>
-                        <th>Revenue</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {channelBreakdown.map((row) => (
-                        <tr key={row.name}>
-                          <td>{row.name}</td>
-                          <td>{row.orders}</td>
-                          <td>{formatAed(row.revenue)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+        {loading ? (
+          <div className="sales-dash-loading">Loading sales data…</div>
+        ) : (
+          <>
+            <div className="sales-dash-card sales-dash-section">
+              <div className="sales-dash-card-header">
+                <div>
+                  <h2>Sales snapshot</h2>
+                  <p className="sales-dash-range-hint">
+                    <span className="sales-dash-range-chip current">{currentLegendLabel}</span>
+                    vs
+                    <span className="sales-dash-range-chip previous">{previousLegendLabel}</span>
+                  </p>
                 </div>
               </div>
+              <div className="sales-dash-snapshot">
+                <SnapshotTile
+                  label="Ordered product sales"
+                  value={formatAed(currentPeriod.totalRevenue)}
+                  sub={`${previousLegendLabel}: ${formatAed(previousPeriod.totalRevenue)}`}
+                  highlight
+                />
+                <SnapshotTile
+                  label="Total orders"
+                  value={currentPeriod.totalSales.toLocaleString()}
+                  sub={`${previousLegendLabel}: ${previousPeriod.totalSales}`}
+                />
+                <SnapshotTile
+                  label="Units ordered"
+                  value={currentPeriod.totalItemsSold.toLocaleString()}
+                  sub={`${previousLegendLabel}: ${previousPeriod.totalItemsSold}`}
+                />
+                <SnapshotTile
+                  label="Avg sales per order"
+                  value={formatAed(currentPeriod.averageOrderValue)}
+                  sub={`${previousLegendLabel}: ${formatAed(previousPeriod.averageOrderValue)}`}
+                />
+              </div>
+              <div className="sales-dash-card-body sales-dash-change-row">
+                <ChangeBadge value={change.totalRevenue} />
+                <ChangeBadge value={change.totalSales} />
+                <ChangeBadge value={change.totalItemsSold} />
+                <ChangeBadge value={change.averageOrderValue} />
+              </div>
+            </div>
+
+            {!isAllTimeView && (
+              <div className="sales-dash-card">
+                <div className="sales-dash-card-header">
+                  <div>
+                    <h2>Sales trend</h2>
+                    <p>
+                      {currentLegendLabel} vs {previousLegendLabel}
+                      {data.chartTimelineLabel && ` · ${data.chartTimelineLabel}`}
+                    </p>
+                  </div>
+                  <div className="sales-dash-chart-legend-row">
+                    <span className="sales-dash-range-chip current">{currentLegendLabel}</span>
+                    <span className="sales-dash-range-chip previous">{previousLegendLabel}</span>
+                  </div>
+                </div>
+                {comparisonChart.length === 0 ? (
+                  <div className="sales-dash-empty">No sales data for the selected period.</div>
+                ) : (
+                  <div className="sales-dash-chart-card">
+                    <h3>Ordered product sales (AED)</h3>
+                    <ResponsiveContainer width="100%" height={COMPARISON_CHART_HEIGHT}>
+                      <BarChart data={comparisonChart} barGap={2} barCategoryGap="12%">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e7e7e7" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#565959' }} interval={0} angle={-25} textAnchor="end" height={55} />
+                        <YAxis tick={{ fontSize: 11, fill: '#565959' }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={45} />
+                        <Tooltip
+                          formatter={chartTooltipFormatter}
+                          contentStyle={{ border: '1px solid #d5d9d9', borderRadius: 4, fontSize: 12 }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Bar dataKey="currentRevenue" fill={AMAZON_CHART_CURRENT} name={currentRevenueLegend} radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="previousRevenue" fill={AMAZON_CHART_PREVIOUS} name={previousRevenueLegend} radius={[2, 2, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <h3 className="chart-subtitle">Order count</h3>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={comparisonChart}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e7e7e7" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#565959' }} interval={0} angle={-25} textAnchor="end" height={55} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#565959' }} width={35} />
+                        <Tooltip contentStyle={{ border: '1px solid #d5d9d9', borderRadius: 4, fontSize: 12 }} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Line type="monotone" dataKey="currentOrders" stroke={AMAZON_CHART_CURRENT} strokeWidth={2} name={currentOrdersLegend} dot={{ r: 2, fill: AMAZON_CHART_CURRENT }} />
+                        <Line type="monotone" dataKey="previousOrders" stroke={AMAZON_CHART_PREVIOUS} strokeWidth={2} name={previousOrdersLegend} dot={{ r: 2, fill: AMAZON_CHART_PREVIOUS }} strokeDasharray="4 2" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
             )}
-          </section>
-        </>
-      )}
+
+            <RevenueByChannelSection
+              channelBreakdown={channelBreakdown}
+              periodLabel={channelPeriodLabel}
+              formatAed={formatAed}
+            />
+
+            <div className="sales-dash-card sales-dash-section">
+              <div className="sales-dash-card-header">
+                <div>
+                  <h2>Recent orders</h2>
+                  <p>
+                    {isAllTimeView
+                      ? 'All orders — click a row for details'
+                      : `Orders in ${formatRangeSpan(data.currentRange?.start, data.currentRange?.end) || 'selected period'}`}
+                  </p>
+                </div>
+              </div>
+              {recordsLoading ? (
+                <div className="sales-dash-empty">Loading orders…</div>
+              ) : records.length === 0 ? (
+                <div className="sales-dash-empty">No orders for the selected filters.</div>
+              ) : (
+                <>
+                  <div className="sales-dash-records-wrap">
+                    <table className="sales-dash-records-table">
+                      <thead>
+                        <tr>
+                          <th>Amazon order ID</th>
+                          <th>Product SKU</th>
+                          <th>Date</th>
+                          <th>Channel</th>
+                          <th>Items</th>
+                          <th>Order total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {records.map((sale) => (
+                          <tr
+                            key={sale._id}
+                            className="sales-dash-record-row"
+                            onClick={() => openSaleDetail(sale)}
+                          >
+                            <td className="mono">{sale.amazonOrderId || '—'}</td>
+                            <td className="mono">{getSaleProductSkus(sale)}</td>
+                            <td>{new Date(sale.salesDate).toLocaleDateString('en-IN')}</td>
+                            <td>{sale.salesChannel?.name || '—'}</td>
+                            <td className="num">{sale.items?.length || 0}</td>
+                            <td className="num">{formatAed(sale.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {recordsPagination && (
+                    <div className="sales-dash-card-body sales-dash-pagination-wrap">
+                      <Pagination
+                        currentPage={recordsPagination.page}
+                        totalPages={recordsPagination.totalPages}
+                        totalItems={recordsPagination.total}
+                        itemsPerPage={recordsPagination.limit}
+                        onPageChange={setRecordsPage}
+                        onItemsPerPageChange={handleRecordsItemsPerPageChange}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
       {(viewingSale || viewingSaleLoading) && (
         <SaleDetailsModal

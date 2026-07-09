@@ -5,7 +5,7 @@ const Payroll = require('../models/Payroll');
 const EmployeeTask = require('../models/EmployeeTask');
 const { getEmployeeLeaveBalances } = require('./leaveBalanceService');
 const { startOfDay, endOfDay } = require('../utils/employeeId');
-const { getEmployeeIdForUser } = require('../utils/attendanceAccess');
+const { getEmployeeIdForUser, withComputedWorkingHours } = require('../utils/attendanceAccess');
 
 async function getEmployeeContext(userId) {
   const employeeId = await getEmployeeIdForUser(userId);
@@ -106,7 +106,7 @@ async function getEmployeeDashboard(userId) {
   return {
     linked: true,
     employee: context.employee,
-    todayAttendance,
+    todayAttendance: todayAttendance ? withComputedWorkingHours(todayAttendance) : null,
     tasksToday,
     recentLeaves,
     latestPayroll,

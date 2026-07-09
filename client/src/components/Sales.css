@@ -3,12 +3,24 @@
   height: 100%;
   width: 100%;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.sales-container.sales-report-page {
+  padding: 0;
   overflow-y: auto;
 }
 
 .sales-report-page .sales-sku-report {
-  max-width: 1600px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
 }
 
 .sales-header {
