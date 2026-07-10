@@ -2,10 +2,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { hrAttendanceAPI } from '../../hr/services/hrApi';
 import EmployeeContextGate, { EmployeeWelcome } from '../components/EmployeeContextGate';
 import HrKpiCard from '../../hr/components/HrKpiCard';
-import HrPagination from '../../hr/components/HrPagination';
 import HrStatusBadge from '../../hr/components/HrStatusBadge';
-import { extractList, extractPagination, formatDate } from '../../hr/utils/hrUtils';
-import { resolveWorkingHours, formatWorkingHoursDisplay, isWorkingHoursInProgress, formatTime12Hour } from '../../hr/utils/attendanceUtils';
+import AttendanceCalendar from '../../hr/components/AttendanceCalendar';
+import { extractList } from '../../hr/utils/hrUtils';
+import {
+  resolveWorkingHours,
+  formatWorkingHoursDisplay,
+  isWorkingHoursInProgress,
+  formatTime12Hour,
+  getDisplayCheckOut,
+  formatNow12Hour,
+} from '../../hr/utils/attendanceUtils';
 
 const WORK_LOCATIONS = [
   { id: 'office', label: 'Office', status: 'Present', icon: '🏢' },
@@ -29,9 +36,9 @@ const formatTodayLabel = () =>
   });
 
 function EmployeeAttendanceContent({ employeeId }) {
-  const [records, setRecords] = useState([]);
+  const [calendarRecords, setCalendarRecords] = useState([]);
   const [summary, setSummary] = useState({ present: 0, absent: 0, late: 0, leave: 0 });
-  const [loading, setLoading] = useState(true);
+  const [loadingCalendar, setLoadingCalendar] = useState(true);
   const [todayDefaults, setTodayDefaults] = useState(null);
   const [loadingToday, setLoadingToday] = useState(true);
   const [marking, setMarking] = useState(false);
@@ -41,8 +48,6 @@ function EmployeeAttendanceContent({ employeeId }) {
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
   });
-  const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState(null);
   const [liveTick, setLiveTick] = useState(0);
 
   const loadTodayDefaults = useCallback(async () => {
@@ -67,42 +72,40 @@ function EmployeeAttendanceContent({ employeeId }) {
     }
   }, []);
 
-  const fetchRecords = useCallback(async () => {
+  const fetchMonthData = useCallback(async () => {
     if (!employeeId) return;
     try {
-      setLoading(true);
-      const [recordsRes, summaryRes] = await Promise.all([
-        hrAttendanceAPI.getAll({
-          employee: employeeId,
-          month: filters.month,
-          year: filters.year,
-          page,
-          limit: 15,
-        }),
+      setLoadingCalendar(true);
+      const [summaryRes, calendarRes] = await Promise.all([
         hrAttendanceAPI.getSummary({
           employee: employeeId,
           month: filters.month,
           year: filters.year,
         }),
+        hrAttendanceAPI.getAll({
+          employee: employeeId,
+          month: filters.month,
+          year: filters.year,
+          limit: 31,
+        }),
       ]);
-      setRecords(extractList(recordsRes));
-      setPagination(extractPagination(recordsRes));
+      setCalendarRecords(extractList(calendarRes));
       setSummary(summaryRes.data || { present: 0, absent: 0, late: 0, leave: 0 });
     } catch (error) {
       console.error('Error fetching attendance:', error);
-      setRecords([]);
+      setCalendarRecords([]);
     } finally {
-      setLoading(false);
+      setLoadingCalendar(false);
     }
-  }, [employeeId, filters, page]);
+  }, [employeeId, filters.month, filters.year]);
 
   useEffect(() => {
     loadTodayDefaults();
   }, [loadTodayDefaults]);
 
   useEffect(() => {
-    fetchRecords();
-  }, [fetchRecords]);
+    fetchMonthData();
+  }, [fetchMonthData]);
 
   useEffect(() => {
     const inProgress = todayDefaults?.hoursInProgress
@@ -128,7 +131,7 @@ function EmployeeAttendanceContent({ employeeId }) {
         notes,
         status: workLocationToStatus(workLocation),
       });
-      await Promise.all([loadTodayDefaults(), fetchRecords()]);
+      await Promise.all([loadTodayDefaults(), fetchMonthData()]);
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to mark attendance');
     } finally {
@@ -150,10 +153,11 @@ function EmployeeAttendanceContent({ employeeId }) {
   );
   const todayWorkingHours = resolveWorkingHours({
     checkIn: todayCheckIn,
-    checkOut: todayCheckOut,
+    checkOut: getDisplayCheckOut(todayCheckOut, { inProgress: todayHoursInProgress }),
     date: todayDefaults?.date || new Date(),
     workingHours: todayRecord?.workingHours ?? todayDefaults?.workingHours,
   });
+  const displayCheckOut = getDisplayCheckOut(todayCheckOut, { inProgress: todayHoursInProgress });
   void liveTick;
 
   return (
@@ -172,6 +176,7 @@ function EmployeeAttendanceContent({ employeeId }) {
             <p className="ed-attendance-today-subtitle">
               Check-in and check-out are taken from when you log in and out of the app.
             </p>
+            <p className="ed-attendance-live-clock">Current time: {formatNow12Hour()}</p>
           </div>
           <button
             type="button"
@@ -198,7 +203,7 @@ function EmployeeAttendanceContent({ employeeId }) {
               </div>
               <div>
                 <span className="ed-attendance-time-label">Check Out</span>
-                <strong>{formatTime12Hour(todayCheckOut)}</strong>
+                <strong>{formatTime12Hour(displayCheckOut)}</strong>
               </div>
               <div>
                 <span className="ed-attendance-time-label">Working Hours</span>
@@ -262,7 +267,6 @@ function EmployeeAttendanceContent({ employeeId }) {
         <select
           value={filters.month}
           onChange={(e) => {
-            setPage(1);
             setFilters((f) => ({ ...f, month: parseInt(e.target.value, 10) }));
           }}
         >
@@ -275,7 +279,6 @@ function EmployeeAttendanceContent({ employeeId }) {
         <select
           value={filters.year}
           onChange={(e) => {
-            setPage(1);
             setFilters((f) => ({ ...f, year: parseInt(e.target.value, 10) }));
           }}
         >
@@ -292,45 +295,12 @@ function EmployeeAttendanceContent({ employeeId }) {
         <HrKpiCard icon="🏖️" label="On Leave" value={summary.leave} />
       </div>
 
-      {loading ? (
-        <div className="ed-loading">Loading attendance...</div>
-      ) : (
-        <div className="ed-table-card">
-          <table className="ed-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Check In</th>
-                <th>Check Out</th>
-                <th>Hours</th>
-                <th>Status</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.length === 0 ? (
-                <tr><td colSpan={6} className="ed-empty">No attendance records for this period.</td></tr>
-              ) : (
-                records.map((record) => (
-                  <tr key={record._id}>
-                    <td>{formatDate(record.date)}</td>
-                    <td>{formatTime12Hour(record.checkIn)}</td>
-                    <td>{formatTime12Hour(record.checkOut)}</td>
-                    <td>
-                      {formatWorkingHoursDisplay(resolveWorkingHours(record), {
-                        inProgress: isWorkingHoursInProgress(record),
-                      })}
-                    </td>
-                    <td><HrStatusBadge status={record.status} /></td>
-                    <td>{record.notes || '—'}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-          <HrPagination pagination={pagination} onPageChange={setPage} />
-        </div>
-      )}
+      <AttendanceCalendar
+        month={filters.month}
+        year={filters.year}
+        records={calendarRecords}
+        loading={loadingCalendar}
+      />
     </>
   );
 }

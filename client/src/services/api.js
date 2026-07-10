@@ -151,6 +151,7 @@ export const stockAPI = {
   delete: (id) => api.delete(`/stock/${id}`),
   deleteAll: (params) => api.delete('/stock/all', { params: { confirm: 'yes', ...params } }),
   downloadTemplate: () => api.get('/stock/template', { responseType: 'blob' }),
+  exportReport: (params) => api.get('/stock/export', { params, responseType: 'blob' }),
   import: (formData) => api.post('/stock/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
@@ -304,13 +305,16 @@ export const reportsAPI = {
     api.get('/reports/sales/detailed/export', { params, responseType: 'blob' }),
   exportSalesBusinessReport: (params) =>
     api.get('/reports/sales/business-report/export', { params, responseType: 'blob' }),
+  exportSalesDashboard: (params) =>
+    api.get('/reports/sales/dashboard/export', { params, responseType: 'blob' }),
   exportSales: (data) => api.post('/reports/sales/export', data),
   
   // Purchase Reports
   getPurchasesSummary: (params) => api.get('/reports/purchases/summary', { params }),
   getPurchasesDetailed: (params) => api.get('/reports/purchases/detailed', { params }),
   getPurchasesStatistics: (params) => api.get('/reports/purchases/statistics', { params }),
-  exportPurchases: (data) => api.post('/reports/purchases/export', data),
+  exportPurchases: (params) =>
+    api.get('/reports/purchases/export', { params, responseType: 'blob' }),
   
   // Replenishment Reports
   getReplenishReport: (params) => api.get('/reports/replenish', { params }),

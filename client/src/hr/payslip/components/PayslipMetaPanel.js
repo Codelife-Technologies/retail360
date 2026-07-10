@@ -18,6 +18,7 @@ function PayslipMetaPanel({ downloadHistory = [], emailStatus }) {
                   {new Date(entry.timestamp).toLocaleTimeString('en-IN', {
                     hour: '2-digit',
                     minute: '2-digit',
+                    hour12: true,
                   })}
                 </span>
               </li>
@@ -33,6 +34,7 @@ function PayslipMetaPanel({ downloadHistory = [], emailStatus }) {
             {new Date(emailStatus.timestamp).toLocaleTimeString('en-IN', {
               hour: '2-digit',
               minute: '2-digit',
+              hour12: true,
             })}
           </p>
         ) : (

@@ -6,6 +6,7 @@ import './PurchaseReport.css';
 function PurchaseReport() {
   const [view, setView] = useState('summary'); // 'summary' or 'detailed'
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
   const [detailedData, setDetailedData] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -83,17 +84,35 @@ function PurchaseReport() {
     }));
   };
 
-  const handleExport = async (format) => {
+  const handleExport = async () => {
+    const hasData = view === 'summary' ? Boolean(summaryData) : detailedData.length > 0;
+    if (!hasData) {
+      alert('No data to export for the selected filters');
+      return;
+    }
+
     try {
+      setExporting(true);
       const response = await reportsAPI.exportPurchases({
-        format,
-        filters,
-        view
+        ...filters,
+        view,
       });
-      alert(`Export ${format.toUpperCase()} functionality will be implemented`);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute(
+        'download',
+        `purchase_report_${view}_${filters.endDate || new Date().toISOString().slice(0, 10)}.xlsx`
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error exporting report:', error);
-      alert('Failed to export report');
+      alert(error.response?.data?.error || 'Failed to export report');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -204,11 +223,12 @@ function PurchaseReport() {
           </button>
         </div>
         <div className="export-buttons">
-          <button className="btn-export" onClick={() => handleExport('pdf')}>
-            Export PDF
-          </button>
-          <button className="btn-export" onClick={() => handleExport('excel')}>
-            Export Excel
+          <button
+            className="btn-export"
+            onClick={handleExport}
+            disabled={loading || exporting}
+          >
+            {exporting ? 'Exporting…' : 'Export Excel'}
           </button>
         </div>
       </div>

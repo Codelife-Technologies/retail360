@@ -432,6 +432,13 @@
   font-size: 0.875rem;
 }
 
+.ed-attendance-live-clock {
+  margin: 0.35rem 0 0;
+  color: #374151;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .ed-attendance-today-body {
   display: flex;
   flex-direction: column;

@@ -42,7 +42,7 @@ export function generatePayslipPrintHtml(payslipData) {
     payslipData;
   const att = breakdown.attendanceSummary || payslipData.attendanceSummary || {};
   const generatedDate = formatDate(generatedAt);
-  const generatedTime = generatedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const generatedTime = generatedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   const earnings = [
     { label: 'Basic Salary', amount: breakdown.earnings.basicSalary },

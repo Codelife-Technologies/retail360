@@ -1,10 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { reportsAPI, categoriesAPI, subcategoriesAPI, locationsAPI, purchaseRequisitesAPI, productsAPI, pricesAPI } from '../services/api';
 import { getCurrentUser } from '../utils/currentUser';
 import logger from '../utils/logger';
 import ProductDetailsModal from './ProductDetailsModal';
 import './ReplenishReport.css';
 import './Products.css';
+
+function formatRequiredStockDisplay(item) {
+  const main = Number(item?.requiredStockNextMonth ?? 0);
+  if (main <= 0) return '';
+  const deduction = Number(item?.inventory?.availableStock ?? 0);
+  return `${main} (${deduction})`;
+}
+
+function formatReorderDisplay(item) {
+  const main = Number(item?.reorderQty ?? 0);
+  if (main <= 0) return '';
+  const deduction = Number(item?.refillQty ?? 0);
+  return `${main} (${deduction})`;
+}
+
+function ReplenishBracketQty({ main, deduction, title }) {
+  const mainNum = Number(main);
+  if (!Number.isFinite(mainNum) || mainNum <= 0) return '—';
+  const deductionNum = Number(deduction) || 0;
+  return (
+    <span title={title}>
+      {mainNum}{' '}
+      <span className="replenish-bracket-deduction">({deductionNum})</span>
+    </span>
+  );
+}
 
 function ReplenishReport({ onNavigate }) {
   const [activeTab, setActiveTab] = useState('locations');
@@ -34,7 +60,7 @@ function ReplenishReport({ onNavigate }) {
   });
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState('location.name');
+  const [sortField, setSortField] = useState('product.sku');
   const [sortDirection, setSortDirection] = useState('asc');
   const [viewingProduct, setViewingProduct] = useState(null);
   const [viewingProductPrice, setViewingProductPrice] = useState(null);
@@ -55,6 +81,37 @@ function ReplenishReport({ onNavigate }) {
   useEffect(() => {
     fetchReport();
   }, [filters.category, filters.subCategory, filters.location, filters.specificDate]);
+
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+    container.style.setProperty('--replenish-sticky-stack', '0px');
+
+    if (activeTab !== 'locations' || !reportData) return undefined;
+
+    const updateLocationHeaderHeights = () => {
+      container.querySelectorAll('.location-block').forEach((block) => {
+        const header = block.querySelector('.location-block-header');
+        if (header) {
+          block.style.setProperty('--location-header-height', `${header.offsetHeight}px`);
+        }
+      });
+    };
+
+    updateLocationHeaderHeights();
+    const headerObserver = new ResizeObserver(updateLocationHeaderHeights);
+    container.querySelectorAll('.location-block-header').forEach((header) => {
+      headerObserver.observe(header);
+    });
+    window.addEventListener('resize', updateLocationHeaderHeights);
+
+    return () => {
+      headerObserver.disconnect();
+      window.removeEventListener('resize', updateLocationHeaderHeights);
+    };
+  }, [activeTab, reportData, filters, searchTerm, reportData?.specificDate]);
 
   const formatPrOptionLabel = (pr) => {
     const title = pr.name ? `${pr.name} (${pr.prNumber})` : pr.prNumber;
@@ -191,6 +248,7 @@ function ReplenishReport({ onNavigate }) {
 
   const monthLabels = reportData?.monthLabels || {};
   const pastThreeMonthsLabel = monthLabels.pastThreeMonths || 'Past 3 Months';
+  const homeBranchLabel = reportData?.homeBranch?.name || 'Home';
   const specificDateInfo = reportData?.specificDate;
   const dateWindow = reportData?.dateWindow;
   const showDateColumn = Boolean(specificDateInfo?.value);
@@ -198,11 +256,6 @@ function ReplenishReport({ onNavigate }) {
 
   const needsReplenishHighlight = (item) =>
     item.replenishStatus === 'REORDER' || item.replenishStatus === 'LOW';
-
-  const formatRequiredStockNextMonth = (value) => {
-    if (value == null || Number.isNaN(value) || value <= 0) return '—';
-    return value;
-  };
 
   const getRowKey = (item) => `${item.location?._id}-${item.product?._id}`;
 
@@ -428,11 +481,10 @@ function ReplenishReport({ onNavigate }) {
         key={rowKey}
         className={needsReplenishHighlight(item) ? 'replenish-row-warning' : undefined}
       >
-        <td className="font-semibold">{item.location?.name || '-'}</td>
         <td
-          className="font-monospace font-semibold replenish-product-link"
+          className="font-monospace font-semibold replenish-product-link replenish-col-sku"
           onClick={() => handleOpenProductDetail(item)}
-          title="View product details"
+          title={item.product.sku || 'View product details'}
         >
           {item.product.sku}
         </td>
@@ -445,8 +497,11 @@ function ReplenishReport({ onNavigate }) {
         </td>
         <td>{item.product.category?.name || 'Uncategorized'}</td>
         <td className="text-center font-semibold">{item.inventory.currentStock}</td>
+        <td className="text-center font-semibold home-avail-cell">
+          {item.homeAvailableStock ?? item.homeInventory?.availableStock ?? 0}
+        </td>
         <td className="text-center text-blue font-semibold">{item.salesCurrent ?? 0}</td>
-        <td className="text-center text-blue font-semibold">
+        <td className="text-center text-blue font-semibold replenish-col-past3">
           {item.salesPastThreeMonths ?? 0}
         </td>
         {showDateColumn && (
@@ -458,17 +513,26 @@ function ReplenishReport({ onNavigate }) {
             {item.salesOnDate ?? 0}
           </td>
         )}
+        <td className="text-center font-semibold replenish-col-peak">{item.highestMonthlySale ?? 0}</td>
         <td
-          className="text-center font-bold required-stock-cell"
-          title={`Peak monthly sale (${item.highestMonthlySale ?? 0}) minus available stock (${item.inventory.availableStock ?? 0})`}
+          className="text-center font-bold required-stock-cell replenish-col-req-stock"
+          title={`Peak monthly sale from past 3 months (${item.highestMonthlySale ?? 0}) minus available stock (${item.inventory.availableStock ?? 0})`}
         >
-          {formatRequiredStockNextMonth(item.requiredStockNextMonth)}
+          <ReplenishBracketQty
+            main={item.requiredStockNextMonth}
+            deduction={item.inventory?.availableStock}
+            title={`${item.requiredStockNextMonth ?? 0} needed; ${item.inventory?.availableStock ?? 0} available stock subtracted`}
+          />
         </td>
         <td
           className="text-center font-bold text-violet"
-          title="Quantity still to purchase after home refill"
+          title={`${item.reorderQty ?? 0} to purchase; ${item.refillQty ?? 0} covered by home refill`}
         >
-          {(item.reorderQty ?? 0) > 0 ? item.reorderQty : '-'}
+          <ReplenishBracketQty
+            main={item.reorderQty}
+            deduction={item.refillQty}
+            title={`${item.reorderQty ?? 0} to purchase; ${item.refillQty ?? 0} covered by home refill`}
+          />
         </td>
       </tr>
       );
@@ -477,10 +541,7 @@ function ReplenishReport({ onNavigate }) {
   const productTableHeader = (
     <thead>
       <tr>
-        <th onClick={() => handleSort('location.name')} className="sortable">
-          Location {sortField === 'location.name' && (sortDirection === 'asc' ? '🔼' : '🔽')}
-        </th>
-        <th onClick={() => handleSort('product.sku')} className="sortable">
+        <th onClick={() => handleSort('product.sku')} className="sortable replenish-col-sku">
           SKU {sortField === 'product.sku' && (sortDirection === 'asc' ? '🔼' : '🔽')}
         </th>
         <th onClick={() => handleSort('product.title')} className="sortable">
@@ -493,6 +554,14 @@ function ReplenishReport({ onNavigate }) {
           Stock {sortField === 'inventory.currentStock' && (sortDirection === 'asc' ? '🔼' : '🔽')}
         </th>
         <th
+          onClick={() => handleSort('homeAvailableStock')}
+          className="sortable text-center month-col"
+          title={`Available stock at home branch (${homeBranchLabel})`}
+        >
+          Avail at Home
+          {sortField === 'homeAvailableStock' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
+        </th>
+        <th
           onClick={() => handleSort('salesCurrent')}
           className="sortable text-center month-col"
         >
@@ -501,9 +570,10 @@ function ReplenishReport({ onNavigate }) {
         </th>
         <th
           onClick={() => handleSort('salesPastThreeMonths')}
-          className="sortable text-center month-col"
+          className="sortable text-center replenish-col-past3"
+          title={`Sold (${pastThreeMonthsLabel})`}
         >
-          Sold ({pastThreeMonthsLabel})
+          Sold (3 mo)
           {sortField === 'salesPastThreeMonths' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
         </th>
         {showDateColumn && (
@@ -516,17 +586,25 @@ function ReplenishReport({ onNavigate }) {
           </th>
         )}
         <th
-          onClick={() => handleSort('requiredStockNextMonth')}
-          className="sortable text-center"
-          title="Units needed for next month: highest monthly sale minus available stock"
+          onClick={() => handleSort('highestMonthlySale')}
+          className="sortable text-center replenish-col-peak"
+          title={`Peak single-month sale within ${pastThreeMonthsLabel} — excludes current month`}
         >
-          Req. Stock (Next Mo.)
+          Peak (3 mo)
+          {sortField === 'highestMonthlySale' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
+        </th>
+        <th
+          onClick={() => handleSort('requiredStockNextMonth')}
+          className="sortable text-center replenish-col-req-stock"
+          title="Units needed for next month: highest monthly sale minus available stock (available shown in brackets)"
+        >
+          Req. Stock
           {sortField === 'requiredStockNextMonth' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
         </th>
         <th
           onClick={() => handleSort('reorderQty')}
           className="sortable text-center"
-          title="Units still needed to purchase after home refill"
+          title="Units still needed to purchase after home refill (home refill shown in brackets)"
         >
           Reorder
           {sortField === 'reorderQty' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
@@ -551,6 +629,7 @@ function ReplenishReport({ onNavigate }) {
   return (
     <div className="replenish-report-container">
       <div className="replenish-report-inner">
+      <div className="replenish-sticky-page-head">
       <div className="replenish-header">
         <div className="title-area">
           <h1>Inventory Replenish Report</h1>
@@ -588,6 +667,61 @@ function ReplenishReport({ onNavigate }) {
         </div>
       </div>
 
+      <div className="report-actions-row">
+        <div className="report-actions-left">
+          <div className="view-toggle">
+            <button
+              className={activeTab === 'locations' ? 'active' : ''}
+              onClick={() => setActiveTab('locations')}
+            >
+              Location-wise
+            </button>
+            <button
+              className={activeTab === 'products' ? 'active' : ''}
+              onClick={() => setActiveTab('products')}
+            >
+              All Products
+            </button>
+            <button
+              className={activeTab === 'categories' ? 'active' : ''}
+              onClick={() => setActiveTab('categories')}
+            >
+              Category Summary
+            </button>
+          </div>
+
+          <div className="replenish-location-select">
+            <label htmlFor="replenish-location">Warehouse</label>
+            <select
+              id="replenish-location"
+              name="location"
+              value={filters.location}
+              onChange={handleFilterChange}
+            >
+              <option value="">All Locations</option>
+              {locations.map((loc) => (
+                <option key={loc._id} value={loc._id}>
+                  {loc.name}{loc.code ? ` (${loc.code})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {(activeTab === 'products' || activeTab === 'locations') && (
+          <div className="search-bar">
+            <input
+              type="text"
+              placeholder="Search SKU, product, location..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        )}
+      </div>
+      </div>
+
+      <div className="replenish-report-scroll" ref={containerRef}>
       {showFilters && (
       <div className="report-filters">
         <h3>Filters</h3>
@@ -691,59 +825,6 @@ function ReplenishReport({ onNavigate }) {
         </div>
       )}
 
-      <div className="report-actions-row">
-        <div className="report-actions-left">
-          <div className="view-toggle">
-            <button
-              className={activeTab === 'locations' ? 'active' : ''}
-              onClick={() => setActiveTab('locations')}
-            >
-              Location-wise
-            </button>
-            <button
-              className={activeTab === 'products' ? 'active' : ''}
-              onClick={() => setActiveTab('products')}
-            >
-              All Products
-            </button>
-            <button
-              className={activeTab === 'categories' ? 'active' : ''}
-              onClick={() => setActiveTab('categories')}
-            >
-              Category Summary
-            </button>
-          </div>
-
-          <div className="replenish-location-select">
-            <label htmlFor="replenish-location">Location</label>
-            <select
-              id="replenish-location"
-              name="location"
-              value={filters.location}
-              onChange={handleFilterChange}
-            >
-              <option value="">All Locations</option>
-              {locations.map((loc) => (
-                <option key={loc._id} value={loc._id}>
-                  {loc.name}{loc.code ? ` (${loc.code})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {(activeTab === 'products' || activeTab === 'locations') && (
-          <div className="search-bar">
-            <input
-              type="text"
-              placeholder="Search SKU, product, location..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-        )}
-      </div>
-
       {loading ? (
         <div className="loading-state">
           <div className="spinner"></div>
@@ -776,6 +857,12 @@ function ReplenishReport({ onNavigate }) {
                           {group.location.name}
                           <span className="location-code">{group.location.code}</span>
                         </h3>
+                        {group.location.warehouse?.name && (
+                          <div className="location-warehouse-hint">
+                            Stock warehouse: {group.location.warehouse.name}
+                            {group.location.warehouse.code ? ` (${group.location.warehouse.code})` : ''}
+                          </div>
+                        )}
                         <div className="location-block-stats">
                           <span>{group.summary.totalProducts} products</span>
                           <span className="text-red">{group.summary.reorderCount} reorder</span>
@@ -881,6 +968,7 @@ function ReplenishReport({ onNavigate }) {
         </div>
       )}
 
+      </div>
       </div>
 
       {showPrModal && (
@@ -1012,8 +1100,7 @@ function ReplenishReport({ onNavigate }) {
                         disabled={prCandidatesSelectable === 0}
                       />
                     </th>
-                    <th>Location</th>
-                    <th>SKU</th>
+                    <th className="replenish-col-sku">SKU</th>
                     <th>Product</th>
                     <th className="text-center">Stock</th>
                     <th className="text-center">Status</th>
@@ -1023,7 +1110,7 @@ function ReplenishReport({ onNavigate }) {
                 <tbody>
                   {prCandidateItems.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="text-center text-muted py-4">
+                      <td colSpan="6" className="text-center text-muted py-4">
                         No Reorder or Low Stock items match the current filters.
                       </td>
                     </tr>
@@ -1040,8 +1127,12 @@ function ReplenishReport({ onNavigate }) {
                               aria-label={`Select ${item.product.sku}`}
                             />
                           </td>
-                          <td>{item.location?.name || '—'}</td>
-                          <td className="font-monospace font-semibold">{item.product.sku}</td>
+                          <td
+                            className="font-monospace font-semibold replenish-col-sku"
+                            title={item.product.sku}
+                          >
+                            {item.product.sku}
+                          </td>
                           <td className="product-title-cell" title={item.product.title}>
                             {item.product.title}
                           </td>
@@ -1113,17 +1204,21 @@ function ReplenishReport({ onNavigate }) {
             currentStock: viewingReplenishItem.inventory?.currentStock,
             minStock: viewingReplenishItem.inventory?.minStock,
             availableStock: viewingReplenishItem.inventory?.availableStock,
+            homeAvailableStock:
+              viewingReplenishItem.homeAvailableStock ??
+              viewingReplenishItem.homeInventory?.availableStock ??
+              0,
             homeLocationCode: viewingReplenishItem.homeInventory?.locationCode || reportData?.homeBranch?.code,
             salesCurrent: viewingReplenishItem.salesCurrent ?? 0,
             salesPastThreeMonths: viewingReplenishItem.salesPastThreeMonths ?? 0,
             highestMonthlySale: viewingReplenishItem.highestMonthlySale ?? 0,
             requiredStockNextMonth: viewingReplenishItem.requiredStockNextMonth ?? 0,
+            requiredStockDisplay: formatRequiredStockDisplay(viewingReplenishItem),
             salesOnDate: viewingReplenishItem.salesOnDate,
             replenishStatus: viewingReplenishItem.replenishStatus,
-            suggestedReorder:
-              (viewingReplenishItem.reorderQty ?? 0) > 0
-                ? viewingReplenishItem.reorderQty
-                : '—',
+            refillQty: viewingReplenishItem.refillQty ?? 0,
+            reorderQty: viewingReplenishItem.reorderQty ?? 0,
+            reorderDisplay: formatReorderDisplay(viewingReplenishItem),
             lastMonthLabel: monthLabels.current,
             pastThreeMonthsLabel,
             specificDateLabel: specificDateInfo?.label,

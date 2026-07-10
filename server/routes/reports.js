@@ -5,6 +5,11 @@ const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
 const logger = require('../utils/logger');
 const { exportToExcel, exportMultiSheetExcel } = require('../utils/excelGenerator');
+const {
+  buildReplenishMonthBuckets,
+  aggregateReplenishSalesMonthly,
+  aggregateReplenishSalesDaily,
+} = require('../utils/replenishReportUtils');
 
 /** Calendar month grouping for sales reports (aligns with dashboard date ranges). */
 const SALES_REPORT_TIMEZONE = process.env.SALES_REPORT_TIMEZONE || 'Asia/Kolkata';
@@ -176,6 +181,63 @@ function filterSalesInRange(sales, start, end) {
   });
 }
 
+function formatOverviewDayLabel(date, offsetFromToday) {
+  if (offsetFromToday === 0) return 'Today';
+  if (offsetFromToday === 1) return 'Yesterday';
+  return toDateInputStr(date);
+}
+
+function buildRecentDayBuckets(now, count = 3) {
+  const buckets = [];
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    const date = new Date(now);
+    date.setDate(now.getDate() - offset);
+    buckets.push({
+      key: `day-${offset}`,
+      label: formatOverviewDayLabel(date, offset),
+      start: startOfDay(date),
+      end: endOfDay(date),
+    });
+  }
+  return buckets;
+}
+
+function buildPast3WeeksRange(now) {
+  const start = new Date(now);
+  start.setDate(now.getDate() - 20);
+  return {
+    key: 'past-3-weeks',
+    label: 'Past 3 weeks',
+    start: startOfDay(start),
+    end: endOfDay(now),
+  };
+}
+
+function buildPast3MonthsRange(now) {
+  const start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  return {
+    key: 'past-3-months',
+    label: 'Past 3 months',
+    start: startOfDay(start),
+    end: endOfDay(now),
+  };
+}
+
+function mapOverviewTile(bucket, sales) {
+  const stats = computeSaleStats(filterSalesInRange(sales, bucket.start, bucket.end));
+  return {
+    key: bucket.key,
+    label: bucket.label,
+    start: toDateInputStr(bucket.start),
+    end: toDateInputStr(bucket.end),
+    ...stats,
+  };
+}
+
+function mapOverviewBuckets(buckets, sales) {
+  return buckets.map((bucket) => mapOverviewTile(bucket, sales));
+}
+
 function resolvePeriodRange(period, customStart, customEnd) {
   const now = new Date();
   switch (period) {
@@ -204,17 +266,28 @@ function resolvePeriodRange(period, customStart, customEnd) {
       };
     }
     case 'month': {
-      const start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
       return {
         start: startOfDay(start),
         end: endOfDay(now),
-        label: 'Past 3 Months',
+        label: 'This Month',
       };
     }
     case 'custom': {
+      if (customStart && !customEnd) {
+        const day = startOfDay(new Date(customStart));
+        return {
+          start: day,
+          end: endOfDay(day),
+          label: toDateInputStr(day),
+        };
+      }
       const start = customStart ? startOfDay(new Date(customStart)) : startOfDay(now);
       const end = customEnd ? endOfDay(new Date(customEnd)) : endOfDay(now);
-      return { start, end, label: 'Custom Range' };
+      const label = customStart && customEnd
+        ? `${toDateInputStr(start)} – ${toDateInputStr(end)}`
+        : 'Custom Range';
+      return { start, end, label };
     }
     case 'allTime':
     case 'all-time': {
@@ -554,41 +627,23 @@ function buildChannelBreakdown(sales) {
 
 /** Previous month + the 3 calendar months before it (excludes current month). */
 function buildMonthBuckets() {
-  const now = new Date();
-  return [1, 2, 3, 4].map((offset) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-    const start = new Date(d.getFullYear(), d.getMonth(), 1);
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const label = d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
-    return { key, label, start, end, offset };
-  });
+  return buildReplenishMonthBuckets(SALES_REPORT_TIMEZONE);
+}
+
+/** Bucket indices for the combined past-3-months sold column (excludes current month). */
+function getPastThreeMonthBucketIndices() {
+  return [0, 1, 2];
 }
 
 function sumPastThreeMonthsSales(salesByMonth, monthBuckets) {
-  return [0, 1, 2].reduce(
+  return getPastThreeMonthBucketIndices().reduce(
     (sum, idx) => sum + (salesByMonth[monthBuckets[idx]?.key] || 0),
     0
   );
 }
 
-async function aggregateItemQuantitySold(productIds, start, end) {
-  const result = await Sale.aggregate([
-    {
-      $match: {
-        salesDate: { $gte: start, $lte: end },
-        'items.product': { $in: productIds },
-      },
-    },
-    { $unwind: '$items' },
-    { $match: { 'items.product': { $in: productIds } } },
-    { $group: { _id: null, quantity: { $sum: '$items.quantity' } } },
-  ]);
-  return result[0]?.quantity || 0;
-}
-
 function highestMonthlySaleInPastThreeMonths(salesByMonth, monthBuckets) {
-  return [0, 1, 2].reduce(
+  return getPastThreeMonthBucketIndices().reduce(
     (max, idx) => Math.max(max, salesByMonth[monthBuckets[idx]?.key] || 0),
     0
   );
@@ -619,9 +674,20 @@ function formatDateKey(date) {
   return `${y}-${m}-${d}`;
 }
 
-function buildProductRow(product, loc, stockRec, monthBuckets, salesMonthlyMap, salesDailyMap = null, homeInventory = null) {
+function buildProductRow(
+  product,
+  displayLocation,
+  salesLocationId,
+  warehouseLocationId,
+  stockRec,
+  monthBuckets,
+  salesMonthlyMap,
+  salesDailyMap = null,
+  homeInventory = null
+) {
   const productIdStr = product._id.toString();
-  const locIdStr = loc._id.toString();
+  const salesLocationIdStr = salesLocationId.toString();
+  const warehouseLocationIdStr = warehouseLocationId.toString();
 
   const currentStock = stockRec?.quantity || 0;
   const reservedStock = stockRec?.reservedQuantity || 0;
@@ -637,7 +703,7 @@ function buildProductRow(product, loc, stockRec, monthBuckets, salesMonthlyMap, 
 
   const salesByMonth = {};
   monthBuckets.forEach((bucket) => {
-    const mapKey = `${productIdStr}-${locIdStr}-${bucket.key}`;
+    const mapKey = `${productIdStr}-${salesLocationIdStr}-${bucket.key}`;
     salesByMonth[bucket.key] = salesMonthlyMap.get(mapKey) || 0;
   });
 
@@ -652,15 +718,14 @@ function buildProductRow(product, loc, stockRec, monthBuckets, salesMonthlyMap, 
   }
 
   const salesOnDate = salesDailyMap
-    ? salesDailyMap.get(`${productIdStr}-${locIdStr}`) || 0
+    ? salesDailyMap.get(`${productIdStr}-${salesLocationIdStr}`) || 0
     : undefined;
+  const homeAvailableStock = homeInventory?.availableStock ?? 0;
 
   return {
-    location: {
-      _id: loc._id,
-      name: loc.name,
-      code: loc.code,
-    },
+    location: displayLocation,
+    warehouseLocationId: warehouseLocationIdStr,
+    salesLocationId: salesLocationIdStr,
     product: {
       _id: product._id,
       sku: product.sku || '',
@@ -676,6 +741,7 @@ function buildProductRow(product, loc, stockRec, monthBuckets, salesMonthlyMap, 
     },
     salesByMonth,
     salesCurrent: lastMonthSales,
+    homeAvailableStock,
     salesPastThreeMonths: pastThreeMonthsSales,
     highestMonthlySale,
     requiredStockNextMonth,
@@ -983,6 +1049,119 @@ async function fetchSalesDetailedReport(filters = {}) {
   };
 
   return { summary, rows: sales };
+}
+
+const PURCHASE_SUMMARY_GROUP_HEADERS = [
+  { key: 'group', label: 'Group' },
+  { key: 'count', label: 'Count' },
+  { key: 'expenditure', label: 'Expenditure' },
+  { key: 'itemsPurchased', label: 'Items Purchased' },
+];
+
+const PURCHASE_DETAILED_EXPORT_HEADERS = [
+  { key: 'purchaseNumber', label: 'Purchase Number' },
+  { key: 'purchaseDate', label: 'Date' },
+  { key: 'supplier', label: 'Supplier' },
+  { key: 'location', label: 'Location' },
+  { key: 'items', label: 'Items' },
+  { key: 'subtotal', label: 'Subtotal' },
+  { key: 'tax', label: 'Tax' },
+  { key: 'total', label: 'Total' },
+  { key: 'paymentStatus', label: 'Payment Status' },
+];
+
+const DASHBOARD_SUMMARY_HEADERS = [
+  { key: 'metric', label: 'Metric' },
+  { key: 'current', label: 'Current Period' },
+  { key: 'previous', label: 'Previous Period' },
+  { key: 'change', label: 'Change %' },
+];
+
+const CHANNEL_BREAKDOWN_EXPORT_HEADERS = [
+  { key: 'name', label: 'Channel' },
+  { key: 'orders', label: 'Orders' },
+  { key: 'revenue', label: 'Revenue' },
+  { key: 'share', label: 'Share %' },
+];
+
+function mapPurchasesToExportRows(purchases = []) {
+  return purchases.map((purchase) => ({
+    purchaseNumber: purchase.purchaseNumber || '',
+    purchaseDate: purchase.purchaseDate ? new Date(purchase.purchaseDate).toISOString().slice(0, 10) : '',
+    supplier: purchase.supplier?.name || '',
+    location: purchase.location?.name || '',
+    items: purchase.items?.length || 0,
+    subtotal: purchase.subtotal ?? '',
+    tax: purchase.tax ?? '',
+    total: purchase.total ?? '',
+    paymentStatus: purchase.paymentStatus || '',
+  }));
+}
+
+function mapPurchaseSummaryGroups(groups = []) {
+  return groups.map((group) => ({
+    group: group.group,
+    count: group.count,
+    expenditure: Math.round((group.revenue || 0) * 100) / 100,
+    itemsPurchased: group.itemsSold || 0,
+  }));
+}
+
+function mapChannelBreakdownToExportRows(channelBreakdown = []) {
+  const totalRevenue = channelBreakdown.reduce((sum, row) => sum + (row.revenue || 0), 0);
+  return channelBreakdown.map((row) => ({
+    name: row.name,
+    orders: row.orders,
+    revenue: row.revenue,
+    share: totalRevenue ? Math.round((row.revenue / totalRevenue) * 1000) / 10 : 0,
+  }));
+}
+
+function buildDashboardSummaryRows(currentPeriod, previousPeriod, change) {
+  return [
+    {
+      metric: 'Ordered product sales',
+      current: currentPeriod.totalRevenue,
+      previous: previousPeriod.totalRevenue,
+      change: change.totalRevenue,
+    },
+    {
+      metric: 'Total orders',
+      current: currentPeriod.totalSales,
+      previous: previousPeriod.totalSales,
+      change: change.totalSales,
+    },
+    {
+      metric: 'Units ordered',
+      current: currentPeriod.totalItemsSold,
+      previous: previousPeriod.totalItemsSold,
+      change: change.totalItemsSold,
+    },
+    {
+      metric: 'Avg sales per order',
+      current: currentPeriod.averageOrderValue,
+      previous: previousPeriod.averageOrderValue,
+      change: change.averageOrderValue,
+    },
+  ];
+}
+
+async function fetchPurchasesForReport(filters = {}) {
+  const { startDate, endDate, supplier, location, paymentStatus } = filters;
+  const query = {};
+
+  if (supplier) query.supplier = supplier;
+  if (location) query.location = location;
+  if (paymentStatus) query.paymentStatus = paymentStatus;
+
+  const dateQuery = buildDateQuery(startDate, endDate);
+  if (dateQuery) query.purchaseDate = dateQuery;
+
+  return Purchase.find(query)
+    .populate('supplier', 'name')
+    .populate('location', 'name code')
+    .populate('items.product', 'name sku title')
+    .sort({ purchaseDate: -1 });
 }
 
 const SALES_ORDER_EXPORT_HEADERS = [
@@ -1352,14 +1531,10 @@ router.get('/sales/dashboard', async (req, res) => {
     const previousRange = resolvePreviousRange(currentRange.start, currentRange.end, period);
 
     const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay());
-    const threeDaysStart = new Date(now);
-    threeDaysStart.setDate(now.getDate() - 2);
-    const threeWeeksStart = new Date(now);
-    threeWeeksStart.setDate(now.getDate() - 20);
-    const threeMonthsStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
     const yearStart = new Date(now.getFullYear(), 0, 1);
+    const dayBuckets = buildRecentDayBuckets(now, 3);
+    const past3WeeksRange = buildPast3WeeksRange(now);
+    const past3MonthsRange = buildPast3MonthsRange(now);
 
     const chartLookback = new Date(currentRange.start);
     chartLookback.setMonth(chartLookback.getMonth() - 1);
@@ -1367,10 +1542,9 @@ router.get('/sales/dashboard', async (req, res) => {
     const fetchStart = new Date(Math.min(
       previousRange.start.getTime(),
       startOfDay(chartLookback).getTime(),
-      startOfDay(threeDaysStart).getTime(),
-      startOfDay(threeWeeksStart).getTime(),
-      startOfDay(threeMonthsStart).getTime(),
-      startOfDay(weekStart).getTime(),
+      ...dayBuckets.map((bucket) => bucket.start.getTime()),
+      past3WeeksRange.start.getTime(),
+      past3MonthsRange.start.getTime(),
       startOfDay(yearStart).getTime()
     ));
 
@@ -1387,10 +1561,6 @@ router.get('/sales/dashboard', async (req, res) => {
       .populate('items.product', 'name title sku images parentSkuOrAsin variation')
       .sort({ salesDate: -1 });
 
-    const past3DaysSales = filterSalesInRange(sales, startOfDay(threeDaysStart), endOfDay(now));
-    const past3WeeksSales = filterSalesInRange(sales, startOfDay(threeWeeksStart), endOfDay(now));
-    const past3MonthsSales = filterSalesInRange(sales, startOfDay(threeMonthsStart), endOfDay(now));
-    const thisYearSales = filterSalesInRange(sales, startOfDay(yearStart), endOfDay(now));
     const currentSales = filterSalesInRange(sales, currentRange.start, currentRange.end);
     const previousSales = filterSalesInRange(sales, previousRange.start, previousRange.end);
 
@@ -1428,10 +1598,15 @@ router.get('/sales/dashboard', async (req, res) => {
         end: toDateInputStr(previousRange.end),
       },
       overview: {
-        past3Days: computeSaleStats(past3DaysSales),
-        past3Weeks: computeSaleStats(past3WeeksSales),
-        past3Months: computeSaleStats(past3MonthsSales),
-        thisYear: computeSaleStats(thisYearSales),
+        days: mapOverviewBuckets(dayBuckets, sales),
+        past3Weeks: mapOverviewTile(past3WeeksRange, sales),
+        past3Months: mapOverviewTile(past3MonthsRange, sales),
+        thisYear: mapOverviewTile({
+          key: 'this-year',
+          label: 'This year',
+          start: startOfDay(yearStart),
+          end: endOfDay(now),
+        }, sales),
       },
       currentPeriod,
       previousPeriod,
@@ -1745,12 +1920,131 @@ router.post('/sales/export', async (req, res) => {
   }
 });
 
-// POST export purchases report (placeholder - actual export implementation would require additional libraries)
-router.post('/purchases/export', async (req, res) => {
+// GET export sales dashboard as Excel
+router.get('/sales/dashboard/export', async (req, res) => {
   try {
-    const { format, filters, view } = req.body;
-    // This is a placeholder - actual PDF/Excel export would be implemented here
-    res.json({ message: 'Export functionality will be implemented', format, view });
+    const { period = 'month', startDate, endDate, salesChannel, salesLocation } = req.query;
+    const currentRange = resolvePeriodRange(period, startDate, endDate);
+    const previousRange = resolvePreviousRange(currentRange.start, currentRange.end, period);
+
+    const baseQuery = {};
+    if (salesChannel) baseQuery.salesChannel = salesChannel;
+    if (salesLocation) baseQuery.salesLocation = salesLocation;
+
+    const sales = await Sale.find({
+      ...baseQuery,
+      salesDate: { $gte: previousRange.start, $lte: currentRange.end },
+    })
+      .populate('salesChannel', 'name code')
+      .populate('salesLocation', 'name code')
+      .populate('items.product', 'name title sku images parentSkuOrAsin variation')
+      .sort({ salesDate: -1 });
+
+    const currentSales = filterSalesInRange(sales, currentRange.start, currentRange.end);
+    const previousSales = filterSalesInRange(sales, previousRange.start, previousRange.end);
+    const currentPeriod = computeSaleStats(currentSales);
+    const previousPeriod = computeSaleStats(previousSales);
+    const change = {
+      totalSales: pctChange(currentPeriod.totalSales, previousPeriod.totalSales),
+      totalRevenue: pctChange(currentPeriod.totalRevenue, previousPeriod.totalRevenue),
+      totalItemsSold: pctChange(currentPeriod.totalItemsSold, previousPeriod.totalItemsSold),
+      averageOrderValue: pctChange(currentPeriod.averageOrderValue, previousPeriod.averageOrderValue),
+    };
+
+    const channelBreakdown = buildChannelBreakdown(currentSales);
+    const recordFilters = {
+      startDate: toDateInputStr(currentRange.start),
+      endDate: toDateInputStr(currentRange.end),
+      salesChannel,
+      salesLocation,
+    };
+    const { rows: orderRows } = await fetchSalesDetailedReport(recordFilters);
+
+    const buffer = exportMultiSheetExcel([
+      {
+        name: 'Summary',
+        headers: DASHBOARD_SUMMARY_HEADERS,
+        data: buildDashboardSummaryRows(currentPeriod, previousPeriod, change),
+      },
+      {
+        name: 'Channel Revenue',
+        headers: CHANNEL_BREAKDOWN_EXPORT_HEADERS,
+        data: mapChannelBreakdownToExportRows(channelBreakdown),
+      },
+      {
+        name: 'Sales Records',
+        headers: SALES_ORDER_EXPORT_HEADERS,
+        data: mapSalesToExportRows(orderRows),
+      },
+    ]);
+
+    const rangeLabel = `${toDateInputStr(currentRange.start)}_${toDateInputStr(currentRange.end)}`;
+    const filename = `sales_dashboard_${rangeLabel}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(buffer);
+  } catch (error) {
+    logger.backend.error('Error exporting sales dashboard', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET export purchases report as Excel
+router.get('/purchases/export', async (req, res) => {
+  try {
+    const { view = 'summary', groupBy = 'date', ...filters } = req.query;
+    const purchases = await fetchPurchasesForReport(filters);
+
+    if (view === 'detailed') {
+      const buffer = exportToExcel(
+        mapPurchasesToExportRows(purchases),
+        PURCHASE_DETAILED_EXPORT_HEADERS
+      );
+      const filename = `purchase_report_detailed_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+      return res.send(buffer);
+    }
+
+    const totalPurchases = purchases.length;
+    const totalExpenditure = purchases.reduce((sum, p) => sum + (p.total || 0), 0);
+    const averagePurchaseValue = totalPurchases > 0 ? totalExpenditure / totalPurchases : 0;
+    const totalItemsPurchased = purchases.reduce(
+      (sum, p) => sum + p.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0),
+      0
+    );
+    const groupedData = groupBy ? groupData(purchases, groupBy, 'purchaseDate', false) : [];
+
+    const buffer = exportMultiSheetExcel([
+      {
+        name: 'Overview',
+        headers: [
+          { key: 'metric', label: 'Metric' },
+          { key: 'value', label: 'Value' },
+        ],
+        data: [
+          { metric: 'Total Purchases', value: totalPurchases },
+          { metric: 'Total Expenditure', value: Math.round(totalExpenditure * 100) / 100 },
+          { metric: 'Average Purchase Value', value: Math.round(averagePurchaseValue * 100) / 100 },
+          { metric: 'Total Items Purchased', value: totalItemsPurchased },
+        ],
+      },
+      {
+        name: 'Grouped Data',
+        headers: PURCHASE_SUMMARY_GROUP_HEADERS,
+        data: mapPurchaseSummaryGroups(groupedData),
+      },
+      {
+        name: 'Purchase Details',
+        headers: PURCHASE_DETAILED_EXPORT_HEADERS,
+        data: mapPurchasesToExportRows(purchases),
+      },
+    ]);
+
+    const filename = `purchase_report_summary_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(buffer);
   } catch (error) {
     logger.backend.error('Error exporting purchases report', { error: error.message, stack: error.stack });
     res.status(500).json({ error: error.message });
@@ -1803,9 +2097,15 @@ async function buildReplenishReportData(query = {}) {
       };
     }
 
-    // 4. Locations to report on
-    const locationFilter = location ? { _id: new mongoose.Types.ObjectId(location) } : {};
-    const locations = await Location.find(locationFilter).sort({ name: 1 }).lean();
+    // 4. Sales locations to report on (sold qty per marketplace; stock from linked warehouse)
+    const salesLocationFilter = { isActive: true };
+    if (location) {
+      salesLocationFilter.location = new mongoose.Types.ObjectId(location);
+    }
+    const salesLocations = await SalesLocation.find(salesLocationFilter)
+      .populate('location', 'name code city country isActive')
+      .sort({ name: 1 })
+      .lean();
 
     // 5. Stock per product + warehouse location
     const stockMatch = { product: { $in: productIds } };
@@ -1833,107 +2133,70 @@ async function buildReplenishReportData(query = {}) {
     }
 
     // 6. Monthly sales per product + warehouse location (via salesLocation mapping)
-    const salesLocDocs = await SalesLocation.find().select('_id location').lean();
-    const salesLocToWarehouse = new Map(
-      salesLocDocs.map((sl) => [sl._id.toString(), sl.location.toString()])
-    );
-
-    const salesMonthlyAgg = await Sale.aggregate([
-      {
-        $match: {
-          'items.product': { $in: productIds },
-          salesDate: { $gte: monthBuckets[3].start, $lte: monthBuckets[0].end },
-        },
-      },
-      { $unwind: '$items' },
-      { $match: { 'items.product': { $in: productIds } } },
-      {
-        $group: {
-          _id: {
-            product: '$items.product',
-            salesLocation: '$salesLocation',
-            yearMonth: {
-              $dateToString: {
-                format: '%Y-%m',
-                date: '$salesDate',
-                timezone: SALES_REPORT_TIMEZONE,
-              },
-            },
-          },
-          quantity: { $sum: '$items.quantity' },
-        },
-      },
-    ]);
-
-    const salesMonthlyMap = new Map();
-    salesMonthlyAgg.forEach((row) => {
-      const warehouseLoc = salesLocToWarehouse.get(row._id.salesLocation.toString());
-      if (!warehouseLoc) return;
-      const mapKey = `${row._id.product.toString()}-${warehouseLoc}-${row._id.yearMonth}`;
-      salesMonthlyMap.set(mapKey, (salesMonthlyMap.get(mapKey) || 0) + row.quantity);
+    const salesMonthlyMap = await aggregateReplenishSalesMonthly({
+      productIds,
+      monthBuckets,
+      timeZone: SALES_REPORT_TIMEZONE,
+      locationId: location || null,
     });
 
     let salesDailyMap = null;
     if (specificDay) {
-      const salesDailyAgg = await Sale.aggregate([
-        {
-          $match: {
-            'items.product': { $in: productIds },
-            salesDate: { $gte: specificDay.start, $lte: specificDay.end },
-          },
-        },
-        { $unwind: '$items' },
-        { $match: { 'items.product': { $in: productIds } } },
-        {
-          $group: {
-            _id: {
-              product: '$items.product',
-              salesLocation: '$salesLocation',
-            },
-            quantity: { $sum: '$items.quantity' },
-          },
-        },
-      ]);
-
-      salesDailyMap = new Map();
-      salesDailyAgg.forEach((row) => {
-        const warehouseLoc = salesLocToWarehouse.get(row._id.salesLocation.toString());
-        if (!warehouseLoc) return;
-        const mapKey = `${row._id.product.toString()}-${warehouseLoc}`;
-        salesDailyMap.set(mapKey, (salesDailyMap.get(mapKey) || 0) + row.quantity);
+      salesDailyMap = await aggregateReplenishSalesDaily({
+        productIds,
+        dayStart: specificDay.start,
+        dayEnd: specificDay.end,
+        locationId: location || null,
       });
     }
 
-    // 7. Build location-wise product rows
+    // 7. Build sales-location-wise product rows
     const groupedByLocation = [];
     const combinedData = [];
 
-    locations.forEach((loc) => {
-      const locIdStr = loc._id.toString();
+    salesLocations.forEach((salesLoc) => {
+      const warehouseLoc = salesLoc.location;
+      if (!warehouseLoc?._id) return;
+
+      const warehouseLocIdStr = warehouseLoc._id.toString();
+      const salesLocIdStr = salesLoc._id.toString();
+      const displayLocation = {
+        _id: salesLoc._id,
+        name: salesLoc.name,
+        code: salesLoc.code,
+        warehouse: {
+          _id: warehouseLoc._id,
+          name: warehouseLoc.name,
+          code: warehouseLoc.code,
+        },
+      };
       const locationProducts = [];
 
       products.forEach((product) => {
         const productIdStr = product._id.toString();
-        const stockKey = `${productIdStr}-${locIdStr}`;
+        const stockKey = `${productIdStr}-${warehouseLocIdStr}`;
         const stockRec = stockMap.get(stockKey);
 
         const monthlyQty = monthBuckets.reduce((sum, bucket) => {
-          const mapKey = `${productIdStr}-${locIdStr}-${bucket.key}`;
+          const mapKey = `${productIdStr}-${salesLocIdStr}-${bucket.key}`;
           return sum + (salesMonthlyMap.get(mapKey) || 0);
         }, 0);
 
         const hasStock = stockRec && stockRec.quantity > 0;
         const hasSales = monthlyQty > 0;
         const hasSalesOnDate = salesDailyMap
-          ? (salesDailyMap.get(`${productIdStr}-${locIdStr}`) || 0) > 0
+          ? (salesDailyMap.get(`${productIdStr}-${salesLocIdStr}`) || 0) > 0
           : false;
-        if (!hasStock && !hasSales && !hasSalesOnDate) {
+        const hasHomeStock = (homeStockByProduct.get(productIdStr) ?? 0) > 0;
+        if (!hasStock && !hasSales && !hasSalesOnDate && !hasHomeStock) {
           return;
         }
 
         const row = buildProductRow(
           product,
-          loc,
+          displayLocation,
+          salesLoc._id,
+          warehouseLoc._id,
           stockRec,
           monthBuckets,
           salesMonthlyMap,
@@ -1946,7 +2209,7 @@ async function buildReplenishReportData(query = {}) {
 
       if (locationProducts.length > 0) {
         groupedByLocation.push({
-          location: { _id: loc._id, name: loc.name, code: loc.code },
+          location: displayLocation,
           summary: {
             totalProducts: locationProducts.length,
             reorderCount: locationProducts.filter((i) => i.replenishStatus === 'REORDER').length,
@@ -2006,15 +2269,13 @@ async function buildReplenishReportData(query = {}) {
     const totalProducts = combinedData.length;
     const reorderCount = combinedData.filter((i) => i.replenishStatus === 'REORDER').length;
     const lowCount = combinedData.filter((i) => i.replenishStatus === 'LOW').length;
-    const unitsSoldCurrentMonth = await aggregateItemQuantitySold(
-      productIds,
-      monthBuckets[0].start,
-      monthBuckets[0].end
+    const unitsSoldCurrentMonth = combinedData.reduce(
+      (sum, item) => sum + (item.salesCurrent || 0),
+      0
     );
-    const unitsSoldPastThreeMonths = await aggregateItemQuantitySold(
-      productIds,
-      monthBuckets[2].start,
-      monthBuckets[0].end
+    const unitsSoldPastThreeMonths = combinedData.reduce(
+      (sum, item) => sum + (item.salesPastThreeMonths || 0),
+      0
     );
     const unitsSoldOnDate = specificDay
       ? combinedData.reduce((s, i) => s + (i.salesOnDate || 0), 0)
@@ -2045,13 +2306,27 @@ async function buildReplenishReportData(query = {}) {
     };
 }
 
+function formatRequiredStockDisplay(item) {
+  const main = Number(item?.requiredStockNextMonth ?? 0);
+  if (main <= 0) return '';
+  const deduction = Number(item?.inventory?.availableStock ?? 0);
+  return `${main} (${deduction})`;
+}
+
+function formatReorderDisplay(item) {
+  const main = Number(item?.reorderQty ?? 0);
+  if (main <= 0) return '';
+  const deduction = Number(item?.refillQty ?? 0);
+  return `${main} (${deduction})`;
+}
+
 function buildReplenishProductExportHeaders(monthLabels, showDateColumn) {
   const headers = [
-    { key: 'locationName', label: 'Location' },
     { key: 'sku', label: 'SKU' },
     { key: 'productName', label: 'Product' },
     { key: 'category', label: 'Category' },
     { key: 'currentStock', label: 'Stock' },
+    { key: 'homeAvailableStock', label: 'Avail at Home' },
     { key: 'salesCurrent', label: `Sold (${monthLabels.current})` },
     { key: 'salesPastThreeMonths', label: `Sold (${monthLabels.pastThreeMonths})` },
   ];
@@ -2062,8 +2337,9 @@ function buildReplenishProductExportHeaders(monthLabels, showDateColumn) {
     });
   }
   headers.push(
-    { key: 'requiredStockNextMonth', label: 'Req. Stock (Next Mo.)' },
-    { key: 'reorderQty', label: 'Reorder' }
+    { key: 'highestMonthlySale', label: 'Highest Monthly Sale (Past 3 Mo.)' },
+    { key: 'requiredStockDisplay', label: 'Req. Stock (Next Mo.)' },
+    { key: 'reorderDisplay', label: 'Reorder' }
   );
   return headers;
 }
@@ -2092,16 +2368,16 @@ function buildReplenishCategoryExportHeaders(monthLabels, showDateColumn) {
 
 function mapReplenishItemToExportRow(item, monthLabels, showDateColumn) {
   const row = {
-    locationName: item.location?.name || '',
     sku: item.product?.sku || '',
     productName: item.product?.title || '',
     category: item.product?.category?.name || 'Uncategorized',
     currentStock: item.inventory?.currentStock ?? 0,
+    homeAvailableStock: item.homeAvailableStock ?? item.homeInventory?.availableStock ?? 0,
     salesCurrent: item.salesCurrent ?? 0,
     salesPastThreeMonths: item.salesPastThreeMonths ?? 0,
-    requiredStockNextMonth:
-      item.requiredStockNextMonth > 0 ? item.requiredStockNextMonth : '',
-    reorderQty: (item.reorderQty ?? 0) > 0 ? item.reorderQty : '',
+    highestMonthlySale: item.highestMonthlySale ?? 0,
+    requiredStockDisplay: formatRequiredStockDisplay(item),
+    reorderDisplay: formatReorderDisplay(item),
   };
   if (showDateColumn) {
     row.salesOnDate = item.salesOnDate ?? 0;

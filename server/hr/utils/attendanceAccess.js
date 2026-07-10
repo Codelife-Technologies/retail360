@@ -7,6 +7,8 @@ const {
   getDateKey,
   ensureTodayAttendanceSession,
   calcWorkingHoursFromTimes,
+  pickEarlierTime,
+  pickLaterTime,
 } = require('../../utils/attendanceSession');
 const { startOfDay, endOfDay, formatTimeHHMM } = require('./employeeId');
 
@@ -52,38 +54,34 @@ function readSessionTimes(user, forDate = new Date()) {
 
   const dateKey = getDateKey(forDate);
   const session = user.attendanceSession;
-
-  if (session?.date === dateKey) {
-    const checkIn = session.checkInAt ? formatTimeHHMM(session.checkInAt) : '';
-    let checkOut = session.checkOutAt ? formatTimeHHMM(session.checkOutAt) : '';
-
-    if (!checkOut && session.lastLoginAt && session.checkInAt) {
-      const lastLogin = new Date(session.lastLoginAt);
-      const firstLogin = new Date(session.checkInAt);
-      if (lastLogin > firstLogin) {
-        checkOut = formatTimeHHMM(lastLogin);
-      }
-    }
-
-    return { checkIn, checkOut };
-  }
-
   const dayStart = startOfDay(forDate);
   const dayEnd = endOfDay(forDate);
+
   let checkIn = '';
   let checkOut = '';
+
+  if (session?.date === dateKey) {
+    if (session.checkInAt) {
+      checkIn = formatTimeHHMM(session.checkInAt);
+    }
+    if (session.checkOutAt) {
+      checkOut = formatTimeHHMM(session.checkOutAt);
+    }
+  }
 
   if (user.lastLoginAt) {
     const loginAt = new Date(user.lastLoginAt);
     if (loginAt >= dayStart && loginAt <= dayEnd) {
-      checkIn = formatTimeHHMM(loginAt);
+      const loginTime = formatTimeHHMM(loginAt);
+      checkIn = checkIn ? pickEarlierTime(checkIn, loginTime) : loginTime;
     }
   }
 
   if (user.lastLogoutAt) {
     const logoutAt = new Date(user.lastLogoutAt);
     if (logoutAt >= dayStart && logoutAt <= dayEnd) {
-      checkOut = formatTimeHHMM(logoutAt);
+      const logoutTime = formatTimeHHMM(logoutAt);
+      checkOut = checkOut ? pickLaterTime(checkOut, logoutTime) : logoutTime;
     }
   }
 
@@ -207,11 +205,15 @@ async function syncAttendanceRecordOnLogout(userId) {
 
   if (!existing) return null;
 
-  if (times.checkIn && !existing.checkIn) {
-    existing.checkIn = times.checkIn;
+  if (times.checkIn) {
+    existing.checkIn = existing.checkIn
+      ? pickEarlierTime(existing.checkIn, times.checkIn)
+      : times.checkIn;
   }
   if (times.checkOut) {
-    existing.checkOut = times.checkOut;
+    existing.checkOut = existing.checkOut
+      ? pickLaterTime(existing.checkOut, times.checkOut)
+      : times.checkOut;
   }
   await existing.save();
   return existing;

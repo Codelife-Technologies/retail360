@@ -88,6 +88,7 @@ function Stock() {
   });
   const [lowStockAlerts, setLowStockAlerts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -452,11 +453,47 @@ function Stock() {
     return 'All stock';
   };
 
+  const handleExport = async () => {
+    if (!filteredStock.length) {
+      alert('No stock data to export for the current view');
+      return;
+    }
+
+    try {
+      setExporting(true);
+      const params = { search: searchTerm.trim() || undefined };
+      if (viewMode === 'product' && selectedProduct) params.product = selectedProduct;
+      if (viewMode === 'location' && selectedLocation) params.location = selectedLocation;
+
+      const response = await stockAPI.exportReport(params);
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `stock_report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      logger.error('Error exporting stock report', error);
+      alert(error.response?.data?.error || 'Failed to export stock report');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="stock-container">
       <div className="stock-header">
         <h1>Stock Management</h1>
         <div className="stock-header-actions">
+          <button
+            className="btn-secondary"
+            onClick={handleExport}
+            disabled={loading || exporting || filteredStock.length === 0}
+          >
+            {exporting ? 'Exporting…' : '📤 Export Excel'}
+          </button>
           {canEdit && (
             <>
           <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>

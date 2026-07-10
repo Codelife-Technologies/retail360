@@ -141,7 +141,7 @@ function PayrollSlipDocument({ payslipData }) {
           <p>This is a computer-generated payslip and does not require a signature.</p>
           <p>
             Generated Date: {formatDate(generatedAt)} | Generated Time:{' '}
-            {generatedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            {generatedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
           </p>
         </div>
         <PayslipDigitalSeal companyName={company.companyName} initials={company.initials} />

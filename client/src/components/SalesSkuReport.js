@@ -28,6 +28,13 @@ const defaultDetailDateFilters = () => ({
   endDate: defaultFilters().endDate,
 });
 
+function resolveDetailDateRange(start, end) {
+  if (!start) return null;
+  if (!end) return { startDate: start, endDate: start };
+  if (start > end) return null;
+  return { startDate: start, endDate: end };
+}
+
 const SKU_SORT_OPTIONS = [
   { value: 'revenue', label: 'Revenue' },
   { value: 'quantity', label: 'Quantity Sold' },
@@ -234,17 +241,23 @@ function SalesSkuReport({ onClose }) {
   const activeFilterCount = countActiveAppliedFilters(appliedFilters);
 
   const buildSalesDetailParams = useCallback(() => {
+    const dateRange = resolveDetailDateRange(
+      appliedDetailDateFilters.startDate,
+      appliedDetailDateFilters.endDate
+    );
     const params = {
-      ...appliedFilters,
-      startDate: appliedDetailDateFilters.startDate,
-      endDate: appliedDetailDateFilters.endDate,
-      sortBy: 'salesDate',
-      sortDir: 'desc',
+      salesChannel: appliedFilters.salesChannel || undefined,
+      paymentStatus: appliedFilters.paymentStatus || undefined,
+      orderStatus: appliedFilters.orderStatus || undefined,
+      sortBy: isOrdersView ? appliedFilters.sortBy : 'salesDate',
+      sortDir: appliedFilters.sortDir || 'desc',
     };
-    delete params.view;
-    delete params.search;
+    if (dateRange) {
+      params.startDate = dateRange.startDate;
+      params.endDate = dateRange.endDate;
+    }
     return params;
-  }, [appliedFilters, appliedDetailDateFilters]);
+  }, [appliedFilters, appliedDetailDateFilters, isOrdersView]);
 
   const fetchSalesDetailOrders = useCallback(async () => {
     const response = await reportsAPI.getSalesDetailed(buildSalesDetailParams());
@@ -288,26 +301,21 @@ function SalesSkuReport({ onClose }) {
         delete trendDetailParams.sortBy;
         delete trendDetailParams.sortDir;
 
-        const skuParams = { ...params, sortBy: 'quantity', sortDir: 'desc' };
-        const [orders, trendRes, skuRes] = await Promise.all([
-          fetchSalesDetailOrders(),
+        const skuParams = { ...detailParams, sortBy: 'quantity', sortDir: 'desc' };
+
+        const [trendRes, skuRes] = await Promise.all([
           reportsAPI.getSalesSummary({ ...trendDetailParams, groupBy: 'month' }),
           reportsAPI.getSalesBySku(skuParams),
         ]);
         const skuSummary = skuRes.data?.summary || {};
-        setOrderRows(orders);
         setSkuRows([]);
         setMonthlyTrend(trendRes.data?.groupedData || []);
         setSummary({
           totalSkus: skuSummary.totalSkus ?? null,
-          totalSales: orders.length,
-          totalQuantitySold: orders.reduce(
-            (sum, sale) =>
-              sum + (sale.items || []).reduce((itemSum, item) => itemSum + (item.quantity || 0), 0),
-            0
-          ),
-          totalRevenue: Math.round(orders.reduce((sum, sale) => sum + (sale.total || 0), 0) * 100) / 100,
-          totalOrders: orders.length,
+          totalSales: 0,
+          totalQuantitySold: 0,
+          totalRevenue: 0,
+          totalOrders: 0,
           topSellingProducts: skuSummary.topSellingProducts || [],
           leastSellingProducts: skuSummary.leastSellingProducts || [],
         });
@@ -321,21 +329,35 @@ function SalesSkuReport({ onClose }) {
     } finally {
       setLoading(false);
     }
-  }, [appliedFilters, buildSalesDetailParams, fetchSalesDetailOrders]);
+  }, [appliedFilters, buildSalesDetailParams]);
 
   useEffect(() => {
     fetchReport();
   }, [fetchReport]);
 
   useEffect(() => {
-    if (appliedFilters.view !== 'sku') return undefined;
+    if (isBusinessView) return undefined;
 
     let cancelled = false;
     const loadDetail = async () => {
       try {
         setDetailLoading(true);
         const orders = await fetchSalesDetailOrders();
-        if (!cancelled) setOrderRows(orders);
+        if (cancelled) return;
+        setOrderRows(orders);
+        if (appliedFilters.view === 'orders') {
+          setSummary((prev) => ({
+            ...(prev || {}),
+            totalSales: orders.length,
+            totalQuantitySold: orders.reduce(
+              (sum, sale) =>
+                sum + (sale.items || []).reduce((itemSum, item) => itemSum + (item.quantity || 0), 0),
+              0
+            ),
+            totalRevenue: Math.round(orders.reduce((sum, sale) => sum + (sale.total || 0), 0) * 100) / 100,
+            totalOrders: orders.length,
+          }));
+        }
       } catch (error) {
         console.error('Error fetching sales detail:', error);
         if (!cancelled) {
@@ -350,7 +372,17 @@ function SalesSkuReport({ onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [appliedFilters.view, appliedDetailDateFilters, appliedFilters.salesChannel, appliedFilters.paymentStatus, appliedFilters.orderStatus, fetchSalesDetailOrders]);
+  }, [
+    isBusinessView,
+    appliedFilters.view,
+    appliedDetailDateFilters,
+    appliedFilters.salesChannel,
+    appliedFilters.paymentStatus,
+    appliedFilters.orderStatus,
+    appliedFilters.sortBy,
+    appliedFilters.sortDir,
+    fetchSalesDetailOrders,
+  ]);
 
   useEffect(() => {
     setViewingSale(null);
@@ -384,12 +416,16 @@ function SalesSkuReport({ onClose }) {
   };
 
   const handleApplyDetailDateFilters = () => {
-    if (
-      detailDateFilters.startDate
-      && detailDateFilters.endDate
-      && detailDateFilters.startDate > detailDateFilters.endDate
-    ) {
+    const dateRange = resolveDetailDateRange(
+      detailDateFilters.startDate,
+      detailDateFilters.endDate
+    );
+    if (detailDateFilters.startDate && !dateRange) {
       alert('Start date must be on or before end date.');
+      return;
+    }
+    if (!detailDateFilters.startDate) {
+      alert('Select a start date. Leave end date empty to show that day only.');
       return;
     }
     setAppliedDetailDateFilters({ ...detailDateFilters });
@@ -431,15 +467,18 @@ function SalesSkuReport({ onClose }) {
         });
         filename = `sales_report_${appliedFilters.endDate}.xlsx`;
       } else {
+        const dateRange = resolveDetailDateRange(
+          appliedDetailDateFilters.startDate,
+          appliedDetailDateFilters.endDate
+        );
         const orderParams = {
           ...params,
-          startDate: appliedDetailDateFilters.startDate,
-          endDate: appliedDetailDateFilters.endDate,
+          ...(dateRange || {}),
         };
         delete orderParams.sortBy;
         delete orderParams.sortDir;
         response = await reportsAPI.exportSalesDetailed(orderParams);
-        filename = `sales_report_by_sale_${appliedDetailDateFilters.endDate}.xlsx`;
+        filename = `sales_report_by_sale_${(dateRange?.endDate || appliedDetailDateFilters.endDate)}.xlsx`;
       }
 
       downloadBlob(response.data, filename);

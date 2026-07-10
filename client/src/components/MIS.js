@@ -1,27 +1,32 @@
 import React, { useState } from 'react';
+import SalesDashboard from './SalesDashboard';
 import Sales from './Sales';
 import PurchaseReport from './PurchaseReport';
 import Stock from './Stock';
 import ReplenishReport from './ReplenishReport';
 import './MIS.css';
+import './SalesDashboard.css';
 import './Sales.css';
 import './SalesSkuReport.css';
 import './PurchaseReport.css';
 import './Stock.css';
 import './ReplenishReport.css';
 
-const MIS_TABS = [
+const BUSINESS_REPORT_TABS = [
+  { id: 'sales-dashboard', label: 'Sales Dashboard' },
   { id: 'sales', label: 'Sales Report' },
   { id: 'purchases', label: 'Purchase Report' },
   { id: 'stock', label: 'Stock Report' },
   { id: 'replenish', label: 'Replenish Report' },
 ];
 
-function MIS() {
-  const [activeTab, setActiveTab] = useState('sales');
+function MIS({ onNavigate }) {
+  const [activeTab, setActiveTab] = useState('sales-dashboard');
 
   const renderReport = () => {
     switch (activeTab) {
+      case 'sales-dashboard':
+        return <SalesDashboard />;
       case 'sales':
         return <Sales />;
       case 'purchases':
@@ -29,20 +34,20 @@ function MIS() {
       case 'stock':
         return <Stock />;
       case 'replenish':
-        return <ReplenishReport />;
+        return <ReplenishReport onNavigate={onNavigate} />;
       default:
-        return <Sales />;
+        return <SalesDashboard />;
     }
   };
 
   return (
     <div className="mis-container">
       <div className="mis-header">
-        <h1>Management Information System (MIS)</h1>
+        <h1>Business Reports</h1>
       </div>
 
       <div className="mis-tabs">
-        {MIS_TABS.map((tab) => (
+        {BUSINESS_REPORT_TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"

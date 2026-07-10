@@ -18,6 +18,23 @@ function ProductDetailField({ label, value }) {
     </div>
   );
 }
+
+function ReplenishBracketField({ label, main, deduction }) {
+  const mainNum = Number(main);
+  if (!Number.isFinite(mainNum) || mainNum <= 0) {
+    return <ProductDetailField label={label} value="—" />;
+  }
+  const deductionNum = Number(deduction) || 0;
+  return (
+    <div className="detail-field">
+      <span className="detail-field-label">{label}</span>
+      <span className="detail-field-value">
+        {mainNum}{' '}
+        <span className="replenish-bracket-deduction">({deductionNum})</span>
+      </span>
+    </div>
+  );
+}
  
 function formatDim(d) {
   return d && (d.length || d.width || d.height)
@@ -110,6 +127,10 @@ function ProductDetailsModal({
               <ProductDetailField label="Min Stock" value={replenishContext.minStock} />
               <ProductDetailField label="Available Stock" value={replenishContext.availableStock} />
               <ProductDetailField
+                label="Avail at Home"
+                value={replenishContext.homeAvailableStock ?? 0}
+              />
+              <ProductDetailField
                 label={`Sold (${replenishContext.lastMonthLabel || 'Previous month'})`}
                 value={replenishContext.salesCurrent}
               />
@@ -118,16 +139,13 @@ function ProductDetailsModal({
                 value={replenishContext.salesPastThreeMonths}
               />
               <ProductDetailField
-                label="Highest Monthly Sale (3 mo)"
+                label={`Highest Monthly Sale (${replenishContext.pastThreeMonthsLabel || 'Past 3 mo'})`}
                 value={replenishContext.highestMonthlySale}
               />
-              <ProductDetailField
+              <ReplenishBracketField
                 label="Req. Stock (Next Month)"
-                value={
-                  (replenishContext.requiredStockNextMonth ?? 0) > 0
-                    ? replenishContext.requiredStockNextMonth
-                    : '—'
-                }
+                main={replenishContext.requiredStockNextMonth}
+                deduction={replenishContext.availableStock}
               />
               {replenishContext.showDateColumn && (
                 <ProductDetailField
@@ -136,7 +154,11 @@ function ProductDetailsModal({
                 />
               )}
               <ProductDetailField label="Replenish Status" value={replenishContext.replenishStatus} />
-              <ProductDetailField label="Reorder Qty" value={replenishContext.suggestedReorder} />
+              <ReplenishBracketField
+                label="Reorder"
+                main={replenishContext.reorderQty}
+                deduction={replenishContext.refillQty}
+              />
             </div>
           </div>
         )}

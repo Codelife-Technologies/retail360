@@ -80,7 +80,7 @@ function formatComparisonPeriodLabel(startStr, endStr, periodFilter, isPrevious)
     case 'fortnight':
       return isPrevious ? `Previous month (${span})` : `Last 14 days (${span})`;
     case 'month':
-      return isPrevious ? `Previous month (${span})` : `Past 3 months (${span})`;
+      return isPrevious ? `Previous month (${span})` : `This month (${span})`;
     case 'custom':
       return isPrevious ? `Previous month (${span})` : `Selected range (${span})`;
     case 'allTime':
@@ -90,18 +90,25 @@ function formatComparisonPeriodLabel(startStr, endStr, periodFilter, isPrevious)
   }
 }
 
-const QUICK_STAT_TILES = [
-  { key: 'past3Days', label: 'Past 3 days' },
-  { key: 'past3Weeks', label: 'Past 3 weeks' },
-  { key: 'past3Months', label: 'Past 3 months', period: 'month' },
-  { key: 'thisYear', label: 'This year', period: 'allTime' },
-];
+const emptyStat = () => ({
+  totalSales: 0,
+  totalRevenue: 0,
+  totalItemsSold: 0,
+  averageOrderValue: 0,
+});
+
+const emptyOverviewTile = (key, label) => ({
+  key,
+  label,
+  start: '',
+  end: '',
+  ...emptyStat(),
+});
 
 const PERIOD_OPTIONS = [
   { id: 'day', label: 'Today' },
   { id: 'week', label: 'This Week' },
-  { id: 'fortnight', label: 'Fortnight' },
-  { id: 'month', label: 'Past 3 Months' },
+  { id: 'month', label: 'This Month' },
   { id: 'allTime', label: 'This Year' },
   { id: 'custom', label: 'Custom' },
 ];
@@ -114,6 +121,17 @@ const defaultDashboardFilters = () => ({
   salesChannel: '',
 });
 
+function resolveCustomDates(start, end) {
+  if (!start) return null;
+  if (!end) return { startDate: start, endDate: start };
+  if (new Date(start) > new Date(end)) return null;
+  return { startDate: start, endDate: end };
+}
+
+function isValidCustomRange(start, end) {
+  return resolveCustomDates(start, end) !== null;
+}
+
 function buildDashboardParams(applied) {
   const params = {
     period: applied.period,
@@ -121,8 +139,11 @@ function buildDashboardParams(applied) {
     salesChannel: applied.salesChannel || undefined,
   };
   if (applied.period === 'custom') {
-    if (applied.customStart) params.startDate = applied.customStart;
-    if (applied.customEnd) params.endDate = applied.customEnd;
+    const customDates = resolveCustomDates(applied.customStart, applied.customEnd);
+    if (customDates) {
+      params.startDate = customDates.startDate;
+      params.endDate = customDates.endDate;
+    }
   }
   return params;
 }
@@ -139,8 +160,11 @@ function buildRecordParams(applied, currentRange, page, limit = 25) {
     return params;
   }
   if (applied.period === 'custom') {
-    if (applied.customStart) params.startDate = applied.customStart;
-    if (applied.customEnd) params.endDate = applied.customEnd;
+    const customDates = resolveCustomDates(applied.customStart, applied.customEnd);
+    if (customDates) {
+      params.startDate = customDates.startDate;
+      params.endDate = customDates.endDate;
+    }
     return params;
   }
   if (currentRange?.start) params.startDate = currentRange.start;
@@ -180,10 +204,10 @@ const emptyDashboard = {
   currentRange: { start: '', end: '' },
   previousRange: { start: '', end: '' },
   overview: {
-    past3Days: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
-    past3Weeks: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
-    past3Months: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
-    thisYear: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
+    days: [],
+    past3Weeks: emptyOverviewTile('past-3-weeks', 'Past 3 weeks'),
+    past3Months: emptyOverviewTile('past-3-months', 'Past 3 months'),
+    thisYear: emptyOverviewTile('this-year', 'This year'),
   },
   currentPeriod: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
   previousPeriod: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
@@ -320,6 +344,7 @@ function SalesDashboard() {
   const [recordsLimit, setRecordsLimit] = useState(25);
   const [recordsPagination, setRecordsPagination] = useState(null);
   const [recordsLoading, setRecordsLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [viewingSale, setViewingSale] = useState(null);
   const [viewingSaleLoading, setViewingSaleLoading] = useState(false);
 
@@ -332,7 +357,19 @@ function SalesDashboard() {
   const fetchDashboardData = useCallback(async () => {
     const dashParams = buildDashboardParams(appliedFilters);
     const response = await reportsAPI.getSalesDashboard(dashParams);
-    return { ...emptyDashboard, ...response.data };
+    const payload = response.data || {};
+    return {
+      ...emptyDashboard,
+      ...payload,
+      overview: {
+        ...emptyDashboard.overview,
+        ...(payload.overview || {}),
+        days: payload.overview?.days || emptyDashboard.overview.days,
+        past3Weeks: payload.overview?.past3Weeks || emptyDashboard.overview.past3Weeks,
+        past3Months: payload.overview?.past3Months || emptyDashboard.overview.past3Months,
+        thisYear: payload.overview?.thisYear || emptyDashboard.overview.thisYear,
+      },
+    };
   }, [appliedFilters]);
 
   const fetchSalesRecords = useCallback(async (currentRange, page, limit) => {
@@ -349,7 +386,7 @@ function SalesDashboard() {
   }, [appliedFilters]);
 
   const loadDashboard = useCallback(async () => {
-    if (appliedFilters.period === 'custom' && (!appliedFilters.customStart || !appliedFilters.customEnd)) {
+    if (appliedFilters.period === 'custom' && !isValidCustomRange(appliedFilters.customStart, appliedFilters.customEnd)) {
       return;
     }
 
@@ -378,8 +415,8 @@ function SalesDashboard() {
   }, [loadDashboard]);
 
   const applyFilters = (next) => {
-    if (next.period === 'custom' && (!next.customStart || !next.customEnd)) {
-      alert('Select both start and end dates for a custom range.');
+    if (next.period === 'custom' && !isValidCustomRange(next.customStart, next.customEnd)) {
+      alert('Select a start date. If end date is omitted, only that day is shown. Start must be on or before end date.');
       return;
     }
     setRecordsPage(1);
@@ -404,18 +441,110 @@ function SalesDashboard() {
       customEnd: nextPeriod === 'custom' ? filters.customEnd : '',
     };
     setFilters(next);
-    if (nextPeriod !== 'custom' || (next.customStart && next.customEnd)) {
+    if (nextPeriod !== 'custom' || isValidCustomRange(next.customStart, next.customEnd)) {
       setRecordsPage(1);
       setAppliedFilters(next);
     }
   };
 
+  const handleOverviewTileClick = (tile, period = 'custom') => {
+    if (period === 'allTime') {
+      handlePeriodChange('allTime');
+      return;
+    }
+    if (!tile?.start) return;
+    const next = {
+      ...filters,
+      period: 'custom',
+      customStart: tile.start,
+      customEnd: tile.end || tile.start,
+    };
+    setFilters(next);
+    setRecordsPage(1);
+    setAppliedFilters(next);
+  };
+
+  const isOverviewTileActive = (tile, period = 'custom') => {
+    if (period === 'allTime') {
+      return appliedFilters.period === 'allTime';
+    }
+    if (appliedFilters.period !== 'custom' || !tile?.start) return false;
+    const range = resolveCustomDates(appliedFilters.customStart, appliedFilters.customEnd);
+    return range?.startDate === tile.start && range?.endDate === (tile.end || tile.start);
+  };
+
+  const renderOverviewTile = (tile, period = 'custom') => {
+    const safeTile = {
+      ...emptyOverviewTile('overview', '—'),
+      ...(tile || {}),
+    };
+    const isActive = isOverviewTileActive(safeTile, period);
+    return (
+      <div
+        key={safeTile.key}
+        role="button"
+        tabIndex={0}
+        className={`sales-dash-quick-stat${isActive ? ' active' : ''}`}
+        onClick={() => handleOverviewTileClick(safeTile, period)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleOverviewTileClick(safeTile, period);
+          }
+        }}
+      >
+        <div className="sales-dash-quick-stat-label">{safeTile.label}</div>
+        <div className="sales-dash-quick-stat-value">
+          {loading ? '—' : formatAed(safeTile.totalRevenue)}
+        </div>
+        <div className="sales-dash-quick-stat-sub">
+          {loading
+            ? 'Loading…'
+            : `${safeTile.totalSales || 0} orders · ${safeTile.totalItemsSold || 0} units`}
+        </div>
+      </div>
+    );
+  };
+
   const handleCustomDateChange = (field, value) => {
     const next = { ...filters, [field]: value };
     setFilters(next);
-    if (next.period === 'custom' && next.customStart && next.customEnd) {
+    if (next.period === 'custom' && isValidCustomRange(next.customStart, next.customEnd)) {
       setRecordsPage(1);
       setAppliedFilters(next);
+    }
+  };
+
+  const downloadBlob = (blobData, filename) => {
+    const url = window.URL.createObjectURL(new Blob([blobData]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleExport = async () => {
+    if (appliedFilters.period === 'custom' && !isValidCustomRange(appliedFilters.customStart, appliedFilters.customEnd)) {
+      alert('Select a start date before exporting.');
+      return;
+    }
+
+    try {
+      setExporting(true);
+      const params = buildDashboardParams(appliedFilters);
+      const response = await reportsAPI.exportSalesDashboard(params);
+      const rangeLabel = data.currentRange?.start && data.currentRange?.end
+        ? `${data.currentRange.start}_${data.currentRange.end}`
+        : new Date().toISOString().slice(0, 10);
+      downloadBlob(response.data, `sales_dashboard_${rangeLabel}.xlsx`);
+    } catch (error) {
+      console.error('Error exporting sales dashboard:', error);
+      alert(error.response?.data?.error || 'Failed to export report');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -488,47 +617,36 @@ function SalesDashboard() {
               : `${data.periodLabel || 'Sales'} · ${formatRangeSpan(data.currentRange?.start, data.currentRange?.end)}`}
           </div>
         </div>
-        <button type="button" className="sales-dash-btn-refresh" onClick={loadDashboard} disabled={loading}>
-          Refresh data
-        </button>
+        <div className="sales-dash-topbar-actions">
+          <button
+            type="button"
+            className="sales-dash-btn-export"
+            onClick={handleExport}
+            disabled={loading || exporting}
+          >
+            {exporting ? 'Exporting…' : 'Export Excel'}
+          </button>
+          <button type="button" className="sales-dash-btn-refresh" onClick={loadDashboard} disabled={loading}>
+            Refresh data
+          </button>
+        </div>
       </header>
 
       <div className="sales-dash-body">
-        <div className="sales-dash-quick-stats">
-          {QUICK_STAT_TILES.map((tile) => {
-            const stats = overview[tile.key] || {};
-            const isActive = tile.period && appliedFilters.period === tile.period;
-            const tileProps = tile.period
-              ? {
-                  role: 'button',
-                  tabIndex: 0,
-                  onClick: () => handlePeriodChange(tile.period),
-                  onKeyDown: (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handlePeriodChange(tile.period);
-                    }
-                  },
-                }
-              : {};
-            return (
-              <div
-                key={tile.key}
-                className={`sales-dash-quick-stat${isActive ? ' active' : ''}${tile.period ? '' : ' static'}`}
-                {...tileProps}
-              >
-                <div className="sales-dash-quick-stat-label">{tile.label}</div>
-                <div className="sales-dash-quick-stat-value">
-                  {loading ? '—' : formatAed(stats.totalRevenue)}
-                </div>
-                <div className="sales-dash-quick-stat-sub">
-                  {loading
-                    ? 'Loading…'
-                    : `${stats.totalSales || 0} orders · ${stats.totalItemsSold || 0} units`}
-                </div>
-              </div>
-            );
-          })}
+        <div className="sales-dash-overview-sections">
+          <section className="sales-dash-overview-group">
+            <h2 className="sales-dash-overview-title">Last 3 days</h2>
+            <div className="sales-dash-quick-stats cols-3">
+              {(overview.days || []).map((tile) => renderOverviewTile(tile))}
+            </div>
+          </section>
+          <section className="sales-dash-overview-group">
+            <div className="sales-dash-quick-stats cols-3">
+              {renderOverviewTile(overview.past3Weeks)}
+              {renderOverviewTile(overview.past3Months)}
+              {renderOverviewTile(overview.thisYear, 'allTime')}
+            </div>
+          </section>
         </div>
 
         <section className="sales-dash-filters">
@@ -553,6 +671,7 @@ function SalesDashboard() {
                   <input
                     type="date"
                     value={filters.customStart}
+                    max={filters.customEnd || undefined}
                     onChange={(e) => handleCustomDateChange('customStart', e.target.value)}
                   />
                 </label>
@@ -561,6 +680,7 @@ function SalesDashboard() {
                   <input
                     type="date"
                     value={filters.customEnd}
+                    min={filters.customStart || undefined}
                     onChange={(e) => handleCustomDateChange('customEnd', e.target.value)}
                   />
                 </label>

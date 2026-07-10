@@ -52,6 +52,33 @@
   margin-top: 0.15rem;
 }
 
+.sales-dash-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sales-dash-btn-export {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid #007185;
+  border-radius: 4px;
+  background: #007185;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: #fff;
+  cursor: pointer;
+}
+
+.sales-dash-btn-export:hover:not(:disabled) {
+  background: #005f70;
+  border-color: #005f70;
+}
+
+.sales-dash-btn-export:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .sales-dash-btn-refresh {
   padding: 0.4rem 0.9rem;
   border: 1px solid #848688;
@@ -539,12 +566,37 @@
   text-decoration: underline;
 }
 
-/* Quick stats row (past 3 days / 3 weeks / 3 months / this year) */
+/* Overview sections (last 3 days / weeks / months + this year) */
+.sales-dash-overview-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.sales-dash-overview-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sales-dash-overview-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--asc-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .sales-dash-quick-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0.75rem;
-  margin-bottom: 1rem;
+}
+
+.sales-dash-quick-stats.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .sales-dash-quick-stat {

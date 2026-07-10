@@ -6,6 +6,26 @@ function getDateKey(date = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
+function pickEarlierTime(timeA, timeB) {
+  if (!timeA) return timeB || '';
+  if (!timeB) return timeA;
+  const minutesA = parseTimeToMinutes(timeA);
+  const minutesB = parseTimeToMinutes(timeB);
+  if (minutesA == null) return timeB;
+  if (minutesB == null) return timeA;
+  return minutesA <= minutesB ? timeA : timeB;
+}
+
+function pickLaterTime(timeA, timeB) {
+  if (!timeA) return timeB || '';
+  if (!timeB) return timeA;
+  const minutesA = parseTimeToMinutes(timeA);
+  const minutesB = parseTimeToMinutes(timeB);
+  if (minutesA == null) return timeB;
+  if (minutesB == null) return timeA;
+  return minutesA >= minutesB ? timeA : timeB;
+}
+
 function applyLoginToAttendanceSession(user) {
   const now = new Date();
   const todayKey = getDateKey(now);
@@ -39,8 +59,12 @@ function applyLogoutToAttendanceSession(user) {
   const session = user.attendanceSession || {};
 
   if (session.date === todayKey) {
-    user.attendanceSession.checkOutAt = now;
-    user.attendanceSession.lastLoginAt = user.attendanceSession.lastLoginAt || now;
+    user.attendanceSession = {
+      date: todayKey,
+      checkInAt: session.checkInAt || now,
+      checkOutAt: now,
+      lastLoginAt: session.lastLoginAt || now,
+    };
   } else {
     user.attendanceSession = {
       date: todayKey,
@@ -51,6 +75,9 @@ function applyLogoutToAttendanceSession(user) {
   }
 
   user.lastLogoutAt = now;
+  if (typeof user.markModified === 'function') {
+    user.markModified('attendanceSession');
+  }
 }
 
 function ensureTodayAttendanceSession(user, { allowCurrentTime = false } = {}) {
@@ -75,7 +102,7 @@ function ensureTodayAttendanceSession(user, { allowCurrentTime = false } = {}) {
   if (user.lastLoginAt && getDateKey(user.lastLoginAt) === todayKey) {
     user.attendanceSession = {
       date: todayKey,
-      checkInAt: user.lastLoginAt,
+      checkInAt: session.date === todayKey && session.checkInAt ? session.checkInAt : user.lastLoginAt,
       checkOutAt: session.date === todayKey ? session.checkOutAt || null : null,
       lastLoginAt: user.lastLoginAt,
     };
@@ -106,7 +133,8 @@ function calcWorkingHoursFromTimes(checkIn, checkOut) {
   if (inMinutes == null || outMinutes == null) return 0;
 
   let diffMinutes = outMinutes - inMinutes;
-  if (diffMinutes <= 0) {
+  if (diffMinutes === 0) return 0;
+  if (diffMinutes < 0) {
     diffMinutes += 24 * 60;
   }
   if (diffMinutes <= 0) return 0;
@@ -121,4 +149,6 @@ module.exports = {
   ensureTodayAttendanceSession,
   parseTimeToMinutes,
   calcWorkingHoursFromTimes,
+  pickEarlierTime,
+  pickLaterTime,
 };

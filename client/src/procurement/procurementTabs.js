@@ -2,7 +2,6 @@ export const PROCUREMENT_GROUPS = [
   {
     label: 'Procurement',
     tabs: [
-      { id: 'replenish-report', label: 'Replenish Report', icon: '🔄', permission: 'reports.view' },
       { id: 'purchase-requisite', label: 'Purchase Requisition', icon: '📝', shortLabel: 'PR', permission: 'purchaseOrders.view' },
       { id: 'purchase-orders', label: 'Purchase Orders', icon: '📋', shortLabel: 'PO', permission: 'purchaseOrders.view' },
       { id: 'grn', label: 'Goods Receipt Note', icon: '📥', shortLabel: 'GRN', permission: 'purchaseOrders.view' },

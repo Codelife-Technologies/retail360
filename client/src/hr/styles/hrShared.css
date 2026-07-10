@@ -657,6 +657,225 @@
   white-space: nowrap;
 }
 
+.attendance-calendar {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-soft, #e5e7eb);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.attendance-calendar-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.attendance-calendar-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.attendance-calendar-subtitle {
+  margin: 0.25rem 0 0;
+  color: #6b7280;
+  font-size: 0.82rem;
+}
+
+.attendance-calendar-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  font-size: 0.82rem;
+  color: #374151;
+}
+
+.attendance-calendar-stats .stat-present strong {
+  color: #059669;
+}
+
+.attendance-calendar-stats .stat-absent strong {
+  color: #dc2626;
+}
+
+.attendance-calendar-stats .stat-leave strong {
+  color: #2563eb;
+}
+
+.attendance-calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  margin-bottom: 0.85rem;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: #4b5563;
+}
+
+.legend-item::before {
+  content: '';
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.legend-present::before {
+  background: #d1fae5;
+  border-color: #10b981;
+}
+
+.legend-absent::before {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+.legend-weekoff::before {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.legend-pending::before {
+  background: #fff;
+  border-color: #9ca3af;
+}
+
+.attendance-calendar-loading {
+  padding: 1.5rem;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.attendance-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+}
+
+.attendance-calendar-day-header {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted, #666);
+  padding: 0.25rem;
+}
+
+.attendance-calendar-day {
+  aspect-ratio: 1;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft, #e5e7eb);
+  background: #fff;
+  padding: 0.2rem;
+  font-size: 0.82rem;
+}
+
+.attendance-calendar-day.other-month {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.attendance-calendar-day.today {
+  box-shadow: inset 0 0 0 2px #667eea;
+  font-weight: 700;
+}
+
+.attendance-calendar-day-num {
+  line-height: 1.1;
+}
+
+.attendance-calendar-day-tag {
+  font-size: 0.58rem;
+  line-height: 1.1;
+  margin-top: 0.15rem;
+  opacity: 0.85;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attendance-calendar-day.state-present {
+  background: #d1fae5;
+  border-color: #10b981;
+  color: #065f46;
+}
+
+.attendance-calendar-day.state-absent {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #991b1b;
+}
+
+.attendance-calendar-day.state-weekoff {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #6b7280;
+}
+
+.attendance-calendar-day.state-leave {
+  background: #dbeafe;
+  border-color: #3b82f6;
+  color: #1e40af;
+}
+
+.attendance-calendar-day.state-halfday {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.attendance-calendar-day.state-holiday {
+  background: #ede9fe;
+  border-color: #8b5cf6;
+  color: #5b21b6;
+}
+
+.attendance-calendar-day.state-pending {
+  background: #fff;
+  border-color: #d1d5db;
+  color: #374151;
+}
+
+.attendance-calendar-day.state-future {
+  background: #fafafa;
+  border-color: #f3f4f6;
+  color: #9ca3af;
+}
+
+[data-theme="dark"] .attendance-calendar-day.state-present {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+}
+
+[data-theme="dark"] .attendance-calendar-day.state-absent {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .attendance-calendar-day.state-weekoff {
+  background: rgba(255, 255, 255, 0.05);
+  color: #9ca3af;
+}
+
+[data-theme="dark"] .attendance-calendar {
+  background: var(--surface);
+}
+
 [data-theme="dark"] .hr-kpi-card,
 [data-theme="dark"] .hr-table-card,
 [data-theme="dark"] .hr-chart-card,

@@ -160,8 +160,8 @@ function Dashboard({ onNavigate }) {
     { tab: 'purchases', className: 'stat-card success', icon: '💰', value: stats.totalPurchases, label: 'Total Purchases' },
     { tab: 'shipments', className: 'stat-card', icon: '🚚', value: stats.totalShipments, label: 'Total Shipments', style: { borderLeft: '4px solid #8b5cf6' } },
     { tab: 'shipments', className: 'stat-card warning', icon: '📤', value: stats.pendingShipments, label: 'Pending Shipments' },
-    { tab: 'sales', className: 'stat-card success', icon: '🛒', value: stats.totalSales, label: 'Total Sales' },
-    { tab: 'sales', className: 'stat-card info', icon: '⏳', value: stats.pendingSales, label: 'Pending Sales' },
+    { tab: 'mis', className: 'stat-card success', icon: '🛒', value: stats.totalSales, label: 'Total Sales' },
+    { tab: 'mis', className: 'stat-card info', icon: '⏳', value: stats.pendingSales, label: 'Pending Sales' },
   ];
 
   return (

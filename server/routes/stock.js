@@ -6,7 +6,7 @@ const Product = require('../models/Product');
 const Location = require('../models/Location');
 const { paginate } = require('../utils/pagination');
 const { parseExcel, buildImportErrorSummary } = require('../utils/excelParser');
-const { generateTemplate } = require('../utils/excelGenerator');
+const { generateTemplate, exportToExcel } = require('../utils/excelGenerator');
 const logger = require('../utils/logger');
 const {
   getCurrentMonthRange,
@@ -142,6 +142,84 @@ router.get('/alerts/low-stock', async (req, res) => {
       stack: error.stack 
     });
     console.error('Low stock alerts error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+const STOCK_EXPORT_HEADERS = [
+  { key: 'product', label: 'Product' },
+  { key: 'sku', label: 'SKU' },
+  { key: 'location', label: 'Location' },
+  { key: 'quantity', label: 'Quantity' },
+  { key: 'soldCurrentMonth', label: 'Sold (Current Month)' },
+  { key: 'minStockLevel', label: 'Min Level' },
+  { key: 'lastUpdated', label: 'Last Updated' },
+];
+
+function mapStockToExportRows(stockRecords = []) {
+  const monthLabel = getCurrentMonthRange().label;
+  return stockRecords.map((record) => ({
+    product: record.product?.title || record.product?.name || 'Unknown',
+    sku: record.product?.sku || '',
+    location: record.location?.code
+      ? `${record.location.name} (${record.location.code})`
+      : (record.location?.name || ''),
+    quantity: record.quantity ?? 0,
+    soldCurrentMonth: record.soldCurrentMonth ?? 0,
+    minStockLevel: record.minStockLevel ?? 0,
+    lastUpdated: record.lastUpdated
+      ? new Date(record.lastUpdated).toISOString().slice(0, 10)
+      : '',
+    _monthLabel: monthLabel,
+  }));
+}
+
+function filterStockForExport(records, search = '') {
+  const term = String(search || '').trim().toLowerCase();
+  if (!term) return records;
+  return records.filter((record) => {
+    const product = record.product || {};
+    const location = record.location || {};
+    return (
+      (product.title && product.title.toLowerCase().includes(term)) ||
+      (product.name && product.name.toLowerCase().includes(term)) ||
+      (product.sku && product.sku.toLowerCase().includes(term)) ||
+      (location.name && location.name.toLowerCase().includes(term)) ||
+      (location.code && location.code.toLowerCase().includes(term))
+    );
+  });
+}
+
+// GET export stock report as Excel
+router.get('/export', async (req, res) => {
+  try {
+    const { product, location, search = '' } = req.query;
+    const query = {};
+    if (product) query.product = product;
+    if (location) query.location = location;
+
+    const stock = await Stock.find(query)
+      .populate('product', PRODUCT_POPULATE_FIELDS)
+      .populate('location', 'name code city')
+      .sort({ createdAt: -1 });
+
+    const enriched = await attachSoldCurrentMonth(stock);
+    const filtered = filterStockForExport(enriched, search);
+    const exportRows = mapStockToExportRows(filtered).map(({ _monthLabel, ...row }) => row);
+    const monthLabel = getCurrentMonthRange().label;
+    const headers = STOCK_EXPORT_HEADERS.map((header) =>
+      header.key === 'soldCurrentMonth'
+        ? { ...header, label: `Sold (${monthLabel})` }
+        : header
+    );
+
+    const buffer = exportToExcel(exportRows, headers);
+    const filename = `stock_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(buffer);
+  } catch (error) {
+    logger.backend.error('Error exporting stock report', { error: error.message, stack: error.stack });
     res.status(500).json({ error: error.message });
   }
 });

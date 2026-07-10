@@ -13,7 +13,7 @@ const {
   isSelfAttendanceRequest,
   withComputedWorkingHours,
 } = require('../utils/attendanceAccess');
-const { calcWorkingHoursFromTimes, getDateKey } = require('../../utils/attendanceSession');
+const { calcWorkingHoursFromTimes, getDateKey, pickEarlierTime, pickLaterTime } = require('../../utils/attendanceSession');
 
 function enrichAttendanceRecord(record) {
   if (!record) return record;
@@ -304,8 +304,16 @@ router.post('/', async (req, res) => {
 
     if (existing) {
       if (selfRequest || !scope.canManageAll) {
-        if (resolvedCheckOut) existing.checkOut = resolvedCheckOut;
-        if (checkIn && !existing.checkIn) existing.checkIn = checkIn;
+        if (checkIn) {
+          existing.checkIn = existing.checkIn
+            ? pickEarlierTime(existing.checkIn, checkIn)
+            : checkIn;
+        }
+        if (resolvedCheckOut) {
+          existing.checkOut = existing.checkOut
+            ? pickLaterTime(existing.checkOut, resolvedCheckOut)
+            : resolvedCheckOut;
+        }
         if (req.body.notes != null) existing.notes = req.body.notes;
         if (req.body.status != null) {
           existing.status = resolveEmployeeSelfStatus(req.body.status, existing.status);

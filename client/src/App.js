@@ -299,7 +299,7 @@ function App() {
         return;
       }
       if (tab === 'sales-module') {
-        const firstTab = visibleSalesTabs[0]?.id || 'sales';
+        const firstTab = visibleSalesTabs[0]?.id || 'shipments';
         setActiveTab(`sales-module:${firstTab}`);
         setSalesOpen(true);
         setMasterOpen(false);
@@ -309,8 +309,8 @@ function App() {
         setEmployeeDashboardOpen(false);
         return;
       }
-      if (tab === 'dashboard' || tab === 'mis') {
-        setActiveTab(tab);
+      if (tab === 'dashboard' || tab === 'mis' || tab === 'business-reports') {
+        setActiveTab(tab === 'business-reports' ? 'mis' : tab);
         closeModuleDropdowns();
         return;
       }
@@ -391,7 +391,7 @@ function App() {
           <div className="app-access-denied">You do not have access to this section.</div>
         );
       case 'mis':
-        return canViewReports ? <MIS /> : (
+        return canViewReports ? <MIS onNavigate={handleNavigate} /> : (
           <div className="app-access-denied">You do not have access to this section.</div>
         );
       default:
@@ -426,7 +426,7 @@ function App() {
                 className={activeTab === 'mis' ? 'nav-item active' : 'nav-item'}
                 onClick={() => handleNavigate('mis')}
               >
-                📊 MIS Reports
+                📊 Business Reports
               </button>
             </>
           )}
@@ -532,7 +532,7 @@ function App() {
               onClick={() => setSalesOpen((open) => !open)}
               aria-expanded={salesOpen}
             >
-              <span>🛒 Sales</span>
+              <span>📦 Shipments</span>
               <span className={`nav-chevron${salesOpen ? ' open' : ''}`}>▾</span>
             </button>
             {salesOpen && (

@@ -1,9 +1,7 @@
 export const SALES_GROUPS = [
   {
-    label: 'Sales',
+    label: 'Shipments',
     tabs: [
-      { id: 'sales-dashboard', label: 'Sales Dashboard', icon: '📊', permission: 'sales.view' },
-      { id: 'sales', label: 'Sales Report', icon: '📋', permission: 'sales.view' },
       { id: 'shipments', label: 'Shipments', icon: '📦', permission: 'shipments.view' },
       { id: 'shipping-charges', label: 'Shipping Charges', icon: '💳', permission: 'shippingCharges.view' },
     ],
@@ -21,7 +19,7 @@ export function isSalesModuleTab(tabId) {
 }
 
 export function resolveSalesSubTab(tabId) {
-  if (tabId === 'sales-module') return 'sales';
+  if (tabId === 'sales-module') return 'shipments';
   if (tabId.startsWith('sales-module:')) return tabId.slice('sales-module:'.length);
-  return isSalesModuleTab(tabId) ? tabId : 'sales';
+  return isSalesModuleTab(tabId) ? tabId : 'shipments';
 }
