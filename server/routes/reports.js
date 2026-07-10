@@ -181,61 +181,12 @@ function filterSalesInRange(sales, start, end) {
   });
 }
 
-function formatOverviewDayLabel(date, offsetFromToday) {
-  if (offsetFromToday === 0) return 'Today';
-  if (offsetFromToday === 1) return 'Yesterday';
-  return toDateInputStr(date);
-}
-
-function buildRecentDayBuckets(now, count = 3) {
-  const buckets = [];
-  for (let offset = count - 1; offset >= 0; offset -= 1) {
-    const date = new Date(now);
-    date.setDate(now.getDate() - offset);
-    buckets.push({
-      key: `day-${offset}`,
-      label: formatOverviewDayLabel(date, offset),
-      start: startOfDay(date),
-      end: endOfDay(date),
-    });
-  }
-  return buckets;
-}
-
-function buildPast3WeeksRange(now) {
-  const start = new Date(now);
-  start.setDate(now.getDate() - 20);
-  return {
-    key: 'past-3-weeks',
-    label: 'Past 3 weeks',
-    start: startOfDay(start),
-    end: endOfDay(now),
-  };
-}
-
-function buildPast3MonthsRange(now) {
-  const start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  return {
-    key: 'past-3-months',
-    label: 'Past 3 months',
-    start: startOfDay(start),
-    end: endOfDay(now),
-  };
-}
-
-function mapOverviewTile(bucket, sales) {
-  const stats = computeSaleStats(filterSalesInRange(sales, bucket.start, bucket.end));
-  return {
-    key: bucket.key,
-    label: bucket.label,
-    start: toDateInputStr(bucket.start),
-    end: toDateInputStr(bucket.end),
-    ...stats,
-  };
-}
-
-function mapOverviewBuckets(buckets, sales) {
-  return buckets.map((bucket) => mapOverviewTile(bucket, sales));
+function buildOverviewRanges(now) {
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - now.getDay());
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const yearStart = new Date(now.getFullYear(), 0, 1);
+  return { weekStart, monthStart, yearStart };
 }
 
 function resolvePeriodRange(period, customStart, customEnd) {
@@ -1473,27 +1424,17 @@ router.get('/sales/business-report/export', async (req, res) => {
   }
 });
 
-// GET export sales by SKU as Excel (includes sales detail sheet)
+// GET export sales by SKU as Excel
 router.get('/sales/by-sku/export', async (req, res) => {
   try {
     const exportFilters = { ...req.query };
     delete exportFilters.view;
+    delete exportFilters.search;
+    delete exportFilters.sortBy;
+    delete exportFilters.sortDir;
     const { rows } = await aggregateSalesBySku(exportFilters);
-    const detailFilters = { ...exportFilters };
-    if (exportFilters.detailStartDate) detailFilters.startDate = exportFilters.detailStartDate;
-    if (exportFilters.detailEndDate) detailFilters.endDate = exportFilters.detailEndDate;
-    delete detailFilters.detailStartDate;
-    delete detailFilters.detailEndDate;
-    delete detailFilters.search;
-    delete detailFilters.sortBy;
-    delete detailFilters.sortDir;
-    const { rows: sales } = await fetchSalesDetailedReport(detailFilters);
-    const orderRows = mapSalesToExportRows(sales);
 
-    const buffer = exportMultiSheetExcel([
-      { name: 'By SKU', headers: SALES_SKU_EXPORT_HEADERS, data: rows },
-      { name: 'Sales Detail', headers: SALES_ORDER_EXPORT_HEADERS, data: orderRows },
-    ]);
+    const buffer = exportToExcel(rows, SALES_SKU_EXPORT_HEADERS);
     const filename = `sales_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
@@ -1531,10 +1472,7 @@ router.get('/sales/dashboard', async (req, res) => {
     const previousRange = resolvePreviousRange(currentRange.start, currentRange.end, period);
 
     const now = new Date();
-    const yearStart = new Date(now.getFullYear(), 0, 1);
-    const dayBuckets = buildRecentDayBuckets(now, 3);
-    const past3WeeksRange = buildPast3WeeksRange(now);
-    const past3MonthsRange = buildPast3MonthsRange(now);
+    const { weekStart, monthStart, yearStart } = buildOverviewRanges(now);
 
     const chartLookback = new Date(currentRange.start);
     chartLookback.setMonth(chartLookback.getMonth() - 1);
@@ -1542,9 +1480,9 @@ router.get('/sales/dashboard', async (req, res) => {
     const fetchStart = new Date(Math.min(
       previousRange.start.getTime(),
       startOfDay(chartLookback).getTime(),
-      ...dayBuckets.map((bucket) => bucket.start.getTime()),
-      past3WeeksRange.start.getTime(),
-      past3MonthsRange.start.getTime(),
+      startOfDay(now).getTime(),
+      startOfDay(weekStart).getTime(),
+      startOfDay(monthStart).getTime(),
       startOfDay(yearStart).getTime()
     ));
 
@@ -1598,15 +1536,10 @@ router.get('/sales/dashboard', async (req, res) => {
         end: toDateInputStr(previousRange.end),
       },
       overview: {
-        days: mapOverviewBuckets(dayBuckets, sales),
-        past3Weeks: mapOverviewTile(past3WeeksRange, sales),
-        past3Months: mapOverviewTile(past3MonthsRange, sales),
-        thisYear: mapOverviewTile({
-          key: 'this-year',
-          label: 'This year',
-          start: startOfDay(yearStart),
-          end: endOfDay(now),
-        }, sales),
+        today: computeSaleStats(filterSalesInRange(sales, startOfDay(now), endOfDay(now))),
+        thisWeek: computeSaleStats(filterSalesInRange(sales, startOfDay(weekStart), endOfDay(now))),
+        thisMonth: computeSaleStats(filterSalesInRange(sales, startOfDay(monthStart), endOfDay(now))),
+        thisYear: computeSaleStats(filterSalesInRange(sales, startOfDay(yearStart), endOfDay(now))),
       },
       currentPeriod,
       previousPeriod,
@@ -2080,7 +2013,7 @@ async function buildReplenishReportData(query = {}) {
     if (productIds.length === 0) {
       return {
         summary: {
-          totalProducts: 0, reorderCount: 0, lowCount: 0,
+          totalProducts: 0, reorderCount: 0, restockRequiredNextMonthQty: 0,
           unitsSoldCurrentMonth: 0, unitsSoldPastThreeMonths: 0,
           ...(specificDay ? { unitsSoldOnDate: 0 } : {}),
         },
@@ -2093,7 +2026,6 @@ async function buildReplenishReportData(query = {}) {
         specificDate: specificDay ? { value: specificDay.key, label: specificDay.label } : null,
         products: [],
         groupedByLocation: [],
-        groupedByCategory: [],
       };
     }
 
@@ -2236,39 +2168,12 @@ async function buildReplenishReportData(query = {}) {
 
     applyHomeRefillAllocation(combinedData, homeLocation, homeStockByProduct);
 
-    const categorySummary = {};
-    combinedData.forEach((item) => {
-      const categoryName = item.product.category?.name || 'Uncategorized';
-      const categoryId = item.product.category?._id?.toString() || 'uncategorized';
-
-      if (!categorySummary[categoryId]) {
-        categorySummary[categoryId] = {
-          categoryId,
-          categoryName,
-          totalProducts: 0,
-          needsReorder: 0,
-          currentStock: 0,
-          unitsSoldCurrentMonth: 0,
-          unitsSoldPastThreeMonths: 0,
-          ...(specificDay ? { unitsSoldOnDate: 0 } : {}),
-        };
-      }
-
-      categorySummary[categoryId].totalProducts += 1;
-      if (item.replenishStatus === 'REORDER' || item.replenishStatus === 'LOW') {
-        categorySummary[categoryId].needsReorder += 1;
-      }
-      categorySummary[categoryId].currentStock += item.inventory.currentStock;
-      categorySummary[categoryId].unitsSoldCurrentMonth += item.salesCurrent;
-      categorySummary[categoryId].unitsSoldPastThreeMonths += item.salesPastThreeMonths;
-      if (specificDay) {
-        categorySummary[categoryId].unitsSoldOnDate += item.salesOnDate || 0;
-      }
-    });
-
     const totalProducts = combinedData.length;
     const reorderCount = combinedData.filter((i) => i.replenishStatus === 'REORDER').length;
-    const lowCount = combinedData.filter((i) => i.replenishStatus === 'LOW').length;
+    const restockRequiredNextMonthQty = combinedData.reduce(
+      (sum, item) => sum + (item.requiredStockNextMonth || 0),
+      0
+    );
     const unitsSoldCurrentMonth = combinedData.reduce(
       (sum, item) => sum + (item.salesCurrent || 0),
       0
@@ -2285,7 +2190,7 @@ async function buildReplenishReportData(query = {}) {
       summary: {
         totalProducts,
         reorderCount,
-        lowCount,
+        restockRequiredNextMonthQty,
         unitsSoldCurrentMonth,
         unitsSoldPastThreeMonths,
         ...(unitsSoldOnDate !== undefined ? { unitsSoldOnDate } : {}),
@@ -2302,7 +2207,6 @@ async function buildReplenishReportData(query = {}) {
         : null,
       products: combinedData,
       groupedByLocation,
-      groupedByCategory: Object.values(categorySummary),
     };
 }
 
@@ -2435,7 +2339,7 @@ router.get('/replenish', async (req, res) => {
 
 router.get('/replenish/export', async (req, res) => {
   try {
-    const { status = 'ALL', view = 'products', search = '', ...reportQuery } = req.query;
+    const { status = 'ALL', search = '', ...reportQuery } = req.query;
     const data = await buildReplenishReportData(reportQuery);
     const showDateColumn = Boolean(data.specificDate?.label);
     const monthLabels = {
@@ -2444,30 +2348,20 @@ router.get('/replenish/export', async (req, res) => {
       specificDate: data.specificDate?.label || '',
     };
 
-    const sheets = [];
-
-    if (view === 'categories') {
-      const categoryHeaders = buildReplenishCategoryExportHeaders(monthLabels, showDateColumn);
-      const categoryRows = (data.groupedByCategory || []).map((cat) =>
-        mapReplenishCategoryToExportRow(cat, monthLabels, showDateColumn)
-      );
-      sheets.push({ name: 'Category Summary', headers: categoryHeaders, data: categoryRows });
-    } else {
-      const products = filterReplenishProductsForExport(data.products || [], {
-        status,
-        search,
-        view,
-      });
-      const productRows = products.map((item) =>
-        mapReplenishItemToExportRow(item, monthLabels, showDateColumn)
-      );
-      const productHeaders = buildReplenishProductExportHeaders(monthLabels, showDateColumn);
-      sheets.push({
-        name: view === 'locations' ? 'Location-wise' : 'Products',
-        headers: productHeaders,
-        data: productRows,
-      });
-    }
+    const products = filterReplenishProductsForExport(data.products || [], {
+      status,
+      search,
+      view: 'locations',
+    });
+    const productRows = products.map((item) =>
+      mapReplenishItemToExportRow(item, monthLabels, showDateColumn)
+    );
+    const productHeaders = buildReplenishProductExportHeaders(monthLabels, showDateColumn);
+    const sheets = [{
+      name: 'Location-wise',
+      headers: productHeaders,
+      data: productRows,
+    }];
 
     const buffer = exportMultiSheetExcel(sheets);
     const filename = `replenish_report_${new Date().toISOString().slice(0, 10)}.xlsx`;

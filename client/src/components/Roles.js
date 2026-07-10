@@ -1,7 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { rolesAPI, permissionsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import DetailModal from './DetailModal';
 import './UserManagement.css';
+import './DetailModal.css';
+
+function truncateText(text, maxLength = 50) {
+  if (!text) return '—';
+  const trimmed = String(text).trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, maxLength)}…`;
+}
+
+function getRolePermissions(role) {
+  return (role.permissions || []).map((p) => {
+    if (typeof p === 'object') {
+      return {
+        id: p._id,
+        name: p.name || p.code || '—',
+        code: p.code || '',
+      };
+    }
+    return { id: p, name: String(p), code: '' };
+  });
+}
+
+function permissionSummary(role) {
+  const perms = getRolePermissions(role);
+  if (perms.length === 0) return '—';
+  if (perms.length === 1) return truncateText(perms[0].name, 28);
+  return `${perms.length} permissions`;
+}
 
 function Roles() {
   const { hasPermission } = useAuth();
@@ -10,6 +39,7 @@ function Roles() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [viewingRole, setViewingRole] = useState(null);
   const [editingRole, setEditingRole] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -86,6 +116,7 @@ function Roles() {
   };
 
   const handleEdit = (item) => {
+    setViewingRole(null);
     setEditingRole(item);
     const permIds = (item.permissions || []).map((p) => (typeof p === 'object' ? p._id : p));
     setFormData({
@@ -112,14 +143,33 @@ function Roles() {
   };
 
   const openAddModal = () => {
+    setViewingRole(null);
     setEditingRole(null);
     resetForm();
     setShowModal(true);
   };
 
-  const permNames = (role) => {
-    const perms = role.permissions || [];
-    return perms.map((p) => (typeof p === 'object' ? p.name || p.code : '-')).join(', ') || '-';
+  const openViewRole = (role) => {
+    setViewingRole(role);
+  };
+
+  const closeViewRole = () => {
+    setViewingRole(null);
+  };
+
+  const handleViewEdit = () => {
+    if (!viewingRole) return;
+    handleEdit(viewingRole);
+  };
+
+  const handleViewDelete = () => {
+    if (!viewingRole) return;
+    handleDelete(viewingRole._id);
+    setViewingRole(null);
+  };
+
+  const stopRowClick = (event) => {
+    event.stopPropagation();
   };
 
   return (
@@ -142,13 +192,13 @@ function Roles() {
         <div className="loading">Loading...</div>
       ) : (
         <div className="um-table-container">
-          <table className="um-table">
+          <table className="um-table um-table-roles">
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Code</th>
-                <th>Description</th>
-                <th>Permissions</th>
+                <th className="col-description">Description</th>
+                <th className="col-permissions">Permissions</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -157,17 +207,30 @@ function Roles() {
                 <tr><td colSpan="5" className="no-data">No roles found</td></tr>
               ) : (
                 roles.map((r) => (
-                  <tr key={r._id}>
+                  <tr
+                    key={r._id}
+                    className="clickable-row"
+                    onClick={() => openViewRole(r)}
+                    title="Click to view role details"
+                  >
                     <td>{r.name}</td>
                     <td>{r.code}</td>
-                    <td>{r.description || '-'}</td>
-                    <td>{permNames(r)}</td>
-                    <td>
+                    <td className="col-description">
+                      <span className="um-cell-ellipsis" title={r.description || ''}>
+                        {truncateText(r.description, 40)}
+                      </span>
+                    </td>
+                    <td className="col-permissions">
+                      <span className="um-cell-ellipsis" title={getRolePermissions(r).map((p) => p.name).join(', ')}>
+                        {permissionSummary(r)}
+                      </span>
+                    </td>
+                    <td onClick={stopRowClick}>
                       {hasPermission('roles.update') && (
-                        <button className="btn-edit" onClick={() => handleEdit(r)}>Edit</button>
+                        <button type="button" className="btn-edit" onClick={() => handleEdit(r)}>Edit</button>
                       )}
                       {hasPermission('roles.delete') && (
-                        <button className="btn-delete" onClick={() => handleDelete(r._id)}>Delete</button>
+                        <button type="button" className="btn-delete" onClick={() => handleDelete(r._id)}>Delete</button>
                       )}
                     </td>
                   </tr>
@@ -176,6 +239,34 @@ function Roles() {
             </tbody>
           </table>
         </div>
+      )}
+      {viewingRole && (
+        <DetailModal
+          title={viewingRole.name}
+          fields={[
+            { label: 'Code', value: viewingRole.code },
+            { label: 'Description', value: viewingRole.description || '—', full: true },
+          ]}
+          onClose={closeViewRole}
+          onEdit={hasPermission('roles.update') ? handleViewEdit : undefined}
+          onDelete={hasPermission('roles.delete') ? handleViewDelete : undefined}
+        >
+          <div className="detail-view-section">
+            <h3>Permissions ({getRolePermissions(viewingRole).length})</h3>
+            {getRolePermissions(viewingRole).length === 0 ? (
+              <p className="um-role-perm-empty">No permissions assigned to this role.</p>
+            ) : (
+              <ul className="um-role-perm-list">
+                {getRolePermissions(viewingRole).map((perm) => (
+                  <li key={perm.id}>
+                    <strong>{perm.name}</strong>
+                    {perm.code ? <span className="um-role-perm-code">{perm.code}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </DetailModal>
       )}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>

@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import SalesDashboard from './SalesDashboard';
-import Sales from './Sales';
 import PurchaseReport from './PurchaseReport';
 import Stock from './Stock';
 import ReplenishReport from './ReplenishReport';
@@ -11,6 +10,8 @@ import './SalesSkuReport.css';
 import './PurchaseReport.css';
 import './Stock.css';
 import './ReplenishReport.css';
+
+const SalesSkuReport = lazy(() => import('./SalesSkuReport'));
 
 const BUSINESS_REPORT_TABS = [
   { id: 'sales-dashboard', label: 'Sales Dashboard' },
@@ -28,7 +29,13 @@ function MIS({ onNavigate }) {
       case 'sales-dashboard':
         return <SalesDashboard />;
       case 'sales':
-        return <Sales />;
+        return (
+          <div className="sales-container sales-report-page">
+            <Suspense fallback={<div className="sales-sku-loading">Loading sales report…</div>}>
+              <SalesSkuReport />
+            </Suspense>
+          </div>
+        );
       case 'purchases':
         return <PurchaseReport />;
       case 'stock':

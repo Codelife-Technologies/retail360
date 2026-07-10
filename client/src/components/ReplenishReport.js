@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { reportsAPI, categoriesAPI, subcategoriesAPI, locationsAPI, purchaseRequisitesAPI, productsAPI, pricesAPI } from '../services/api';
 import { getCurrentUser } from '../utils/currentUser';
 import logger from '../utils/logger';
@@ -33,7 +33,6 @@ function ReplenishBracketQty({ main, deduction, title }) {
 }
 
 function ReplenishReport({ onNavigate }) {
-  const [activeTab, setActiveTab] = useState('locations');
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [creatingPR, setCreatingPR] = useState(false);
@@ -81,37 +80,6 @@ function ReplenishReport({ onNavigate }) {
   useEffect(() => {
     fetchReport();
   }, [filters.category, filters.subCategory, filters.location, filters.specificDate]);
-
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return undefined;
-    container.style.setProperty('--replenish-sticky-stack', '0px');
-
-    if (activeTab !== 'locations' || !reportData) return undefined;
-
-    const updateLocationHeaderHeights = () => {
-      container.querySelectorAll('.location-block').forEach((block) => {
-        const header = block.querySelector('.location-block-header');
-        if (header) {
-          block.style.setProperty('--location-header-height', `${header.offsetHeight}px`);
-        }
-      });
-    };
-
-    updateLocationHeaderHeights();
-    const headerObserver = new ResizeObserver(updateLocationHeaderHeights);
-    container.querySelectorAll('.location-block-header').forEach((header) => {
-      headerObserver.observe(header);
-    });
-    window.addEventListener('resize', updateLocationHeaderHeights);
-
-    return () => {
-      headerObserver.disconnect();
-      window.removeEventListener('resize', updateLocationHeaderHeights);
-    };
-  }, [activeTab, reportData, filters, searchTerm, reportData?.specificDate]);
 
   const formatPrOptionLabel = (pr) => {
     const title = pr.name ? `${pr.name} (${pr.prNumber})` : pr.prNumber;
@@ -186,12 +154,7 @@ function ReplenishReport({ onNavigate }) {
   };
 
   const handleExport = async () => {
-    if (activeTab === 'categories') {
-      if (!reportData?.groupedByCategory?.length) {
-        alert('No data to export for the selected filters');
-        return;
-      }
-    } else if (!getAllVisibleItems().length) {
+    if (!getAllVisibleItems().length) {
       alert('No data to export for the selected filters');
       return;
     }
@@ -202,7 +165,7 @@ function ReplenishReport({ onNavigate }) {
         subCategory: filters.subCategory,
         location: filters.location,
         status: filters.status,
-        view: activeTab,
+        view: 'locations',
       };
       if (filters.specificDate) {
         params.specificDate = filters.specificDate;
@@ -242,17 +205,12 @@ function ReplenishReport({ onNavigate }) {
     }
   };
 
-  const getNestedValue = (obj, path) => {
-    return path.split('.').reduce((acc, part) => acc && acc[part], obj);
-  };
-
   const monthLabels = reportData?.monthLabels || {};
   const pastThreeMonthsLabel = monthLabels.pastThreeMonths || 'Past 3 Months';
   const homeBranchLabel = reportData?.homeBranch?.name || 'Home';
   const specificDateInfo = reportData?.specificDate;
   const dateWindow = reportData?.dateWindow;
   const showDateColumn = Boolean(specificDateInfo?.value);
-  const tableColSpan = showDateColumn ? 11 : 10;
 
   const needsReplenishHighlight = (item) =>
     item.replenishStatus === 'REORDER' || item.replenishStatus === 'LOW';
@@ -318,62 +276,23 @@ function ReplenishReport({ onNavigate }) {
 
   const clearSelection = () => setSelectedKeys(new Set());
 
-  const getProcessedProducts = () => {
-    if (!reportData?.products) return [];
-
-    let result = [...reportData.products];
-
-    if (filters.status !== 'ALL') {
-      result = result.filter((item) => item.replenishStatus === filters.status);
-    }
-
-    if (searchTerm.trim() !== '') {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(
-        (item) =>
-          (item.product.title && item.product.title.toLowerCase().includes(term)) ||
-          (item.product.sku && item.product.sku.toLowerCase().includes(term)) ||
-          (item.location?.name && item.location.name.toLowerCase().includes(term))
-      );
-    }
-
-    result.sort((a, b) => {
-      let valA = getNestedValue(a, sortField);
-      let valB = getNestedValue(b, sortField);
-      if (valA === undefined || valA === null) valA = '';
-      if (valB === undefined || valB === null) valB = '';
-      if (typeof valA === 'string') {
-        return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      }
-      return sortDirection === 'asc' ? valA - valB : valB - valA;
-    });
-
-    return result;
-  };
-
-  const processedProducts = getProcessedProducts();
-
-  const getAllVisibleItems = () => {
-    if (activeTab === 'products') return processedProducts;
-    if (activeTab === 'locations') {
-      return (reportData?.groupedByLocation || []).flatMap((group) =>
-        group.products.filter((item) => {
-          if (filters.status !== 'ALL' && item.replenishStatus !== filters.status) {
-            return false;
-          }
-          if (searchTerm.trim()) {
-            const term = searchTerm.toLowerCase();
-            return (
-              (item.product.title && item.product.title.toLowerCase().includes(term)) ||
-              (item.product.sku && item.product.sku.toLowerCase().includes(term))
-            );
-          }
-          return true;
-        })
-      );
-    }
-    return [];
-  };
+  const getAllVisibleItems = () => (
+    (reportData?.groupedByLocation || []).flatMap((group) =>
+      group.products.filter((item) => {
+        if (filters.status !== 'ALL' && item.replenishStatus !== filters.status) {
+          return false;
+        }
+        if (searchTerm.trim()) {
+          const term = searchTerm.toLowerCase();
+          return (
+            (item.product.title && item.product.title.toLowerCase().includes(term)) ||
+            (item.product.sku && item.product.sku.toLowerCase().includes(term))
+          );
+        }
+        return true;
+      })
+    )
+  );
 
   const selectAllPrItems = () => {
     const keys = getPrCandidateItems().map(getRowKey);
@@ -669,27 +588,6 @@ function ReplenishReport({ onNavigate }) {
 
       <div className="report-actions-row">
         <div className="report-actions-left">
-          <div className="view-toggle">
-            <button
-              className={activeTab === 'locations' ? 'active' : ''}
-              onClick={() => setActiveTab('locations')}
-            >
-              Location-wise
-            </button>
-            <button
-              className={activeTab === 'products' ? 'active' : ''}
-              onClick={() => setActiveTab('products')}
-            >
-              All Products
-            </button>
-            <button
-              className={activeTab === 'categories' ? 'active' : ''}
-              onClick={() => setActiveTab('categories')}
-            >
-              Category Summary
-            </button>
-          </div>
-
           <div className="replenish-location-select">
             <label htmlFor="replenish-location">Warehouse</label>
             <select
@@ -708,20 +606,18 @@ function ReplenishReport({ onNavigate }) {
           </div>
         </div>
 
-        {(activeTab === 'products' || activeTab === 'locations') && (
-          <div className="search-bar">
-            <input
-              type="text"
-              placeholder="Search SKU, product, location..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-        )}
+        <div className="search-bar">
+          <input
+            type="text"
+            placeholder="Search SKU, product..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
       </div>
       </div>
 
-      <div className="replenish-report-scroll" ref={containerRef}>
+      <div className="replenish-report-scroll">
       {showFilters && (
       <div className="report-filters">
         <h3>Filters</h3>
@@ -802,8 +698,9 @@ function ReplenishReport({ onNavigate }) {
             <p className="stat-value text-red">{reportData.summary.reorderCount}</p>
           </div>
           <div className="stat-card alert-card-low">
-            <h3>Low Stock</h3>
-            <p className="stat-value text-yellow">{reportData.summary.lowCount}</p>
+            <h3>Restock Required (Next Month)</h3>
+            <p className="stat-value text-yellow">{reportData.summary.restockRequiredNextMonthQty ?? 0}</p>
+            <small>Total units needed across products</small>
           </div>
           <div className="stat-card">
             <h3>Sold ({monthLabels.current})</h3>
@@ -832,10 +729,9 @@ function ReplenishReport({ onNavigate }) {
         </div>
       ) : reportData ? (
         <div className="report-content-body">
-          {activeTab === 'locations' && (
-            <div className="location-sections">
-              {(reportData.groupedByLocation || []).length > 0 ? (
-                reportData.groupedByLocation.map((group) => {
+          <div className="location-sections">
+            {(reportData.groupedByLocation || []).length > 0 ? (
+              reportData.groupedByLocation.map((group) => {
                   const filtered = group.products.filter((item) => {
                     if (filters.status !== 'ALL' && item.replenishStatus !== filters.status) {
                       return false;
@@ -853,16 +749,18 @@ function ReplenishReport({ onNavigate }) {
                   return (
                     <div key={group.location._id} className="location-block">
                       <div className="location-block-header">
-                        <h3>
-                          {group.location.name}
-                          <span className="location-code">{group.location.code}</span>
-                        </h3>
-                        {group.location.warehouse?.name && (
-                          <div className="location-warehouse-hint">
-                            Stock warehouse: {group.location.warehouse.name}
-                            {group.location.warehouse.code ? ` (${group.location.warehouse.code})` : ''}
-                          </div>
-                        )}
+                        <div className="location-block-title">
+                          <h3>
+                            {group.location.name}
+                            <span className="location-code">{group.location.code}</span>
+                          </h3>
+                          {group.location.warehouse?.name && (
+                            <div className="location-warehouse-hint">
+                              Stock warehouse: {group.location.warehouse.name}
+                              {group.location.warehouse.code ? ` (${group.location.warehouse.code})` : ''}
+                            </div>
+                          )}
+                        </div>
                         <div className="location-block-stats">
                           <span>{group.summary.totalProducts} products</span>
                           <span className="text-red">{group.summary.reorderCount} reorder</span>
@@ -891,76 +789,7 @@ function ReplenishReport({ onNavigate }) {
               ) : (
                 <p className="text-center text-muted py-4">No location data found.</p>
               )}
-            </div>
-          )}
-
-          {activeTab === 'products' && (
-            <div className="table-responsive">
-              <table className="report-table">
-                {productTableHeader}
-                <tbody>
-                  {processedProducts.length > 0 ? (
-                    renderProductRows(processedProducts)
-                  ) : (
-                    <tr>
-                      <td colSpan={tableColSpan} className="text-center text-muted py-4">
-                        No matching products found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {activeTab === 'categories' && (
-            <div className="table-responsive">
-              <table className="report-table">
-                <thead>
-                  <tr>
-                    <th>Category</th>
-                    <th className="text-center">Products</th>
-                    <th className="text-center">Need Reorder</th>
-                    <th className="text-center">Stock</th>
-                    <th className="text-center">Sold ({monthLabels.current})</th>
-                    <th className="text-center">Sold ({pastThreeMonthsLabel})</th>
-                    {showDateColumn && (
-                      <th className="text-center">Sold ({specificDateInfo.label})</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportData.groupedByCategory?.length > 0 ? (
-                    reportData.groupedByCategory.map((cat) => (
-                      <tr key={cat.categoryId}>
-                        <td className="font-semibold">{cat.categoryName}</td>
-                        <td className="text-center">{cat.totalProducts}</td>
-                        <td className="text-center text-red font-semibold">{cat.needsReorder}</td>
-                        <td className="text-center">{cat.currentStock}</td>
-                        <td className="text-center text-blue font-semibold">
-                          {cat.unitsSoldCurrentMonth}
-                        </td>
-                        <td className="text-center text-blue font-semibold">
-                          {cat.unitsSoldPastThreeMonths}
-                        </td>
-                        {showDateColumn && (
-                          <td className="text-center text-green font-semibold">
-                            {cat.unitsSoldOnDate ?? 0}
-                          </td>
-                        )}
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={showDateColumn ? 7 : 6} className="text-center text-muted py-4">
-                        No category data.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+          </div>
         </div>
       ) : (
         <div className="empty-state">

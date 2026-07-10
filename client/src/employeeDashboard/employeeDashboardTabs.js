@@ -2,6 +2,7 @@ export const EMPLOYEE_DASHBOARD_TABS = [
   { id: 'home', label: 'My Dashboard', icon: '🏠' },
   { id: 'attendance', label: 'Attendance', icon: '🕐' },
   { id: 'tasks', label: 'Tasks', icon: '✅' },
+  { id: 'work-log', label: 'Daily Work Log', icon: '📝' },
   { id: 'salary-slip', label: 'Salary Slip', icon: '💰' },
   { id: 'leave', label: 'Apply Leave', icon: '📅' },
 ];

@@ -31,6 +31,46 @@ async function attachSoldCurrentMonth(stockRecords) {
   return Array.isArray(stockRecords) ? enriched : enriched[0];
 }
 
+function aggregateStockByProduct(stockRecords = []) {
+  const grouped = new Map();
+
+  for (const record of stockRecords) {
+    const productId = String(record.product?._id || record.product || '');
+    if (!productId) continue;
+
+    if (!grouped.has(productId)) {
+      grouped.set(productId, {
+        productId,
+        product: record.product,
+        totalQuantity: 0,
+        totalReserved: 0,
+        soldCurrentMonth: 0,
+        totalMinStockLevel: 0,
+        locationCount: 0,
+        lastUpdated: record.lastUpdated,
+        records: [],
+      });
+    }
+
+    const row = grouped.get(productId);
+    row.totalQuantity += record.quantity || 0;
+    row.totalReserved += record.reservedQuantity || 0;
+    row.soldCurrentMonth += record.soldCurrentMonth || 0;
+    row.totalMinStockLevel += record.minStockLevel || 0;
+    row.locationCount += 1;
+    row.records.push(record);
+    if (record.lastUpdated && new Date(record.lastUpdated) > new Date(row.lastUpdated || 0)) {
+      row.lastUpdated = record.lastUpdated;
+    }
+  }
+
+  return Array.from(grouped.values()).sort((a, b) =>
+    String(a.product?.title || a.product?.name || '').localeCompare(
+      String(b.product?.title || b.product?.name || '')
+    )
+  );
+}
+
 // GET all stock with filters (with pagination)
 router.get('/', async (req, res) => {
   try {
@@ -156,6 +196,30 @@ const STOCK_EXPORT_HEADERS = [
   { key: 'lastUpdated', label: 'Last Updated' },
 ];
 
+const STOCK_BY_PRODUCT_EXPORT_HEADERS = [
+  { key: 'product', label: 'Product' },
+  { key: 'sku', label: 'SKU' },
+  { key: 'locationCount', label: 'Locations' },
+  { key: 'totalQuantity', label: 'Total Available' },
+  { key: 'soldCurrentMonth', label: 'Sold (Current Month)' },
+  { key: 'totalMinStockLevel', label: 'Min Level (Total)' },
+  { key: 'lastUpdated', label: 'Last Updated' },
+];
+
+function mapStockByProductExportRows(rows = []) {
+  return rows.map((row) => ({
+    product: row.product?.title || row.product?.name || 'Unknown',
+    sku: row.product?.sku || '',
+    locationCount: row.locationCount ?? 0,
+    totalQuantity: row.totalQuantity ?? 0,
+    soldCurrentMonth: row.soldCurrentMonth ?? 0,
+    totalMinStockLevel: row.totalMinStockLevel ?? 0,
+    lastUpdated: row.lastUpdated
+      ? new Date(row.lastUpdated).toISOString().slice(0, 10)
+      : '',
+  }));
+}
+
 function mapStockToExportRows(stockRecords = []) {
   const monthLabel = getCurrentMonthRange().label;
   return stockRecords.map((record) => ({
@@ -190,13 +254,25 @@ function filterStockForExport(records, search = '') {
   });
 }
 
+function filterAggregatedStockByProduct(rows, search = '') {
+  const term = String(search || '').trim().toLowerCase();
+  if (!term) return rows;
+  return rows.filter((row) => {
+    const product = row.product || {};
+    return (
+      (product.title && product.title.toLowerCase().includes(term)) ||
+      (product.name && product.name.toLowerCase().includes(term)) ||
+      (product.sku && product.sku.toLowerCase().includes(term))
+    );
+  });
+}
+
 // GET export stock report as Excel
 router.get('/export', async (req, res) => {
   try {
-    const { product, location, search = '' } = req.query;
+    const { product, search = '', groupBy } = req.query;
     const query = {};
     if (product) query.product = product;
-    if (location) query.location = location;
 
     const stock = await Stock.find(query)
       .populate('product', PRODUCT_POPULATE_FIELDS)
@@ -204,9 +280,26 @@ router.get('/export', async (req, res) => {
       .sort({ createdAt: -1 });
 
     const enriched = await attachSoldCurrentMonth(stock);
+    const monthLabel = getCurrentMonthRange().label;
+
+    if (groupBy === 'product') {
+      const aggregated = aggregateStockByProduct(enriched);
+      const filtered = filterAggregatedStockByProduct(aggregated, search);
+      const exportRows = mapStockByProductExportRows(filtered);
+      const headers = STOCK_BY_PRODUCT_EXPORT_HEADERS.map((header) =>
+        header.key === 'soldCurrentMonth'
+          ? { ...header, label: `Sold (${monthLabel})` }
+          : header
+      );
+      const buffer = exportToExcel(exportRows, headers);
+      const filename = `stock_by_product_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+      return res.send(buffer);
+    }
+
     const filtered = filterStockForExport(enriched, search);
     const exportRows = mapStockToExportRows(filtered).map(({ _monthLabel, ...row }) => row);
-    const monthLabel = getCurrentMonthRange().label;
     const headers = STOCK_EXPORT_HEADERS.map((header) =>
       header.key === 'soldCurrentMonth'
         ? { ...header, label: `Sold (${monthLabel})` }

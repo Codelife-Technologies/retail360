@@ -89,7 +89,7 @@ function EmployeeTasks() {
     <div className="hr-page">
       <header className="hr-page-header">
         <div>
-          <h1>Employee Tasks</h1>
+          <h1>Assign Task</h1>
           <p className="hr-page-subtitle">Assign tasks to employees with a start and due timeline</p>
         </div>
         <button type="button" className="hr-btn hr-btn-primary" onClick={() => setShowModal(true)}>

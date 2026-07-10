@@ -72,4 +72,14 @@ export const hrTasksAPI = {
   delete: (id) => api.delete(`/hr/tasks/${id}`),
 };
 
+export const hrWorkLogsAPI = {
+  getAll: (params) => api.get('/hr/work-logs', { params }),
+  getSummary: (params) => api.get('/hr/work-logs/summary', { params }),
+  getMonthlyReport: (params) => api.get('/hr/work-logs/monthly-report', { params }),
+  getByDate: (params) => api.get('/hr/work-logs/by-date', { params }),
+  save: (data) => api.post('/hr/work-logs', data),
+  update: (id, data) => api.put(`/hr/work-logs/${id}`, data),
+  delete: (id) => api.delete(`/hr/work-logs/${id}`),
+};
+
 export default api;

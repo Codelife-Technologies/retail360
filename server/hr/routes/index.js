@@ -9,6 +9,7 @@ const payrollRoutes = require('./payroll');
 const holidaysRoutes = require('./holidays');
 const employeeDashboardRoutes = require('./employeeDashboard');
 const tasksRoutes = require('./tasks');
+const workLogsRoutes = require('./workLogs');
 
 router.use('/dashboard', dashboardRoutes);
 router.use('/employees', employeesRoutes);
@@ -18,5 +19,6 @@ router.use('/payroll', payrollRoutes);
 router.use('/holidays', holidaysRoutes);
 router.use('/employee-dashboard', employeeDashboardRoutes);
 router.use('/tasks', tasksRoutes);
+router.use('/work-logs', workLogsRoutes);
 
 module.exports = router;

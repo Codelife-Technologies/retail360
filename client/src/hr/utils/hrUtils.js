@@ -53,3 +53,19 @@ export function validateEmail(email) {
 export function validatePhone(phone) {
   return /^[\d\s+\-()]{7,15}$/.test(phone);
 }
+
+export function formatDuration(minutes) {
+  const total = Math.max(0, Math.round(Number(minutes) || 0));
+  if (total === 0) return '0m';
+  const hours = Math.floor(total / 60);
+  const mins = total % 60;
+  if (hours && mins) return `${hours}h ${mins}m`;
+  if (hours) return `${hours}h`;
+  return `${mins}m`;
+}
+
+export function minutesFromHoursAndMinutes(hours, minutes) {
+  const h = Number(hours) || 0;
+  const m = Number(minutes) || 0;
+  return Math.max(0, Math.round(h * 60 + m));
+}

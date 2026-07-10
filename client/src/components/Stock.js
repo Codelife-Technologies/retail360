@@ -60,6 +60,50 @@ function StockProductCell({ product }) {
   );
 }
 
+function getSoldCurrentMonth(record) {
+  return record.soldCurrentMonth ?? 0;
+}
+
+function aggregateStockByProduct(stockRecords = []) {
+  const grouped = new Map();
+
+  for (const record of stockRecords) {
+    const productId = String(record.product?._id || record.product || '');
+    if (!productId) continue;
+
+    if (!grouped.has(productId)) {
+      grouped.set(productId, {
+        productId,
+        product: record.product,
+        totalQuantity: 0,
+        totalReserved: 0,
+        soldCurrentMonth: 0,
+        totalMinStockLevel: 0,
+        locationCount: 0,
+        lastUpdated: record.lastUpdated,
+        records: [],
+      });
+    }
+
+    const row = grouped.get(productId);
+    row.totalQuantity += record.quantity || 0;
+    row.totalReserved += record.reservedQuantity || 0;
+    row.soldCurrentMonth += getSoldCurrentMonth(record);
+    row.totalMinStockLevel += record.minStockLevel || 0;
+    row.locationCount += 1;
+    row.records.push(record);
+    if (record.lastUpdated && new Date(record.lastUpdated) > new Date(row.lastUpdated || 0)) {
+      row.lastUpdated = record.lastUpdated;
+    }
+  }
+
+  return Array.from(grouped.values()).sort((a, b) =>
+    String(a.product?.title || a.product?.name || '').localeCompare(
+      String(b.product?.title || b.product?.name || '')
+    )
+  );
+}
+
 function Stock() {
   const { canEditStockProduct } = useAuth();
   const canEdit = canEditStockProduct();
@@ -71,15 +115,14 @@ function Stock() {
   const [products, setProducts] = useState([]);
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState('all'); // 'all', 'product', 'location'
-  const [selectedProduct, setSelectedProduct] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState('');
+  const [viewMode, setViewMode] = useState('all'); // 'all', 'product'
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [adjustingStock, setAdjustingStock] = useState(null);
   const [adjustQuantity, setAdjustQuantity] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [viewingStock, setViewingStock] = useState(null);
+  const [viewingProductStock, setViewingProductStock] = useState(null);
   const [newStockFormData, setNewStockFormData] = useState({
     product: '',
     location: '',
@@ -91,21 +134,14 @@ function Stock() {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    fetchProducts();
-    fetchLocations();
     fetchStock();
     fetchLowStockAlerts();
   }, []);
 
   useEffect(() => {
-    if (viewMode === 'product' && selectedProduct) {
-      fetchStockByProduct(selectedProduct);
-    } else if (viewMode === 'location' && selectedLocation) {
-      fetchStockByLocation(selectedLocation);
-    } else {
-      fetchStock();
-    }
-  }, [viewMode, selectedProduct, selectedLocation]);
+    fetchProducts();
+    fetchLocations();
+  }, []);
 
   const fetchStock = async () => {
     try {
@@ -125,37 +161,9 @@ function Stock() {
     }
   };
 
-  const fetchStockByProduct = async (productId) => {
-    try {
-      setLoading(true);
-      const response = await stockAPI.getByProduct(productId);
-      setStock(response.data);
-    } catch (error) {
-      console.error('Error fetching stock by product:', error);
-      alert('Failed to fetch stock');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchStockByLocation = async (locationId) => {
-    try {
-      setLoading(true);
-      const response = await stockAPI.getByLocation(locationId);
-      setStock(response.data);
-    } catch (error) {
-      console.error('Error fetching stock by location:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        stack: error.stack,
-        locationId: locationId
-      });
-      alert('Failed to fetch stock');
-    } finally {
-      setLoading(false);
-    }
+  const refreshStock = () => {
+    fetchStock();
+    fetchLowStockAlerts();
   };
 
   const fetchProducts = async () => {
@@ -201,17 +209,6 @@ function Stock() {
         stack: error.stack
       });
     }
-  };
-
-  const refreshStock = () => {
-    if (viewMode === 'product' && selectedProduct) {
-      fetchStockByProduct(selectedProduct);
-    } else if (viewMode === 'location' && selectedLocation) {
-      fetchStockByLocation(selectedLocation);
-    } else {
-      fetchStock();
-    }
-    fetchLowStockAlerts();
   };
 
   const handleExcelUploadComplete = (result) => {
@@ -332,19 +329,7 @@ function Stock() {
     }
   };
 
-  const getClearStockLabel = () => {
-    if (viewMode === 'product' && selectedProduct) {
-      const product = products.find((p) => p._id === selectedProduct);
-      const name = product?.title || product?.name || 'selected product';
-      return `Remove stock for ${name}`;
-    }
-    if (viewMode === 'location' && selectedLocation) {
-      const location = locations.find((l) => l._id === selectedLocation);
-      const name = location?.name || 'selected location';
-      return `Remove stock at ${name}`;
-    }
-    return 'Remove all stock data';
-  };
+  const getClearStockLabel = () => 'Remove all stock data';
 
   const handleClearStockData = async () => {
     const label = getClearStockLabel();
@@ -365,14 +350,7 @@ function Stock() {
     if (!doubleConfirm) return;
 
     try {
-      const params = {};
-      if (viewMode === 'product' && selectedProduct) {
-        params.product = selectedProduct;
-      } else if (viewMode === 'location' && selectedLocation) {
-        params.location = selectedLocation;
-      }
-
-      const response = await stockAPI.deleteAll(params);
+      const response = await stockAPI.deleteAll({});
       alert(`Removed ${response.data.deletedCount} stock record(s).`);
       refreshStock();
     } catch (error) {
@@ -407,9 +385,9 @@ function Stock() {
     }
   };
 
-  const getSoldCurrentMonth = (record) => record.soldCurrentMonth ?? 0;
+  const isProductView = viewMode === 'product';
 
-  const filteredStock = useMemo(() => {
+  const filteredLocationStock = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return stock;
 
@@ -426,50 +404,78 @@ function Stock() {
     });
   }, [stock, searchTerm]);
 
+  const productStockRows = useMemo(() => {
+    const aggregated = aggregateStockByProduct(stock);
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return aggregated;
+
+    return aggregated.filter((row) => {
+      const product = row.product;
+      return (
+        (product?.title && product.title.toLowerCase().includes(term)) ||
+        (product?.name && product.name.toLowerCase().includes(term)) ||
+        (product?.sku && product.sku.toLowerCase().includes(term))
+      );
+    });
+  }, [stock, searchTerm]);
+
+  const displayRows = isProductView ? productStockRows : filteredLocationStock;
+
   const stockSummary = useMemo(() => {
-    const recordCount = filteredStock.length;
-    const totalSoldCurrentMonth = filteredStock.reduce(
+    if (isProductView) {
+      const recordCount = productStockRows.length;
+      const totalSoldCurrentMonth = productStockRows.reduce(
+        (sum, row) => sum + (row.soldCurrentMonth || 0),
+        0
+      );
+      const totalQuantity = productStockRows.reduce((sum, row) => sum + (row.totalQuantity || 0), 0);
+      const totalReserved = productStockRows.reduce((sum, row) => sum + (row.totalReserved || 0), 0);
+      const lowStockCount = productStockRows.filter(
+        (row) => (row.totalQuantity || 0) <= (row.totalMinStockLevel || 0)
+      ).length;
+
+      return { recordCount, totalSoldCurrentMonth, totalQuantity, totalReserved, lowStockCount };
+    }
+
+    const recordCount = filteredLocationStock.length;
+    const totalSoldCurrentMonth = filteredLocationStock.reduce(
       (sum, record) => sum + getSoldCurrentMonth(record),
       0
     );
-    const totalQuantity = filteredStock.reduce((sum, record) => sum + (record.quantity || 0), 0);
-    const totalReserved = filteredStock.reduce((sum, record) => sum + (record.reservedQuantity || 0), 0);
-    const lowStockCount = filteredStock.filter(
+    const totalQuantity = filteredLocationStock.reduce((sum, record) => sum + (record.quantity || 0), 0);
+    const totalReserved = filteredLocationStock.reduce((sum, record) => sum + (record.reservedQuantity || 0), 0);
+    const lowStockCount = filteredLocationStock.filter(
       (record) => (record.quantity || 0) <= (record.minStockLevel || 0)
     ).length;
 
     return { recordCount, totalSoldCurrentMonth, totalQuantity, totalReserved, lowStockCount };
-  }, [filteredStock]);
+  }, [isProductView, productStockRows, filteredLocationStock]);
 
-  const getSummaryScopeLabel = () => {
-    if (viewMode === 'product' && selectedProduct) {
-      const product = products.find((p) => p._id === selectedProduct);
-      return product?.title || product?.name || 'Selected product';
-    }
-    if (viewMode === 'location' && selectedLocation) {
-      const location = locations.find((l) => l._id === selectedLocation);
-      return location?.name || 'Selected location';
-    }
-    return 'All stock';
-  };
+  const getSummaryScopeLabel = () => (
+    isProductView ? 'By product (all locations)' : 'All stock by location'
+  );
 
   const handleExport = async () => {
-    if (!filteredStock.length) {
+    if (!displayRows.length) {
       alert('No stock data to export for the current view');
       return;
     }
 
     try {
       setExporting(true);
-      const params = { search: searchTerm.trim() || undefined };
-      if (viewMode === 'product' && selectedProduct) params.product = selectedProduct;
-      if (viewMode === 'location' && selectedLocation) params.location = selectedLocation;
+      const params = {
+        search: searchTerm.trim() || undefined,
+        ...(isProductView ? { groupBy: 'product' } : {}),
+      };
 
       const response = await stockAPI.exportReport(params);
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `stock_report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      link.setAttribute(
+        'download',
+        `${isProductView ? 'stock_by_product' : 'stock_report'}_${new Date().toISOString().slice(0, 10)}.xlsx`
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -488,9 +494,9 @@ function Stock() {
         <h1>Stock Management</h1>
         <div className="stock-header-actions">
           <button
-            className="btn-secondary"
+            className="btn-export"
             onClick={handleExport}
-            disabled={loading || exporting || filteredStock.length === 0}
+            disabled={loading || exporting || displayRows.length === 0}
           >
             {exporting ? 'Exporting…' : '📤 Export Excel'}
           </button>
@@ -519,11 +525,7 @@ function Stock() {
       <div className="view-selector">
         <button
           className={viewMode === 'all' ? 'active' : ''}
-          onClick={() => {
-            setViewMode('all');
-            setSelectedProduct('');
-            setSelectedLocation('');
-          }}
+          onClick={() => setViewMode('all')}
         >
           All Stock
         </button>
@@ -533,53 +535,12 @@ function Stock() {
         >
           By Product
         </button>
-        <button
-          className={viewMode === 'location' ? 'active' : ''}
-          onClick={() => setViewMode('location')}
-        >
-          By Location
-        </button>
       </div>
-
-      {/* Filters */}
-      {viewMode === 'product' && (
-        <div className="filter-section">
-          <label>Select Product:</label>
-          <select
-            value={selectedProduct}
-            onChange={(e) => setSelectedProduct(e.target.value)}
-          >
-            <option value="">All Products</option>
-            {products.map((product) => (
-              <option key={product._id} value={product._id}>
-                {product.title || product.name} ({product.sku || 'No SKU'})
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {viewMode === 'location' && (
-        <div className="filter-section">
-          <label>Select Location:</label>
-          <select
-            value={selectedLocation}
-            onChange={(e) => setSelectedLocation(e.target.value)}
-          >
-            <option value="">All Locations</option>
-            {locations.map((location) => (
-              <option key={location._id} value={location._id}>
-                {location.name} ({location.code})
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
 
       <div className="stock-search-bar">
         <input
           type="text"
-          placeholder="Search product, SKU, location…"
+          placeholder={isProductView ? 'Search product or SKU…' : 'Search product, SKU, location…'}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
@@ -601,7 +562,7 @@ function Stock() {
             <span className="stock-stat-value">
               {loading ? '—' : stockSummary.recordCount.toLocaleString()}
             </span>
-            <span className="stock-stat-label">Stock Records</span>
+            <span className="stock-stat-label">{isProductView ? 'Products' : 'Stock Records'}</span>
           </div>
           <div className="stock-stat">
             <span className="stock-stat-value">
@@ -655,25 +616,69 @@ function Stock() {
               <tr>
                 <th>Product</th>
                 <th>SKU</th>
-                <th>Location</th>
-                <th>Quantity</th>
-                <th>Sold ({currentMonthLabel})</th>
-                <th>Min Level</th>
-                <th>Last Updated</th>
-                <th>Actions</th>
+                {isProductView ? (
+                  <>
+                    <th>Locations</th>
+                    <th>Total Available</th>
+                    <th>Sold ({currentMonthLabel})</th>
+                    <th>Min Level</th>
+                    <th>Last Updated</th>
+                  </>
+                ) : (
+                  <>
+                    <th>Location</th>
+                    <th>Quantity</th>
+                    <th>Sold ({currentMonthLabel})</th>
+                    <th>Min Level</th>
+                    <th>Last Updated</th>
+                    <th>Actions</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
-              {filteredStock.length === 0 ? (
+              {displayRows.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="no-data">
+                  <td colSpan={isProductView ? 7 : 8} className="no-data">
                     {searchTerm.trim()
                       ? 'No stock records match your search.'
                       : 'No stock records found'}
                   </td>
                 </tr>
+              ) : isProductView ? (
+                productStockRows.map((row) => (
+                  <tr
+                    key={row.productId}
+                    className={`clickable-row${
+                      row.totalQuantity <= row.totalMinStockLevel ? ' low-stock' : ''
+                    }`}
+                    onClick={() => setViewingProductStock(row)}
+                  >
+                    <td>
+                      <StockProductCell product={row.product} />
+                    </td>
+                    <td className="stock-sku-cell">
+                      <span
+                        className={`stock-sku-value${
+                          row.product?.sku ? '' : ' stock-sku-empty'
+                        }`}
+                      >
+                        {row.product?.sku || '—'}
+                      </span>
+                    </td>
+                    <td>{row.locationCount}</td>
+                    <td>{row.totalQuantity}</td>
+                    <td className="stock-sold-current-month">{row.soldCurrentMonth}</td>
+                    <td>{row.totalMinStockLevel}</td>
+                    <td>
+                      {row.lastUpdated
+                        ? new Date(row.lastUpdated).toLocaleDateString()
+                        : '—'}
+                    </td>
+                  </tr>
+                ))
               ) : (
-                filteredStock.map((stockRecord) => (
+                filteredLocationStock.map((stockRecord) => (
                   <tr
                     key={stockRecord._id}
                     className={`clickable-row${
@@ -795,6 +800,71 @@ function Stock() {
             handleDeleteStock(id);
           } : undefined}
         />
+      )}
+
+      {viewingProductStock && (
+        <div className="modal-overlay" onClick={() => setViewingProductStock(null)}>
+          <div className="modal-content stock-product-detail-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="stock-product-detail-header">
+              <h2>
+                {viewingProductStock.product?.title ||
+                  viewingProductStock.product?.name ||
+                  'Product Stock'}
+              </h2>
+              <button type="button" className="btn-secondary" onClick={() => setViewingProductStock(null)}>
+                Close
+              </button>
+            </div>
+            <div className="stock-product-detail-summary">
+              <div><strong>Total Available:</strong> {viewingProductStock.totalQuantity}</div>
+              <div><strong>Locations:</strong> {viewingProductStock.locationCount}</div>
+              <div><strong>Sold ({currentMonthLabel}):</strong> {viewingProductStock.soldCurrentMonth}</div>
+              <div><strong>Min Level (Total):</strong> {viewingProductStock.totalMinStockLevel}</div>
+            </div>
+            <div className="stock-product-detail-table-wrap">
+              <table className="stock-table stock-product-breakdown-table">
+                <thead>
+                  <tr>
+                    <th>Location</th>
+                    <th>Quantity</th>
+                    <th>Sold ({currentMonthLabel})</th>
+                    <th>Min Level</th>
+                    {canEdit && <th>Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(viewingProductStock.records || []).map((record) => (
+                    <tr key={record._id}>
+                      <td>
+                        {record.location?.name || 'Unknown'}
+                        {record.location?.code && (
+                          <span className="code"> ({record.location.code})</span>
+                        )}
+                      </td>
+                      <td>{record.quantity}</td>
+                      <td>{getSoldCurrentMonth(record)}</td>
+                      <td>{record.minStockLevel}</td>
+                      {canEdit && (
+                        <td className="stock-actions-cell">
+                          <button
+                            type="button"
+                            className="btn-adjust"
+                            onClick={() => {
+                              setViewingProductStock(null);
+                              handleAdjustStock(record);
+                            }}
+                          >
+                            Adjust
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Adjust Stock Modal */}

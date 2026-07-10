@@ -287,6 +287,116 @@
   color: #374151;
 }
 
+.hr-status-submitted,
+.hr-status-completed {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.hr-status-draft,
+.hr-status-in-progress {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.hr-worklog-detail-row td {
+  background: #f8fafc;
+  padding-top: 0;
+}
+
+.hr-worklog-detail {
+  padding: 0.75rem 0 1rem;
+}
+
+.hr-worklog-detail-notes {
+  margin: 0 0 0.75rem;
+  color: #475569;
+}
+
+.hr-worklog-detail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hr-worklog-detail-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.hr-worklog-report-period {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem 0.5rem;
+}
+
+.hr-worklog-report-period h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+.hr-worklog-report-period span {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.hr-worklog-report-employee {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.hr-worklog-report-employee span {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.hr-worklog-report-empty-row td {
+  color: #64748b;
+}
+
+.hr-worklog-report-detail {
+  padding: 0.75rem 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.hr-worklog-report-day {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.85rem 1rem;
+}
+
+.hr-worklog-report-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.hr-worklog-report-day-header strong {
+  margin-right: 0.65rem;
+}
+
+.hr-worklog-report-day-header span {
+  color: #475569;
+  font-size: 0.9rem;
+}
+
 .hr-avatar {
   width: 40px;
   height: 40px;

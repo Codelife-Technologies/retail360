@@ -2,6 +2,7 @@ import React from 'react';
 import EmployeeHome from './pages/EmployeeHome';
 import EmployeeAttendance from './pages/EmployeeAttendance';
 import EmployeeTasks from './pages/EmployeeTasks';
+import EmployeeWorkLog from './pages/EmployeeWorkLog';
 import EmployeeSalarySlip from './pages/EmployeeSalarySlip';
 import EmployeeLeave from './pages/EmployeeLeave';
 import './EmployeeDashboardModule.css';
@@ -16,6 +17,8 @@ function EmployeeDashboardModule({ subTab = 'home' }) {
         return <EmployeeAttendance />;
       case 'tasks':
         return <EmployeeTasks />;
+      case 'work-log':
+        return <EmployeeWorkLog />;
       case 'salary-slip':
         return <EmployeeSalarySlip />;
       case 'leave':

@@ -6,6 +6,8 @@ import LeaveManagement from './pages/LeaveManagement';
 import Payroll from './pages/Payroll';
 import Holidays from './pages/Holidays';
 import EmployeeTasks from './pages/EmployeeTasks';
+import WorkLogs from './pages/WorkLogs';
+import WorkLogMonthlyReport from './pages/WorkLogMonthlyReport';
 import './HrModule.css';
 import './styles/hrShared.css';
 
@@ -18,6 +20,10 @@ function HrModule({ subTab = 'hr-dashboard' }) {
         return <EmployeeMaster />;
       case 'employee-tasks':
         return <EmployeeTasks />;
+      case 'work-logs':
+        return <WorkLogs />;
+      case 'work-log-report':
+        return <WorkLogMonthlyReport />;
       case 'attendance':
         return <Attendance />;
       case 'leave-management':
