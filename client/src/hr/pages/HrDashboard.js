@@ -111,8 +111,8 @@ function HrDashboard() {
             <ResponsiveContainer width="100%" height={280}>
               <LineChart data={data.attendanceTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                <XAxis dataKey="label" tick={{ fontSize: 13 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 13 }} />
                 <Tooltip />
                 <Legend />
                 <Line type="monotone" dataKey="present" stroke="#10b981" strokeWidth={2} name="Present" />

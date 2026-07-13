@@ -72,18 +72,18 @@ function SalesMonthlyTrendCharts({ groupedData, formatCurrency }) {
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={chartData} barCategoryGap="20%">
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={-25} textAnchor="end" height={60} />
+              <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} angle={-25} textAnchor="end" height={60} />
               <YAxis
                 yAxisId="revenue"
                 orientation="left"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 12 }}
                 tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
               />
               <YAxis
                 yAxisId="quantity"
                 orientation="right"
                 allowDecimals={false}
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 12 }}
               />
               <Tooltip formatter={tooltipFormatter} />
               <Legend />

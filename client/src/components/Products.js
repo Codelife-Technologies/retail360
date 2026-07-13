@@ -1659,7 +1659,7 @@ function Products() {
                             >
                               ×
                             </button>
-                            <div style={{ fontSize: '12px', marginTop: '5px', wordBreak: 'break-word' }}>
+                            <div style={{ fontSize: '13px', marginTop: '5px', wordBreak: 'break-word' }}>
                               {preview.file.name}
                             </div>
                           </div>
@@ -1864,7 +1864,7 @@ function Products() {
                               cursor: 'pointer',
                               padding: '0',
                               marginLeft: '4px',
-                              fontSize: '16px',
+                              fontSize: '17px',
                               lineHeight: '1',
                               fontWeight: 'bold'
                             }}

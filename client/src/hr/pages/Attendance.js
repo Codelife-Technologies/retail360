@@ -341,8 +341,8 @@ function Attendance() {
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={monthlyTrend} barGap={2} barCategoryGap="20%">
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} interval="preserveStartEnd" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 13 }} />
                   <Tooltip />
                   <Legend />
                   <Bar dataKey="present" fill="#10b981" name="Present" radius={[2, 2, 0, 0]} />

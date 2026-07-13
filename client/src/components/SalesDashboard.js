@@ -633,10 +633,10 @@ function SalesDashboard() {
                   <ResponsiveContainer width="100%" height={COMPARISON_CHART_HEIGHT}>
                     <BarChart data={comparisonChart} barGap={4} barCategoryGap="18%">
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} angle={-20} textAnchor="end" height={60} />
-                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                      <XAxis dataKey="label" tick={{ fontSize: 13 }} interval={0} angle={-20} textAnchor="end" height={60} />
+                      <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                       <Tooltip formatter={chartTooltipFormatter} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Legend wrapperStyle={{ fontSize: 13 }} />
                       <Bar dataKey="currentRevenue" fill="#667eea" name={currentRevenueLegend} radius={[4, 4, 0, 0]} />
                       <Bar dataKey="previousRevenue" fill="#94a3b8" name={previousRevenueLegend} radius={[4, 4, 0, 0]} />
                     </BarChart>
@@ -648,10 +648,10 @@ function SalesDashboard() {
                   <ResponsiveContainer width="100%" height={COMPARISON_CHART_HEIGHT}>
                     <LineChart data={comparisonChart}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={0} angle={-20} textAnchor="end" height={60} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                      <XAxis dataKey="label" tick={{ fontSize: 13 }} interval={0} angle={-20} textAnchor="end" height={60} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                       <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Legend wrapperStyle={{ fontSize: 13 }} />
                       <Line type="monotone" dataKey="currentOrders" stroke="#10b981" strokeWidth={2} name={currentOrdersLegend} dot={{ r: 3 }} />
                       <Line type="monotone" dataKey="previousOrders" stroke="#f59e0b" strokeWidth={2} name={previousOrdersLegend} dot={{ r: 3 }} />
                     </LineChart>
