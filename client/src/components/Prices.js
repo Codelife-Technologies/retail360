@@ -11,6 +11,15 @@ import {
 } from '../utils/productDisplayUtils';
 import './Prices.css';
 
+const PRODUCT_NAME_MAX_WORDS = 5;
+
+function truncateWords(text, maxWords = PRODUCT_NAME_MAX_WORDS) {
+  if (!text) return 'Unknown';
+  const words = String(text).trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return words.join(' ');
+  return `${words.slice(0, maxWords).join(' ')}…`;
+}
+
 function VendorPriceImage({ product, size = 'table', alt }) {
   const displayName = product?.title || product?.name || alt || 'Product';
   const thumbnail = getProductThumbnail(product);
@@ -32,6 +41,34 @@ function VendorPriceImage({ product, size = 'table', alt }) {
         e.target.src = PRODUCT_IMAGE_PLACEHOLDER;
       }}
     />
+  );
+}
+
+function VendorPriceProductCell({ product, vendorCount = 1 }) {
+  const productName = product?.title || product?.name || 'Unknown';
+  const thumbnail = getProductThumbnail(product);
+
+  return (
+    <div className="vendor-price-product-cell">
+      <img
+        className="vendor-price-product-thumbnail"
+        src={thumbnail || PRODUCT_IMAGE_PLACEHOLDER}
+        alt={productName}
+        loading="lazy"
+        onError={(e) => {
+          e.target.onerror = null;
+          e.target.src = PRODUCT_IMAGE_PLACEHOLDER;
+        }}
+      />
+      <div className="vendor-price-product-text">
+        <span className="vendor-price-product-title" title={productName}>
+          {truncateWords(productName)}
+        </span>
+        {vendorCount > 1 && (
+          <span className="product-vendor-count">{vendorCount} vendors</span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -70,9 +107,33 @@ function VendorPriceImageGallery({ product }) {
   );
 }
 
-function RecentAcquisitions({ acquisitions, formatPrice }) {
+function RecentAcquisitions({ acquisitions, formatPrice, compact = false }) {
   if (!acquisitions?.length) {
     return <span className="recent-acq-empty">—</span>;
+  }
+
+  if (compact) {
+    return (
+      <div className="recent-acquisitions recent-acquisitions-compact">
+        {acquisitions.map((acq, index) => (
+          <div
+            key={`${acq.purchaseNumber || index}-${acq.purchaseDate || index}`}
+            className="recent-acq-item recent-acq-item-compact"
+          >
+            <span className="recent-acq-label">{index + 1}</span>
+            <span className="recent-acq-price">{formatPrice(acq.unitPrice)}</span>
+            {acq.purchaseDate && (
+              <span className="recent-acq-date">
+                {new Date(acq.purchaseDate).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                })}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    );
   }
 
   return (
@@ -443,12 +504,7 @@ function Prices() {
   return (
     <div className="prices-container">
       <div className="prices-header">
-        <div>
-          <h1>Vendor Prices</h1>
-          <p className="prices-subtitle">
-            Click a product row to view details and edit vendor prices.
-          </p>
-        </div>
+        <h1>Vendor Prices</h1>
         <div className="prices-header-actions">
           <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
             ⬆ Upload Excel
@@ -456,22 +512,31 @@ function Prices() {
         </div>
       </div>
 
-      <div className="prices-filters">
-        <input
-          type="text"
-          placeholder="Search product, Parent SKU, Child SKU, vendor…"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-        <select value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)}>
-          <option value="">All vendors</option>
-          {suppliers.map((supplier) => (
-            <option key={supplier._id} value={supplier._id}>
-              {supplier.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      <div className="prices-scroll-area">
+        <div className="prices-search-bar">
+          <input
+            type="text"
+            placeholder="Search product, Parent SKU, Child SKU, vendor…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        <div className="prices-filter-row">
+          <label htmlFor="vendor-price-filter">Vendor</label>
+          <select
+            id="vendor-price-filter"
+            value={vendorFilter}
+            onChange={(e) => setVendorFilter(e.target.value)}
+          >
+            <option value="">All vendors</option>
+            {suppliers.map((supplier) => (
+              <option key={supplier._id} value={supplier._id}>
+                {supplier.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
       {loading ? (
         <div className="loading">Loading vendor prices...</div>
@@ -480,7 +545,6 @@ function Prices() {
           <table className="prices-table">
             <thead>
               <tr>
-                <th>Image</th>
                 <th>Product</th>
                 <th>Parent SKU</th>
                 <th>Vendor</th>
@@ -492,7 +556,7 @@ function Prices() {
             <tbody>
               {groupedProducts.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="no-data">
+                  <td colSpan="6" className="no-data">
                     No vendor-linked products found. Link suppliers to products in the Products
                     page, then click a row here to set vendor prices.
                   </td>
@@ -506,7 +570,7 @@ function Prices() {
                       key={row.rowKey}
                       className={[
                         'clickable-row',
-                        vendorIndex === 0 ? 'product-group-first-row' : 'product-vendor-sub-row',
+                        vendorIndex > 0 ? 'product-vendor-sub-row' : '',
                         row.purchasePrice == null ? 'no-vendor-price' : '',
                       ]
                         .filter(Boolean)
@@ -516,17 +580,20 @@ function Prices() {
                     >
                       {vendorIndex === 0 && (
                         <>
-                          <td rowSpan={vendorCount} className="prices-image-cell product-group-cell">
-                            <VendorPriceImage product={group.product} />
+                          <td rowSpan={vendorCount} className="vendor-price-product-cell-wrap">
+                            <VendorPriceProductCell
+                              product={group.product}
+                              vendorCount={vendorCount}
+                            />
                           </td>
-                          <td rowSpan={vendorCount} className="product-group-cell product-group-name">
-                            <span>{group.product?.title || group.product?.name || 'Unknown'}</span>
-                            {vendorCount > 1 && (
-                              <span className="product-vendor-count">{vendorCount} vendors</span>
-                            )}
-                          </td>
-                          <td rowSpan={vendorCount} className="sku product-group-cell">
-                            {getParentSku(group.product) || '—'}
+                          <td rowSpan={vendorCount} className="vendor-price-sku-cell">
+                            <span
+                              className={`vendor-price-sku-value${
+                                getParentSku(group.product) ? '' : ' vendor-price-sku-empty'
+                              }`}
+                            >
+                              {getParentSku(group.product) || '—'}
+                            </span>
                           </td>
                         </>
                       )}
@@ -534,14 +601,23 @@ function Prices() {
                         {vendorIndex > 0 && <span className="vendor-sub-indicator">↳</span>}
                         {row.supplier?.name || '—'}
                       </td>
-                      <td className="sku child-sku-cell">
-                        {getVendorChildSku(group.product, row.vendorSku) || '—'}
+                      <td className="vendor-price-sku-cell">
+                        <span
+                          className={`vendor-price-sku-value child-sku-cell${
+                            getVendorChildSku(group.product, row.vendorSku) ? '' : ' vendor-price-sku-empty'
+                          }`}
+                        >
+                          {getVendorChildSku(group.product, row.vendorSku) || '—'}
+                        </span>
                       </td>
-                      <td className="font-semibold">{formatPrice(row.purchasePrice)}</td>
+                      <td className="font-semibold vendor-price-amount">
+                        {formatPrice(row.purchasePrice)}
+                      </td>
                       <td className="recent-acq-cell">
                         <RecentAcquisitions
                           acquisitions={row.recentAcquisitions}
                           formatPrice={formatPrice}
+                          compact
                         />
                       </td>
                     </tr>
@@ -552,6 +628,7 @@ function Prices() {
           </table>
         </div>
       )}
+      </div>
 
       {showExcelUpload && (
         <ExcelUpload

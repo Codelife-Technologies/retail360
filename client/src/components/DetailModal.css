@@ -29,7 +29,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
   transition: background 0.2s;
 }
 
@@ -44,7 +44,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
   transition: background 0.2s;
 }
 
@@ -70,7 +70,7 @@
 }
 
 .detail-view-label {
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted, #9ca3af);
@@ -90,7 +90,7 @@
 .detail-view-section h3 {
   margin: 0 0 0.75rem 0;
   color: #6B3894;
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 600;
   border-bottom: 2px solid #ede7f3;
   padding-bottom: 0.4rem;
@@ -118,7 +118,7 @@
   padding: 0.5rem 0.75rem;
   text-align: left;
   border-bottom: 1px solid var(--border, #e5e7eb);
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .detail-view-items-table th {

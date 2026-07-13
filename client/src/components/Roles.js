@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { rolesAPI, permissionsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import DetailModal from './DetailModal';
+import { getShortRoleLabel } from '../utils/roleLabels';
 import './UserManagement.css';
 import './DetailModal.css';
 
@@ -213,11 +214,19 @@ function Roles() {
                     onClick={() => openViewRole(r)}
                     title="Click to view role details"
                   >
-                    <td>{r.name}</td>
-                    <td>{r.code}</td>
+                    <td>
+                      <span className="um-cell-ellipsis" title={r.name || ''}>
+                        {truncateText(r.name, 14)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="um-cell-ellipsis" title={r.code || ''}>
+                        {getShortRoleLabel(r, 8)}
+                      </span>
+                    </td>
                     <td className="col-description">
                       <span className="um-cell-ellipsis" title={r.description || ''}>
-                        {truncateText(r.description, 40)}
+                        {truncateText(r.description, 28)}
                       </span>
                     </td>
                     <td className="col-permissions">
@@ -295,7 +304,7 @@ function Roles() {
                         checked={(formData.permissions || []).includes(p._id)}
                         onChange={() => handlePermissionToggle(p._id)}
                       />
-                      {p.name} ({p.code})
+                      {getShortRoleLabel(p, 10)}
                     </label>
                   ))}
                   {permissions.length === 0 && <span>No permissions defined</span>}

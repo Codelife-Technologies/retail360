@@ -5,6 +5,7 @@ import { getDesignatedSupplierName } from '../utils/purchaseOrderVendorSplit';
 import DetailModal from './DetailModal';
 import PoProductVendorAssign from './PoProductVendorAssign';
 import PoShareActions from './PoShareActions';
+import ProductSearchPicker from './ProductSearchPicker';
 import './PurchaseRequisite.css';
 import './PoShareActions.css';
 
@@ -66,7 +67,7 @@ function PurchaseRequisite({ onNavigate }) {
       setRequisites(response.data || []);
     } catch (error) {
       console.error('Error fetching purchase requisites:', error);
-      alert('Failed to load purchase requisitions');
+      alert('Failed to load pur chase requisitions');
     } finally {
       setLoading(false);
     }
@@ -610,20 +611,15 @@ function PurchaseRequisite({ onNavigate }) {
             <form onSubmit={handleAddProductToPR}>
               <div className="form-group">
                 <label>Product *</label>
-                <select
+                <ProductSearchPicker
+                  products={products}
                   value={addItemForm.product}
-                  onChange={(e) =>
-                    setAddItemForm((prev) => ({ ...prev, product: e.target.value }))
+                  onChange={(productId) =>
+                    setAddItemForm((prev) => ({ ...prev, product: productId }))
                   }
+                  placeholder="Type product name or SKU…"
                   required
-                >
-                  <option value="">Select product</option>
-                  {products.map((product) => (
-                    <option key={product._id} value={product._id}>
-                      {product.title || product.name} ({product.sku || 'No SKU'})
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
               <div className="form-group">
                 <label>Location *</label>

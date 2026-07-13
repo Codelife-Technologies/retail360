@@ -14,7 +14,7 @@
 .grn-module-subtitle {
   margin: 0 0 1rem;
   color: var(--text-muted, #6b7280);
-  font-size: 0.95rem;
+  font-size: 1.05rem;
 }
 
 .grn-module-nav {
@@ -55,7 +55,7 @@
 .grn-page-header p {
   margin: 0;
   color: #6b7280;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .grn-header-actions {
@@ -107,7 +107,7 @@
 
 .grn-kpi-label {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: #6b7280;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -115,7 +115,7 @@
 
 .grn-kpi-value {
   display: block;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   font-weight: 700;
   margin-top: 0.35rem;
 }
@@ -136,7 +136,7 @@
 
 .grn-chart-card h4 {
   margin: 0 0 0.75rem;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .grn-bar-chart {
@@ -151,7 +151,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
 }
 
 .grn-bar {
@@ -172,7 +172,7 @@
   justify-content: space-between;
   padding: 0.35rem 0;
   border-bottom: 1px solid #f3f4f6;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .grn-filters {
@@ -187,7 +187,7 @@
   padding: 0.6rem 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
 }
 
 .grn-filters input {
@@ -207,7 +207,7 @@
   width: 100%;
   min-width: 900px;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .grn-table th,
@@ -239,7 +239,7 @@
   padding: 0.35rem 0.4rem;
   border: 1px solid #c4b5fd;
   border-radius: 4px;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .grn-inline-field {
@@ -247,7 +247,7 @@
   padding: 0.5rem 0.6rem;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: 1rem;
   box-sizing: border-box;
 }
 
@@ -277,7 +277,7 @@
 
 .mono {
   font-family: ui-monospace, monospace;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .grn-empty {
@@ -290,7 +290,7 @@
   display: inline-block;
   padding: 0.2rem 0.6rem;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
 }
 
@@ -322,7 +322,7 @@
 .grn-form-grid .form-group label,
 .grn-detail-grid label {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: #6b7280;
   margin-bottom: 0.25rem;
 }
@@ -346,12 +346,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .grn-section h3 {
   margin: 0 0 1rem;
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: #374151;
 }
 
@@ -368,7 +368,7 @@
 }
 
 .grn-financial-summary .grand {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   border-top: 2px solid #333;
   margin-top: 0.5rem;
   padding-top: 0.5rem;
@@ -387,13 +387,13 @@
 
 .grn-alert {
   color: #b91c1c;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   margin-top: 0.35rem;
 }
 
 .grn-field-hint {
   margin: 0.5rem 0 0;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: #6b7280;
   line-height: 1.4;
 }
@@ -423,7 +423,7 @@
 .grn-audit-item {
   padding: 0.5rem 0;
   border-bottom: 1px solid #f3f4f6;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .grn-upload-row {
@@ -440,7 +440,7 @@
   padding: 0.35rem 0.75rem;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .grn-link-btn.static {
@@ -494,7 +494,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .grn-attachments-list {
@@ -510,7 +510,7 @@
 
 .grn-attachment-meta {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: #6b7280;
 }
 

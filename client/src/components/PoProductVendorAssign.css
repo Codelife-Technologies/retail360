@@ -15,14 +15,14 @@
 
 .po-product-vendor-assign h3 {
   margin: 0 0 0.35rem;
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: #92400e;
 }
 
 .po-vendor-assign-hint {
   margin: 0 0 1rem;
   color: #6b7280;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   line-height: 1.45;
 }
 
@@ -35,7 +35,7 @@
 }
 
 .po-vendor-bulk-row label {
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   font-weight: 500;
   color: #374151;
 }
@@ -54,7 +54,7 @@
 .po-vendor-assign-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .po-vendor-assign-table th,
@@ -80,7 +80,7 @@
 
 .po-vendor-assign-table .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .po-vendor-assign-actions {
@@ -94,5 +94,5 @@
 .po-vendor-assign-empty {
   margin: 0.5rem 0;
   color: #6b7280;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }

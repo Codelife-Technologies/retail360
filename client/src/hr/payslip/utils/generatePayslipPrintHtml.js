@@ -76,10 +76,10 @@ export function generatePayslipPrintHtml(payslipData) {
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Segoe UI", Arial, sans-serif;
-      color: #1f2937;
+      font-family: "Amazon Ember", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: #0f1111;
       background: #fff;
-      font-size: 12px;
+      font-size: 17px;
       line-height: 1.45;
     }
     .ps-page {
@@ -106,12 +106,12 @@ export function generatePayslipPrintHtml(payslipData) {
       align-items: center;
       justify-content: center;
       font-weight: 700;
-      font-size: 17px;
+      font-size: 16px;
     }
-    .ps-company h1 { margin: 0 0 4px; font-size: 19px; color: #1e3a8a; }
+    .ps-company h1 { margin: 0 0 4px; font-size: 18px; color: #1e3a8a; }
     .ps-company p { margin: 2px 0; color: #4b5563; }
     .ps-title-block { text-align: right; }
-    .ps-title-block h2 { margin: 0; color: #2563eb; font-size: 21px; letter-spacing: 0.04em; }
+    .ps-title-block h2 { margin: 0; color: #2563eb; font-size: 19px; letter-spacing: 0.04em; }
     .ps-title-block p { margin: 4px 0 0; color: #374151; font-weight: 600; }
     .ps-section {
       border: 1px solid #dbeafe;
@@ -122,7 +122,7 @@ export function generatePayslipPrintHtml(payslipData) {
     }
     .ps-section h3 {
       margin: 0 0 8px;
-      font-size: 13px;
+      font-size: 14px;
       color: #1e40af;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -133,12 +133,12 @@ export function generatePayslipPrintHtml(payslipData) {
       gap: 8px 12px;
     }
     .ps-info-item { display: flex; flex-direction: column; gap: 2px; }
-    .ps-info-label { color: #6b7280; font-size: 11px; text-transform: uppercase; }
+    .ps-info-label { color: #6b7280; font-size: 14px; text-transform: uppercase; }
     .ps-info-value { color: #111827; font-weight: 600; }
     .ps-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     table { width: 100%; border-collapse: collapse; }
     th, td { border: 1px solid #dbeafe; padding: 6px 8px; }
-    th { background: #eff6ff; color: #1e40af; text-align: left; font-size: 11px; text-transform: uppercase; }
+    th { background: #eff6ff; color: #1e40af; text-align: left; font-size: 14px; text-transform: uppercase; }
     .ps-amount { text-align: right; font-variant-numeric: tabular-nums; }
     .ps-total-row td { background: #eff6ff; font-weight: 700; }
     .ps-net-card {
@@ -157,7 +157,7 @@ export function generatePayslipPrintHtml(payslipData) {
       padding-top: 10px;
       border-top: 1px dashed #93c5fd;
     }
-    .ps-net-final strong { font-size: 23px; color: #15803d; }
+    .ps-net-final strong { font-size: 21px; color: #15803d; }
     .ps-words { margin-top: 8px; font-style: italic; color: #374151; }
     .ps-employer {
       display: grid;
@@ -180,7 +180,7 @@ export function generatePayslipPrintHtml(payslipData) {
       justify-content: space-between;
       gap: 16px;
       color: #6b7280;
-      font-size: 11px;
+      font-size: 14px;
     }
     .ps-seal {
       width: 72px;
@@ -191,7 +191,7 @@ export function generatePayslipPrintHtml(payslipData) {
       align-items: center;
       justify-content: center;
       text-align: center;
-      font-size: 10px;
+      font-size: 14px;
       color: #1e40af;
       font-weight: 700;
       padding: 8px;

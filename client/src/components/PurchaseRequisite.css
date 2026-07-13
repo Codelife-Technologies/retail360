@@ -23,7 +23,7 @@
 .pr-subtitle {
   margin: 0;
   color: #6b7280;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   max-width: 640px;
 }
 
@@ -43,7 +43,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #374151;
   min-width: 220px;
@@ -53,12 +53,12 @@
   padding: 0.6rem 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   font-weight: 400;
 }
 
 .pr-user-hint {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: #6b7280;
   align-self: center;
 }
@@ -77,14 +77,14 @@
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .pr-filters select {
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 1.1rem;
   min-width: 160px;
 }
 
@@ -125,14 +125,14 @@
 
 .pr-number-cell {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #374151;
 }
 
 .pr-name-sub {
   font-family: inherit;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: #6B3894;
   margin-top: 0.15rem;
@@ -140,7 +140,7 @@
 
 .pr-vendors-cell {
   max-width: 180px;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   color: #374151;
 }
 
@@ -148,7 +148,7 @@
   display: inline-block;
   padding: 0.25rem 0.65rem;
   border-radius: 999px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
@@ -191,7 +191,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   margin-right: 0.35rem;
   background: #6B3894;
   color: white;
@@ -206,7 +206,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   margin-right: 0.35rem;
   background: #059669;
   color: white;
@@ -221,7 +221,7 @@
   border: 1px solid #6B3894;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   margin-right: 0.35rem;
   background: #f8f5fc;
   color: #6B3894;
@@ -235,7 +235,7 @@
 .pr-edit-hint {
   margin: 0 0 1rem;
   color: #6b7280;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .pr-add-modal {
@@ -258,7 +258,7 @@
   padding: 0.65rem;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .btn-edit,
@@ -267,7 +267,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   margin-right: 0.35rem;
 }
 
@@ -303,7 +303,7 @@
 .pr-items-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .pr-items-table th,
@@ -341,7 +341,7 @@
   display: inline-block;
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
 }
 
@@ -436,7 +436,7 @@
 
 .pr-vendor-pending-label {
   color: #b45309;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   font-weight: 500;
 }
 
@@ -468,7 +468,7 @@
   color: #92400e;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .btn-assign-vendor:hover {

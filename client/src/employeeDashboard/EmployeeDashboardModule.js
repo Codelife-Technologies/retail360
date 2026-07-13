@@ -5,6 +5,7 @@ import EmployeeTasks from './pages/EmployeeTasks';
 import EmployeeWorkLog from './pages/EmployeeWorkLog';
 import EmployeeSalarySlip from './pages/EmployeeSalarySlip';
 import EmployeeLeave from './pages/EmployeeLeave';
+import EmployeeChat from './pages/EmployeeChat';
 import './EmployeeDashboardModule.css';
 import '../hr/styles/hrShared.css';
 
@@ -23,6 +24,8 @@ function EmployeeDashboardModule({ subTab = 'home' }) {
         return <EmployeeSalarySlip />;
       case 'leave':
         return <EmployeeLeave />;
+      case 'chat':
+        return <EmployeeChat />;
       default:
         return <EmployeeHome />;
     }

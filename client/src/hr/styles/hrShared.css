@@ -20,14 +20,14 @@
 .hr-page-header h1 {
   margin: 0;
   color: var(--text, #333);
-  font-size: 1.75rem;
+  font-size: 1.85rem;
   font-weight: 700;
 }
 
 .hr-page-subtitle {
   margin: 0.35rem 0 0;
   color: var(--text-muted, #6b7280);
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   line-height: 1.45;
 }
 
@@ -86,13 +86,13 @@
 .hr-kpi-card.info { border-left-color: #6B3894; }
 
 .hr-kpi-icon {
-  font-size: 2rem;
+  font-size: 2.1rem;
   line-height: 1;
 }
 
 .hr-kpi-body h3 {
   margin: 0;
-  font-size: 1.65rem;
+  font-size: 1.75rem;
   color: var(--text, #333);
   font-weight: 700;
 }
@@ -100,7 +100,7 @@
 .hr-kpi-body p {
   margin: 0.2rem 0 0;
   color: var(--text-muted, #666);
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .hr-filters-row {
@@ -117,7 +117,7 @@
   padding: 0.65rem 0.85rem;
   border: 1px solid var(--border, #ddd);
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   background: var(--surface, #fff);
   color: var(--text, #333);
   min-width: 140px;
@@ -180,7 +180,7 @@
   padding: 0.55rem 1.1rem;
   border-radius: 8px;
   border: none;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.2s, transform 0.15s;
@@ -221,7 +221,7 @@
 
 .hr-btn-sm {
   padding: 0.35rem 0.65rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .hr-btn-icon {
@@ -237,7 +237,7 @@
 
 .hr-task-desc-inline {
   margin-top: 0.25rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #6b7280;
   max-width: 280px;
 }
@@ -246,7 +246,7 @@
   display: inline-block;
   padding: 0.25rem 0.65rem;
   border-radius: 999px;
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   font-weight: 600;
   text-transform: capitalize;
 }
@@ -342,13 +342,13 @@
 
 .hr-worklog-report-period h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.15rem;
   color: #0f172a;
 }
 
 .hr-worklog-report-period span {
   color: #64748b;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .hr-worklog-report-employee {
@@ -359,7 +359,7 @@
 
 .hr-worklog-report-employee span {
   color: #64748b;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
 }
 
 .hr-worklog-report-empty-row td {
@@ -394,7 +394,7 @@
 
 .hr-worklog-report-day-header span {
   color: #475569;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .hr-avatar {
@@ -408,7 +408,7 @@
   justify-content: center;
   font-weight: 600;
   color: #667eea;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .hr-avatar img {
@@ -429,7 +429,7 @@
 
 .hr-pagination-info {
   color: var(--text-muted, #666);
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .hr-pagination-controls {
@@ -480,14 +480,14 @@
 
 .hr-modal-header h2 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   color: var(--text, #333);
 }
 
 .hr-modal-close {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   cursor: pointer;
   color: var(--text-muted, #666);
   line-height: 1;
@@ -511,10 +511,56 @@
 
 .hr-form-section h3 {
   margin: 0 0 1rem;
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: #667eea;
   border-bottom: 1px solid var(--border-soft, #e5e7eb);
   padding-bottom: 0.5rem;
+}
+
+.hr-employee-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border-soft, #e5e7eb);
+}
+
+.hr-employee-detail-name {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  color: var(--text, #333);
+}
+
+.hr-employee-detail-meta {
+  margin: 0 0 0.5rem;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.975rem;
+}
+
+.hr-detail-grid {
+  gap: 0.85rem 1.25rem;
+}
+
+.hr-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.hr-detail-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.hr-detail-value {
+  font-size: 1rem;
+  color: var(--text, #111827);
+  word-break: break-word;
 }
 
 .hr-form-grid {
@@ -530,7 +576,7 @@
 }
 
 .hr-form-group label {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-muted, #555);
 }
@@ -545,7 +591,7 @@
   padding: 0.65rem 0.75rem;
   border: 1px solid var(--border, #ddd);
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   background: var(--surface, #fff);
   color: var(--text, #333);
 }
@@ -562,13 +608,13 @@
 }
 
 .hr-field-hint {
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   color: #6b7280;
   line-height: 1.35;
 }
 
 .hr-time-display {
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: #111827;
   margin-bottom: 0.35rem;
@@ -585,7 +631,7 @@
   padding: 0.45rem 0.5rem;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   background: #fff;
 }
 
@@ -596,7 +642,7 @@
 
 .hr-form-error {
   color: #ef4444;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .hr-chart-grid {
@@ -623,7 +669,7 @@
 .hr-chart-card h3,
 .hr-panel-card h3 {
   margin: 0 0 1rem;
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: var(--text, #333);
 }
 
@@ -644,7 +690,7 @@
   border: 1px solid #a7f3d0;
   border-radius: 8px;
   color: #065f46;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .hr-chart-container {
@@ -703,7 +749,7 @@
   background: var(--surface-2, #f8f9fa);
   border-radius: 8px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 500;
   color: var(--text-muted, #666);
 }
@@ -722,7 +768,7 @@
 
 .hr-calendar-day-header {
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-muted, #666);
   padding: 0.35rem;
@@ -735,7 +781,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   background: var(--surface-2, #f8f9fa);
   border: 1px solid var(--border-soft, #e5e7eb);
   padding: 0.25rem;
@@ -757,7 +803,7 @@
 }
 
 .hr-calendar-day-label {
-  font-size: 0.6rem;
+  font-size: 0.7rem;
   color: #667eea;
   text-align: center;
   line-height: 1.1;
@@ -786,20 +832,20 @@
 
 .attendance-calendar-header h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.15rem;
 }
 
 .attendance-calendar-subtitle {
   margin: 0.25rem 0 0;
   color: #6b7280;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
 }
 
 .attendance-calendar-stats {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem 1rem;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   color: #374151;
 }
 
@@ -826,7 +872,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: #4b5563;
 }
 
@@ -862,7 +908,7 @@
   padding: 1.5rem;
   text-align: center;
   color: #6b7280;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .attendance-calendar-grid {
@@ -873,7 +919,7 @@
 
 .attendance-calendar-day-header {
   text-align: center;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--text-muted, #666);
   padding: 0.25rem;
@@ -890,7 +936,7 @@
   border: 1px solid var(--border-soft, #e5e7eb);
   background: #fff;
   padding: 0.2rem;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
 }
 
 .attendance-calendar-day.other-month {
@@ -908,7 +954,7 @@
 }
 
 .attendance-calendar-day-tag {
-  font-size: 0.58rem;
+  font-size: 0.68rem;
   line-height: 1.1;
   margin-top: 0.15rem;
   opacity: 0.85;
@@ -1000,11 +1046,11 @@
   }
 
   .hr-page-header h1 {
-    font-size: 1.4rem;
+    font-size: 1.5rem;
   }
 
   .hr-kpi-body h3 {
-    font-size: 1.35rem;
+    font-size: 1.45rem;
   }
 
   .hr-leave-balance-grid {
@@ -1020,7 +1066,7 @@
 
 .hr-leave-balance-panel h3 {
   margin: 0 0 1rem;
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: var(--text, #333);
 }
 
@@ -1033,7 +1079,7 @@
 .hr-leave-balance-hint {
   margin-bottom: 1.25rem;
   color: var(--text-muted, #666);
-  font-size: 0.95rem;
+  font-size: 1.05rem;
 }
 
 .hr-leave-balance-hint p {
@@ -1055,13 +1101,13 @@
 
 .hr-leave-balance-card h4 {
   margin: 0 0 0.35rem;
-  font-size: 0.92rem;
+  font-size: 1.02rem;
   color: var(--text, #333);
 }
 
 .hr-leave-balance-card p {
   margin: 0.15rem 0;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   color: var(--text-muted, #666);
 }
 
@@ -1077,6 +1123,6 @@
 .form-hint {
   display: block;
   margin-top: 0.35rem;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   color: var(--text-muted, #666);
 }

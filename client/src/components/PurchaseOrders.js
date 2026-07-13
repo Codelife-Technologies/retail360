@@ -32,6 +32,7 @@ import { UOM_OPTIONS } from '../types/purchaseOrderTypes';
 import { isPoEligibleForGrn } from '../goods-receipt-note/types/grn.types';
 import PoProductVendorAssign from './PoProductVendorAssign';
 import PoShareActions from './PoShareActions';
+import ProductSearchPicker from './ProductSearchPicker';
 import './PurchaseOrders.css';
 import './PoShareActions.css';
 
@@ -1115,34 +1116,26 @@ function PurchaseOrders({ onNavigate }) {
                   </div>
                 )}
                 <div className="add-item-form">
-                  <div className="add-item-field">
+                  <div className="add-item-field add-item-field-product">
                     <label>Product</label>
-                    <select
+                    <ProductSearchPicker
+                      products={products}
                       value={newItem.product}
-                      onChange={(e) => {
-                        const productId = e.target.value;
+                      onChange={(productId, product) => {
                         const price = productPrices[productId];
-                        const product = products.find((p) => p._id === productId);
                         setNewItem({
                           ...newItem,
                           product: productId,
                           unitPrice: price ? price.salesPrice : 0,
                           unitOfMeasure: getProductUom(product),
-                          taxRate: getTaxRateForCategory(getCategoryName(product), formData.defaultTaxRate),
+                          taxRate: getTaxRateForCategory(
+                            getCategoryName(product),
+                            formData.defaultTaxRate
+                          ),
                         });
                       }}
-                    >
-                      <option value="">Select Product</option>
-                      {products.map((product) => {
-                        const price = productPrices[product._id];
-                        const salesPrice = price ? price.salesPrice : 0;
-                        return (
-                          <option key={product._id} value={product._id}>
-                            {product.title || product.name} - ₹{salesPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </option>
-                        );
-                      })}
-                    </select>
+                      placeholder="Type product name or SKU…"
+                    />
                   </div>
                   <div className="add-item-field add-item-field-sm">
                     <label>Quantity</label>

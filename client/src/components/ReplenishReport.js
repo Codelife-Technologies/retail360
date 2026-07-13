@@ -408,24 +408,24 @@ function ReplenishReport({ onNavigate }) {
           {item.product.sku}
         </td>
         <td
-          className="product-title-cell replenish-product-link"
+          className="product-title-cell replenish-col-product replenish-product-link"
           title={item.product.title}
           onClick={() => handleOpenProductDetail(item)}
         >
           {item.product.title}
         </td>
-        <td>{item.product.category?.name || 'Uncategorized'}</td>
-        <td className="text-center font-semibold">{item.inventory.currentStock}</td>
-        <td className="text-center font-semibold home-avail-cell">
+        <td className="replenish-col-category">{item.product.category?.name || 'Uncategorized'}</td>
+        <td className="text-center font-semibold replenish-col-num">{item.inventory.currentStock}</td>
+        <td className="text-center font-semibold home-avail-cell replenish-col-num month-col">
           {item.homeAvailableStock ?? item.homeInventory?.availableStock ?? 0}
         </td>
-        <td className="text-center text-blue font-semibold">{item.salesCurrent ?? 0}</td>
+        <td className="text-center text-blue font-semibold replenish-col-num month-col">{item.salesCurrent ?? 0}</td>
         <td className="text-center text-blue font-semibold replenish-col-past3">
           {item.salesPastThreeMonths ?? 0}
         </td>
         {showDateColumn && (
           <td
-            className={`text-center font-semibold ${
+            className={`text-center font-semibold replenish-col-num month-col ${
               (item.salesOnDate ?? 0) > 0 ? 'text-green' : 'text-muted'
             }`}
           >
@@ -444,7 +444,7 @@ function ReplenishReport({ onNavigate }) {
           />
         </td>
         <td
-          className="text-center font-bold text-violet"
+          className="text-center font-bold text-violet replenish-col-reorder"
           title={`${item.reorderQty ?? 0} to purchase; ${item.refillQty ?? 0} covered by home refill`}
         >
           <ReplenishBracketQty
@@ -463,18 +463,18 @@ function ReplenishReport({ onNavigate }) {
         <th onClick={() => handleSort('product.sku')} className="sortable replenish-col-sku">
           SKU {sortField === 'product.sku' && (sortDirection === 'asc' ? '🔼' : '🔽')}
         </th>
-        <th onClick={() => handleSort('product.title')} className="sortable">
+        <th onClick={() => handleSort('product.title')} className="sortable replenish-col-product">
           Product {sortField === 'product.title' && (sortDirection === 'asc' ? '🔼' : '🔽')}
         </th>
-        <th onClick={() => handleSort('product.category.name')} className="sortable">
+        <th onClick={() => handleSort('product.category.name')} className="sortable replenish-col-category">
           Category {sortField === 'product.category.name' && (sortDirection === 'asc' ? '🔼' : '🔽')}
         </th>
-        <th onClick={() => handleSort('inventory.currentStock')} className="sortable text-center">
+        <th onClick={() => handleSort('inventory.currentStock')} className="sortable text-center replenish-col-num">
           Stock {sortField === 'inventory.currentStock' && (sortDirection === 'asc' ? '🔼' : '🔽')}
         </th>
         <th
           onClick={() => handleSort('homeAvailableStock')}
-          className="sortable text-center month-col"
+          className="sortable text-center month-col replenish-col-num"
           title={`Available stock at home branch (${homeBranchLabel})`}
         >
           Avail at Home
@@ -482,7 +482,7 @@ function ReplenishReport({ onNavigate }) {
         </th>
         <th
           onClick={() => handleSort('salesCurrent')}
-          className="sortable text-center month-col"
+          className="sortable text-center month-col replenish-col-num"
         >
           Sold ({monthLabels.current || 'Previous'})
           {sortField === 'salesCurrent' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
@@ -498,7 +498,7 @@ function ReplenishReport({ onNavigate }) {
         {showDateColumn && (
           <th
             onClick={() => handleSort('salesOnDate')}
-            className="sortable text-center month-col date-col"
+            className="sortable text-center month-col replenish-col-num date-col"
           >
             Sold ({specificDateInfo.label})
             {sortField === 'salesOnDate' && (sortDirection === 'asc' ? ' 🔼' : ' 🔽')}
@@ -522,7 +522,7 @@ function ReplenishReport({ onNavigate }) {
         </th>
         <th
           onClick={() => handleSort('reorderQty')}
-          className="sortable text-center"
+          className="sortable text-center replenish-col-reorder"
           title="Units still needed to purchase after home refill (home refill shown in brackets)"
         >
           Reorder

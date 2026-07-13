@@ -3,8 +3,7 @@
   height: 100%;
   box-sizing: border-box;
   overflow-y: auto;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  color: #1e293b;
+  color: var(--text, #0f1111);
 }
 
 .sales-dash-header {
@@ -26,7 +25,7 @@
 
 .sales-dash-header h1 {
   margin: 0 0 0.25rem;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   font-weight: 700;
   color: #0f172a;
 }
@@ -34,7 +33,7 @@
 .sales-dash-subtitle {
   margin: 0;
   color: #64748b;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .sales-dash-header-actions {
@@ -46,7 +45,7 @@
 
 .sales-dash-btn-export {
   padding: 0.45rem 0.9rem;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   border: none;
   border-radius: 8px;
   background: #6366f1;
@@ -67,7 +66,7 @@
 
 .sales-dash-btn-refresh {
   padding: 0.45rem 0.9rem;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   background: white;
@@ -114,7 +113,7 @@
   background: transparent;
   padding: 0.35rem 0.75rem;
   border-radius: 5px;
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   font-weight: 600;
   color: #64748b;
   cursor: pointer;
@@ -146,7 +145,7 @@
 }
 
 .sales-dash-filter-field span {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: #475569;
 }
@@ -156,7 +155,7 @@
   padding: 0.4rem 0.6rem;
   border: 1px solid #cbd5e1;
   border-radius: 5px;
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   background: #f8fafc;
 }
 
@@ -180,7 +179,7 @@
   background: #6366f1;
   color: white;
   font-weight: 600;
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -199,7 +198,7 @@
 .sales-dash-records-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .sales-dash-records-table th,
@@ -218,7 +217,7 @@
 
 .sales-dash-records-table td.mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
 }
 
 .sales-dash-records-table td.num {
@@ -274,14 +273,14 @@
 
 .sales-dash-section h2 {
   margin: 0 0 0.25rem;
-  font-size: 1.05rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: #0f172a;
 }
 
 .sales-dash-range-hint {
   margin: 0 0 0.65rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #64748b;
 }
 
@@ -289,7 +288,7 @@
   display: inline-block;
   padding: 0.2rem 0.55rem;
   border-radius: 6px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
@@ -338,7 +337,7 @@
 }
 
 .sales-dash-kpi-label {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
@@ -346,14 +345,14 @@
 }
 
 .sales-dash-kpi-value {
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   font-weight: 700;
   color: #0f172a;
   line-height: 1.2;
 }
 
 .sales-dash-kpi-sub {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: #64748b;
 }
 
@@ -361,7 +360,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 700;
   margin-top: 0.25rem;
   width: fit-content;
@@ -417,7 +416,7 @@
 
 .sales-dash-chart-card h3 {
   margin: 0 0 0.5rem;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #334155;
 }
@@ -434,7 +433,7 @@
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .sales-dash-channel-table thead th {

@@ -2,8 +2,13 @@
   padding: 2rem;
   height: 100%;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .prices-header {
@@ -11,6 +16,11 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--app-bg);
 }
 
 .prices-header h1 {
@@ -18,41 +28,77 @@
   color: #333;
 }
 
-.prices-subtitle {
-  margin: 0.35rem 0 0;
-  color: #64748b;
-  font-size: 0.95rem;
-}
-
 .prices-header-actions {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
-.prices-filters {
+.prices-header-actions .btn-secondary {
+  padding: 0.55rem 1rem;
+  border: 1px solid #6B3894;
+  border-radius: 8px;
+  font-size: 0.975rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: #ffffff;
+  color: #6B3894;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.prices-header-actions .btn-secondary:hover:not(:disabled) {
+  background: #f3e8ff;
+}
+
+.prices-scroll-area {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+}
+
+.prices-search-bar {
+  margin-bottom: 1rem;
+}
+
+.prices-search-bar input {
+  width: 100%;
+  max-width: 420px;
+  padding: 0.75rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  box-sizing: border-box;
+}
+
+.prices-search-bar input:focus {
+  outline: none;
+  border-color: #6B3894;
+  box-shadow: 0 0 0 3px rgba(107, 56, 148, 0.12);
+}
+
+.prices-filter-row {
+  display: flex;
+  align-items: center;
   gap: 0.75rem;
   margin-bottom: 1.5rem;
 }
 
-.prices-filters input {
-  flex: 1;
-  min-width: 220px;
-  max-width: 420px;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 1rem;
+.prices-filter-row label {
+  font-weight: 500;
+  color: #333;
 }
 
-.prices-filters select {
+.prices-filter-row select {
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 8px;
-  font-size: 1rem;
-  min-width: 200px;
+  font-size: 1.1rem;
+  min-width: 220px;
 }
 
 .vendor-name {
@@ -65,7 +111,102 @@
 }
 
 .prices-table tbody tr.no-vendor-price {
-  background: #fffbeb;
+  background: #fef3c7;
+}
+
+.prices-table tbody tr.clickable-row {
+  cursor: pointer;
+}
+
+.prices-table tbody tr.clickable-row:hover {
+  background: #f8f9fa;
+}
+
+.product-vendor-sub-row {
+  background: #ffffff;
+}
+
+.product-vendor-sub-row .vendor-name {
+  padding-left: 0.5rem;
+}
+
+.vendor-sub-indicator {
+  color: #94a3b8;
+  margin-right: 0.35rem;
+  font-weight: 400;
+}
+
+.vendor-price-product-cell-wrap {
+  min-width: 220px;
+  max-width: 320px;
+  vertical-align: middle;
+}
+
+.vendor-price-product-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.vendor-price-product-thumbnail {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #f3f4f6;
+}
+
+.vendor-price-product-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.vendor-price-product-title {
+  font-weight: 500;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vendor-price-sku-cell {
+  min-width: 100px;
+  max-width: 160px;
+}
+
+.vendor-price-sku-value {
+  display: inline-block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #374151;
+  word-break: break-word;
+}
+
+.vendor-price-sku-empty {
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.vendor-price-amount {
+  white-space: nowrap;
+}
+
+.product-vendor-count {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #ede9fe;
+  color: #5b21b6;
+  font-size: 0.78rem;
+  font-weight: 600;
+  width: fit-content;
 }
 
 .modal-content-wide {
@@ -116,7 +257,7 @@
 
 .add-vendor-section h4 {
   margin: 0 0 0.75rem;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   color: #334155;
 }
 
@@ -132,7 +273,7 @@
   padding: 0.55rem 0.65rem;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
 }
 
 .add-vendor-row select {
@@ -156,7 +297,7 @@
   border-radius: 999px;
   background: #bbf7d0;
   color: #166534;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 700;
   vertical-align: middle;
 }
@@ -174,7 +315,7 @@
   border-radius: 6px;
   background: #fff;
   color: #b91c1c;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   cursor: pointer;
 }
 
@@ -189,71 +330,19 @@
 .product-vendor-prices-sku {
   margin: 0.35rem 0 0;
   color: #64748b;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .product-vendor-prices-section-title {
   margin: 1.25rem 0 0.5rem;
-  font-size: 1.05rem;
+  font-size: 1.15rem;
   color: #0f172a;
-}
-
-.prices-table tbody tr.clickable-row {
-  cursor: pointer;
-}
-
-.product-group-first-row td {
-  border-top: 2px solid #e2e8f0;
-}
-
-.prices-table tbody tr.product-group-first-row:first-child td {
-  border-top: none;
-}
-
-.product-group-cell {
-  vertical-align: middle;
-  background: #fafbfc;
-  border-right: 1px solid #eef2f7;
-}
-
-.product-group-name {
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.product-group-name span:first-child {
-  display: block;
-}
-
-.product-vendor-count {
-  display: inline-block;
-  margin-top: 0.35rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  background: #ede9fe;
-  color: #5b21b6;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.product-vendor-sub-row {
-  background: #fcfcfd;
-}
-
-.product-vendor-sub-row .vendor-name {
-  padding-left: 1.5rem;
-}
-
-.vendor-sub-indicator {
-  color: #94a3b8;
-  margin-right: 0.35rem;
-  font-weight: 400;
 }
 
 .prices-modal-hint {
   margin: 0 0 1rem;
   color: #64748b;
-  font-size: 0.92rem;
+  font-size: 1.02rem;
 }
 
 .multi-vendor-table-wrap {
@@ -277,7 +366,7 @@
 
 .multi-vendor-table th {
   background: #f8fafc;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .multi-vendor-table input {
@@ -294,7 +383,7 @@
 }
 
 .recent-acq-cell {
-  min-width: 180px;
+  min-width: 0;
 }
 
 .recent-acquisitions {
@@ -303,19 +392,29 @@
   gap: 0.35rem;
 }
 
+.recent-acquisitions-compact {
+  gap: 0.2rem;
+}
+
 .recent-acq-item {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  font-size: 0.85rem;
+  gap: 0.35rem;
+  font-size: 0.95rem;
+}
+
+.recent-acq-item-compact {
+  font-size: 0.82rem;
+  gap: 0.25rem;
+  line-height: 1.2;
 }
 
 .recent-acq-label {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.1rem;
+  height: 1.1rem;
   border-radius: 999px;
   background: #e2e8f0;
   color: #334155;
@@ -324,14 +423,26 @@
   flex-shrink: 0;
 }
 
+.recent-acq-item-compact .recent-acq-label {
+  width: 0.95rem;
+  height: 0.95rem;
+  font-size: 0.65rem;
+}
+
 .recent-acq-price {
   font-weight: 600;
   color: #0f172a;
+  white-space: nowrap;
 }
 
 .recent-acq-date {
   color: #64748b;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.recent-acq-item-compact .recent-acq-date {
+  font-size: 0.75rem;
 }
 
 .recent-acq-empty {
@@ -359,7 +470,7 @@
   background: white;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.1rem;
   transition: all 0.2s;
 }
 
@@ -389,7 +500,7 @@
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: 1.1rem;
   min-width: 300px;
 }
 
@@ -397,22 +508,37 @@
   padding: 2rem;
   text-align: center;
   color: #666;
+  flex: 1;
+  min-height: 0;
 }
 
 .prices-table-container {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
   background: white;
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .prices-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .prices-table thead {
   background: #f8f9fa;
+}
+
+.prices-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f8f9fa;
+  box-shadow: 0 2px 0 #dee2e6;
 }
 
 .prices-table th {
@@ -426,14 +552,7 @@
 .prices-table td {
   padding: 1rem;
   border-bottom: 1px solid #dee2e6;
-}
-
-.prices-table tbody tr:hover {
-  background: #f8f9fa;
-}
-
-.prices-table tbody tr.inactive {
-  opacity: 0.6;
+  vertical-align: middle;
 }
 
 .no-data {
@@ -444,13 +563,13 @@
 
 .sku {
   color: #666;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .status-badge {
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 500;
 }
 
@@ -466,7 +585,7 @@
 
 .notes {
   cursor: help;
-  font-size: 1.2rem;
+  font-size: 1.3rem;
 }
 
 .btn-primary,
@@ -476,7 +595,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
   margin-right: 0.5rem;
   transition: all 0.2s;
 }
@@ -555,7 +674,7 @@
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-family: inherit;
 }
 
@@ -586,7 +705,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .form-actions button[type="button"] {
@@ -599,13 +718,13 @@
 }
 
 .prices-image-cell {
-  width: 56px;
-  padding: 0.5rem !important;
+  width: 3.25rem;
+  padding: 0.35rem 0.45rem !important;
 }
 
 .prices-product-image {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid #e5e7eb;
@@ -648,7 +767,7 @@
 
 .prices-image-section h3 {
   margin: 0 0 0.75rem;
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: #334155;
 }
 

@@ -37,7 +37,7 @@
   border-radius: 3px;
   background: transparent;
   color: var(--text-primary, #0f1111);
-  font-size: 1rem;
+  font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -59,7 +59,7 @@
   border-radius: 3px;
   background: transparent;
   color: var(--text-primary, #0f1111);
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   text-align: center;
@@ -84,4 +84,8 @@
 
 .page-zoom-scaler > * {
   min-height: 100%;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }

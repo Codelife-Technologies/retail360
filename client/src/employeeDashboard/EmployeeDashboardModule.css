@@ -1,24 +1,128 @@
 .employee-dashboard-module {
   height: 100%;
   overflow-y: auto;
-  background: #f3f4f6;
+  background: var(--app-bg, #eaeded);
 }
 
 .ed-page {
   padding: 1.5rem 2rem 2rem;
-  max-width: 1200px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ed-page .hr-kpi-card .hr-kpi-body h3,
+.ed-page .hr-kpi-card .hr-kpi-body p {
+  color: #000;
+}
+
+.ed-welcome {
+  margin-bottom: 0.5rem;
+}
+
+.ed-welcome-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .ed-welcome h1 {
-  margin: 0 0 0.25rem;
-  color: #111827;
-  font-size: 1.75rem;
+  margin: 0;
+  color: var(--text, #111827);
+  font-size: 1.85rem;
 }
 
-.ed-welcome-meta {
-  margin: 0 0 1.25rem;
+.ed-home-meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  margin: -0.5rem 0 1.25rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  color: #9a3412;
+}
+
+.ed-empty-chart {
+  margin: 0;
+  padding: 1.5rem;
+  text-align: center;
+  color: #9ca3af;
+}
+
+.ed-leaves-table-panel {
+  margin-top: 1.5rem;
+}
+
+.ed-table-card-flush {
+  box-shadow: none;
+  border: none;
+}
+
+.ed-panel-accent {
+  background: linear-gradient(180deg, #fff 0%, #fffbf5 100%);
+  border-left: 4px solid #ff8c00;
+}
+
+.ed-glance-list span:last-child {
+  font-weight: 700;
+}
+
+.ed-glance-success { color: #059669; }
+.ed-glance-danger { color: #dc2626; }
+.ed-glance-warning { color: #d97706; }
+.ed-glance-info { color: #2563eb; }
+.ed-glance-holiday { color: #ff8c00; }
+
+.ed-task-mini-list li {
+  align-items: flex-start;
+}
+
+.ed-task-mini span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.ed-task-mini small {
   color: #6b7280;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.ed-task-mini-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.ed-task-mini.priority-high .ed-task-mini-badge {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.ed-task-mini.priority-medium .ed-task-mini-badge {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.ed-task-mini.priority-low .ed-task-mini-badge {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.ed-page .hr-kpi-card {
+  border-left-color: #ff8c00;
+}
+
+.ed-page .hr-kpi-card.info {
+  border-left-color: #ff8c00;
 }
 
 .ed-section-header {
@@ -37,7 +141,7 @@
 .ed-section-header p {
   margin: 0;
   color: #6b7280;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .ed-loading,
@@ -47,8 +151,9 @@
   text-align: center;
   color: #6b7280;
   background: #fff;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .ed-unlinked {
@@ -80,28 +185,29 @@
 
 .ed-card {
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: none;
+  border-left: 4px solid #ff8c00;
   border-radius: 12px;
   padding: 1rem 1.15rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .ed-card-label {
   display: block;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #6b7280;
   margin-bottom: 0.35rem;
 }
 
 .ed-card-value {
   display: block;
-  font-size: 1.35rem;
+  font-size: 1.45rem;
   color: #111827;
 }
 
 .ed-card-meta {
   margin: 0.35rem 0 0;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #9ca3af;
 }
 
@@ -113,9 +219,10 @@
 
 .ed-panel {
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: none;
   border-radius: 12px;
   padding: 1rem 1.15rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .ed-panel-wide {
@@ -124,7 +231,7 @@
 
 .ed-panel h3 {
   margin: 0 0 0.85rem;
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: #111827;
 }
 
@@ -161,12 +268,12 @@
 
 .ed-task-item p {
   margin: 0.25rem 0 0;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: #6b7280;
 }
 
 .ed-task-priority {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: #374151;
   white-space: nowrap;
@@ -188,15 +295,16 @@
 }
 
 .ed-leave-balance span {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #6b7280;
 }
 
 .ed-table-card {
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: none;
   border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .ed-table {
@@ -209,7 +317,7 @@
   padding: 0.75rem 1rem;
   text-align: left;
   border-bottom: 1px solid #f3f4f6;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .ed-table th {
@@ -246,10 +354,11 @@
 
 .ed-task-card {
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: none;
   border-radius: 12px;
   padding: 1rem;
   border-left: 4px solid #d1d5db;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .ed-task-card.priority-high {
@@ -274,18 +383,18 @@
 
 .ed-task-card-header h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .ed-task-desc {
   margin: 0 0 0.5rem;
   color: #4b5563;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .ed-task-meta {
   margin: 0 0 0.75rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #9ca3af;
 }
 
@@ -322,13 +431,13 @@
   border-radius: 999px;
   background: #fff;
   color: #374151;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   cursor: pointer;
 }
 
 .ed-view-tab.active {
-  background: #4f46e5;
-  border-color: #4f46e5;
+  background: linear-gradient(135deg, #ff8c00 0%, #ff7043 100%);
+  border-color: #ff8c00;
   color: #fff;
 }
 
@@ -339,7 +448,7 @@
 
 .ed-personal-task-form h3 {
   margin: 0 0 0.75rem;
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .ed-form-group-full {
@@ -363,7 +472,7 @@
 .ed-task-timeline-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: #6b7280;
   margin-bottom: 0.35rem;
 }
@@ -377,7 +486,7 @@
 
 .ed-task-timeline-fill {
   height: 100%;
-  background: linear-gradient(90deg, #6366f1, #818cf8);
+  background: linear-gradient(90deg, #ff8c00, #ffb347);
   border-radius: 999px;
   transition: width 0.2s ease;
 }
@@ -393,7 +502,7 @@
 .ed-task-overdue {
   display: inline-block;
   margin-top: 0.35rem;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: #dc2626;
 }
@@ -429,13 +538,13 @@
 .ed-attendance-today-subtitle {
   margin: 0;
   color: #6b7280;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .ed-attendance-live-clock {
   margin: 0.35rem 0 0;
   color: #374151;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
@@ -458,19 +567,19 @@
 
 .ed-attendance-time-label {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: #6b7280;
   margin-bottom: 0.2rem;
 }
 
 .ed-attendance-times strong {
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: #111827;
 }
 
 .ed-attendance-hint {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   color: #92400e;
   background: #fffbeb;
   border: 1px solid #fde68a;
@@ -499,20 +608,20 @@
   border-radius: 10px;
   background: #fff;
   color: #374151;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   cursor: pointer;
   text-align: left;
 }
 
 .ed-work-location-option.active {
-  border-color: #4f46e5;
-  background: #eef2ff;
-  color: #312e81;
-  box-shadow: inset 0 0 0 1px #4f46e5;
+  border-color: #ff8c00;
+  background: #fff7ed;
+  color: #9a3412;
+  box-shadow: inset 0 0 0 1px #ff8c00;
 }
 
 .ed-work-location-icon {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
 }
 
 .ed-leave-layout {
@@ -541,7 +650,7 @@
 }
 
 .ed-form-group label {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: #374151;
 }
@@ -552,29 +661,29 @@
   padding: 0.5rem 0.65rem;
   border: 1px solid #d1d5db;
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .ed-form-error {
   color: #dc2626;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
 }
 
 .ed-btn {
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   cursor: pointer;
 }
 
 .ed-btn-primary {
-  background: #4f46e5;
+  background: linear-gradient(135deg, #ff8c00 0%, #ff7043 100%);
   color: #fff;
 }
 
 .ed-btn-primary:hover {
-  background: #4338ca;
+  background: linear-gradient(135deg, #e67e00 0%, #f4511e 100%);
 }
 
 .ed-btn-secondary {
@@ -604,7 +713,7 @@
 .ed-worklog-date-field span,
 .ed-worklog-entry-row label span,
 .ed-worklog-notes span {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #64748b;
 }
@@ -615,7 +724,7 @@
   padding: 0.5rem 0.65rem;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .ed-worklog-summary {
@@ -625,7 +734,7 @@
 }
 
 .ed-worklog-total {
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   color: #0f172a;
 }
 
@@ -642,7 +751,7 @@
 .ed-worklog-locked-note {
   margin: 0;
   color: #b45309;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .ed-worklog-entries {
@@ -703,12 +812,12 @@
 .ed-worklog-task-list-header h3,
 .ed-worklog-add-section h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   color: #334155;
 }
 
 .ed-worklog-task-list-header span {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #64748b;
 }
 
@@ -744,9 +853,9 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: #eef2ff;
-  color: #4338ca;
-  font-size: 0.8rem;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 0.9rem;
   font-weight: 700;
 }
 
@@ -759,13 +868,13 @@
 }
 
 .ed-worklog-task-content strong {
-  font-size: 0.9rem;
+  font-size: 1rem;
   color: #0f172a;
   word-break: break-word;
 }
 
 .ed-worklog-task-content span {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #64748b;
 }
 
@@ -798,7 +907,7 @@
 
 .ed-worklog-history h2 {
   margin: 0 0 0.75rem;
-  font-size: 1.05rem;
+  font-size: 1.15rem;
 }
 
 .ed-worklog-history-list {
@@ -822,8 +931,8 @@
 }
 
 .ed-worklog-history-item.active {
-  border-color: #6366f1;
-  background: #eef2ff;
+  border-color: #ff8c00;
+  background: #fff7ed;
 }
 
 .ed-worklog-history-item strong {
@@ -833,7 +942,7 @@
 
 .ed-worklog-history-item span {
   color: #64748b;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 @media (max-width: 768px) {

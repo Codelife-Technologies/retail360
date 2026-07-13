@@ -7,7 +7,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: #1e293b;
   background: var(--app-bg);
 }
@@ -57,7 +56,7 @@
 
 .replenish-header h1 {
   margin: 0 0 0.5rem 0;
-  font-size: 2rem;
+  font-size: 2.1rem;
   font-weight: 700;
   color: #0f172a;
 }
@@ -65,7 +64,7 @@
 .replenish-header p {
   margin: 0;
   color: #64748b;
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .replenish-header-actions {
@@ -79,7 +78,7 @@
   padding: 0.75rem 1.25rem;
   border: none;
   border-radius: 8px;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   background: #6B3894;
@@ -104,7 +103,7 @@
   padding: 0.75rem 1.25rem;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   background: white;
@@ -135,7 +134,7 @@
   border-radius: 999px;
   background: #6366f1;
   color: white;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 700;
 }
 
@@ -166,20 +165,20 @@
 
 .replenish-pr-modal-header h2 {
   margin: 0 0 0.35rem;
-  font-size: 1.35rem;
+  font-size: 1.45rem;
   color: #0f172a;
 }
 
 .replenish-pr-modal-header p {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   color: #64748b;
 }
 
 .replenish-pr-modal-close {
   border: none;
   background: transparent;
-  font-size: 1.75rem;
+  font-size: 1.85rem;
   line-height: 1;
   color: #64748b;
   cursor: pointer;
@@ -220,7 +219,7 @@
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   background: white;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #475569;
   cursor: pointer;
@@ -244,21 +243,21 @@
   padding: 0.55rem 0.75rem;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .pr-option-hint {
   display: block;
   margin-top: 0.35rem;
   color: #64748b;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 400;
 }
 
 .replenish-pr-logged-in-user strong {
   display: block;
   margin-top: 0.25rem;
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: #5a2d7a;
 }
 
@@ -268,7 +267,7 @@
   padding: 0.55rem 0.75rem;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .replenish-pr-modal-table-wrap {
@@ -302,7 +301,7 @@
   padding: 0.75rem 1.25rem;
   border: 1px solid #6B3894;
   border-radius: 8px;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   background: white;
@@ -357,7 +356,7 @@
 
 .report-filters h3 {
   margin: 0 0 1rem 0;
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 600;
   color: #334155;
 }
@@ -375,7 +374,7 @@
 }
 
 .filter-group label {
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   font-weight: 500;
   color: #475569;
 }
@@ -385,7 +384,7 @@
   padding: 0.625rem 0.875rem;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: 1rem;
   background-color: #f8fafc;
   color: #0f172a;
   outline: none;
@@ -422,7 +421,7 @@
   border-radius: 6px;
   background: white;
   color: #64748b;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -434,7 +433,7 @@
 }
 
 .filter-hint {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: #94a3b8;
 }
 
@@ -471,7 +470,7 @@
 
 .stat-card h3 {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
@@ -479,14 +478,14 @@
 }
 
 .stat-value {
-  font-size: 2.25rem;
+  font-size: 2.35rem;
   font-weight: 700;
   margin: 0.5rem 0;
   line-height: 1;
 }
 
 .stat-card small {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #94a3b8;
 }
 
@@ -522,46 +521,13 @@
 }
 
 .required-stock-cell {
-  min-width: 0;
-}
-
-.replenish-col-sku {
-  width: 5.5rem;
-  max-width: 6rem;
-  min-width: 4rem;
-  padding-left: 0.65rem;
-  padding-right: 0.65rem;
-  font-size: 0.72rem;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.report-table th.replenish-col-sku {
-  font-size: 0.75rem;
-}
-
-.replenish-col-past3,
-.replenish-col-peak,
-.replenish-col-req-stock {
-  width: 4.25rem;
-  max-width: 4.75rem;
-  min-width: 3.5rem;
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
-  font-size: 0.8rem;
-  line-height: 1.25;
-  white-space: normal;
-  word-break: break-word;
+  min-width: 5.75rem;
 }
 
 .report-table th.replenish-col-past3,
 .report-table th.replenish-col-peak,
 .report-table th.replenish-col-req-stock {
-  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.01em;
   vertical-align: bottom;
 }
 
@@ -569,7 +535,6 @@
 .report-table td.replenish-col-peak,
 .report-table td.replenish-col-req-stock {
   white-space: nowrap;
-  font-size: 0.875rem;
 }
 
 .replenish-bracket-deduction {
@@ -609,7 +574,7 @@
 }
 
 .replenish-location-select label {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: #64748b;
   text-transform: uppercase;
@@ -622,7 +587,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: white;
-  font-size: 0.9rem;
+  font-size: 1rem;
   color: #1e293b;
   cursor: pointer;
 }
@@ -646,7 +611,7 @@
   border: none;
   padding: 0.5rem 1.25rem;
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
   color: #64748b;
   cursor: pointer;
@@ -667,7 +632,7 @@
   padding: 0.6rem 1rem;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  font-size: 0.9rem;
+  font-size: 1rem;
   width: 280px;
   outline: none;
   background-color: white;
@@ -703,10 +668,12 @@
 
 .report-table {
   width: 100%;
+  min-width: 1580px;
   border-collapse: separate;
   border-spacing: 0;
   text-align: left;
-  font-size: 0.925rem;
+  font-size: 1rem;
+  table-layout: auto;
 }
 
 .report-table thead th {
@@ -726,9 +693,27 @@
   background-color: #f8fafc;
   color: #475569;
   font-weight: 600;
-  padding: 0.55rem 0.85rem;
+  padding: 0.65rem 0.8rem;
   border-bottom: 2px solid #e2e8f0;
   user-select: none;
+  vertical-align: bottom;
+}
+
+.report-table td {
+  padding: 0.65rem 0.8rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.report-table th:first-child,
+.report-table td:first-child {
+  padding-left: 1rem;
+}
+
+.report-table th:last-child,
+.report-table td:last-child {
+  padding-right: 1rem;
 }
 
 .report-table th.sortable {
@@ -746,13 +731,6 @@
   box-shadow: none;
 }
 
-.report-table td {
-  padding: 0.55rem 0.85rem;
-  border-bottom: 1px solid #e2e8f0;
-  color: #334155;
-  vertical-align: middle;
-}
-
 .report-table tbody tr:last-child td {
   border-bottom: none;
 }
@@ -762,12 +740,73 @@
 }
 
 .product-title-cell {
-  max-width: 250px;
+  min-width: 12rem;
+  max-width: 18rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 500;
   color: #0f172a;
+  padding-right: 1rem;
+}
+
+.replenish-col-product {
+  min-width: 12rem;
+  max-width: 18rem;
+}
+
+.replenish-col-category {
+  min-width: 7.5rem;
+  max-width: 10rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.replenish-col-num,
+.replenish-col-past3,
+.replenish-col-peak,
+.replenish-col-req-stock,
+.replenish-col-reorder {
+  min-width: 5.75rem;
+  max-width: 7.5rem;
+  padding-left: 0.7rem;
+  padding-right: 0.7rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.report-table th.replenish-col-num,
+.report-table th.replenish-col-past3,
+.report-table th.replenish-col-peak,
+.report-table th.replenish-col-req-stock,
+.report-table th.replenish-col-reorder {
+  font-size: 0.82rem;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+.replenish-col-sku {
+  width: 7.5rem;
+  min-width: 6.5rem;
+  max-width: 8.5rem;
+  padding-left: 1rem;
+  padding-right: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-table th.replenish-col-sku {
+  font-size: 0.875rem;
+}
+
+.report-table td.replenish-col-past3,
+.report-table td.replenish-col-peak,
+.report-table td.replenish-col-req-stock {
+  font-size: 0.95rem;
 }
 
 .text-center { text-align: center; }
@@ -781,7 +820,7 @@
   justify-content: center;
   padding: 0.25rem 0.75rem;
   border-radius: 9999px;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -908,7 +947,7 @@
 
 .location-block-header h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.1rem;
   color: #0f172a;
   display: flex;
   align-items: center;
@@ -916,7 +955,7 @@
 }
 
 .location-code {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: #6366f1;
   background: #eef2ff;
@@ -928,7 +967,7 @@
 .replenish-warehouse-hint {
   display: block;
   margin-top: 0;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 500;
   color: #64748b;
   white-space: nowrap;
@@ -938,17 +977,13 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   color: #64748b;
 }
 
 .month-col {
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
-.report-table {
-  min-width: 1540px;
+  font-size: 0.82rem;
+  line-height: 1.3;
 }
 
 .replenish-pr-actions {
@@ -959,7 +994,7 @@
 }
 
 .selection-count {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: #64748b;
   min-width: 80px;
 }
@@ -970,7 +1005,7 @@
   background: white;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .btn-secondary-sm:hover:not(:disabled) {
@@ -987,7 +1022,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
   background: #6B3894;
   color: white;
   font-weight: 600;
@@ -1014,7 +1049,7 @@
   padding: 0.45rem 0.75rem;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   max-width: 260px;
 }
 
@@ -1022,7 +1057,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #374151;
 }
@@ -1031,7 +1066,7 @@
   padding: 0.45rem 0.65rem;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 400;
   min-width: 160px;
 }

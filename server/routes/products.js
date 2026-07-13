@@ -8,7 +8,7 @@ const Category = require('../models/Category');
 const Subcategory = require('../models/Subcategory');
 const logger = require('../utils/logger');
 const { paginate } = require('../utils/pagination');
-const { parseExcel, validateExcelData, buildImportErrorSummary } = require('../utils/excelParser');
+const { parseExcel, buildImportErrorSummary } = require('../utils/excelParser');
 const { generateTemplate, exportToExcel } = require('../utils/excelGenerator');
 const { parseSupplierLinksPayload } = require('../utils/productSuppliers');
 const { requireAdminOrRole } = require('../middleware/auth');
@@ -60,6 +60,230 @@ const PRODUCT_EXPORT_HEADERS = [
   { key: 'createdAt', label: 'Created At' },
   { key: 'updatedAt', label: 'Updated At' },
 ];
+
+const PRODUCT_TEMPLATE_HEADERS = [
+  { key: 'slno', label: 'SL No' },
+  {
+    key: 'parentSkuOrAsin',
+    label: 'Parent SKU *',
+    required: true,
+    aliases: ['P-SKU (Parent SKU) *', 'Parent SKU/ASIN', 'Parent SKU'],
+  },
+  { key: 'variation', label: 'Variation' },
+  {
+    key: 'sku',
+    label: 'Child SKU * (if Variation=YES)',
+    requiredWhen: 'variationYes',
+    aliases: ['Child SKU', 'C-SKU (Child SKU)', 'SKU *'],
+  },
+  { key: 'ean', label: 'EAN' },
+  { key: 'category', label: 'Category' },
+  { key: 'subCategory', label: 'Sub Category' },
+  { key: 'brandName', label: 'Brand Name' },
+  { key: 'title', label: 'Title *', requiredOr: 'name' },
+  { key: 'name', label: 'Name *', requiredOr: 'title', aliases: ['Name'] },
+  { key: 'colour', label: 'Colour' },
+  { key: 'material', label: 'Material' },
+  { key: 'size', label: 'Size' },
+  { key: 'hsnCode', label: 'HSN Code' },
+  { key: 'description', label: 'Description' },
+  { key: 'manufacturerName', label: 'Manufacturer Name' },
+  { key: 'contactDetails', label: 'Contact Details' },
+  { key: 'bulletPoint1', label: 'Bullet Point 1' },
+  { key: 'bulletPoint2', label: 'Bullet Point 2' },
+  { key: 'bulletPoint3', label: 'Bullet Point 3' },
+  { key: 'bulletPoint4', label: 'Bullet Point 4' },
+  { key: 'bulletPoint5', label: 'Bullet Point 5' },
+  { key: 'productDimensionLength', label: 'Product Dimension Length (cm)' },
+  { key: 'productDimensionWidth', label: 'Product Dimension Width (cm)' },
+  { key: 'productDimensionHeight', label: 'Product Dimension Height (cm)' },
+  { key: 'packageDimensionLength', label: 'Package Dimension Length (cm)' },
+  { key: 'packageDimensionWidth', label: 'Package Dimension Width (cm)' },
+  { key: 'packageDimensionHeight', label: 'Package Dimension Height (cm)' },
+  { key: 'weight', label: 'Weight (kg)' },
+  { key: 'shape', label: 'Shape' },
+  { key: 'specialFeature', label: 'Special Feature' },
+  { key: 'images', label: 'Images (comma-separated URLs)' },
+];
+
+const PRODUCT_TEMPLATE_INSTRUCTIONS = [
+  'Product import — mandatory fields (columns marked with * in the Data sheet)',
+  '',
+  'Always required:',
+  '  • Parent SKU * — used as the product SKU when Variation is blank or NO',
+  '  • Title * OR Name * — at least one must be filled',
+  '',
+  'Required when Variation = YES:',
+  '  • Child SKU * (if Variation=YES)',
+  '  • Parent SKU * must also be filled',
+  '',
+  'Variation column:',
+  '  • Leave blank or set NO for a single-SKU product (SKU = Parent SKU)',
+  '  • Set YES for a variant product (SKU = Child SKU; Parent SKU links variants)',
+  '',
+  'All other columns are optional for import pre-checks.',
+  'Note: empty optional fields may still cause row save errors (category, dimensions, images, etc.).',
+];
+
+const PRODUCT_IMPORT_LABEL_MAP = PRODUCT_TEMPLATE_HEADERS.reduce((acc, header) => {
+  acc[header.key] = [header.label, ...(header.aliases || [])];
+  return acc;
+}, {});
+
+function getImportRowValue(row, key) {
+  const labels = PRODUCT_IMPORT_LABEL_MAP[key] || [];
+  for (const label of labels) {
+    const value = row[label];
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return String(value).trim();
+    }
+  }
+  return '';
+}
+
+function parseProductImportSkuFields(row) {
+  const variation = getImportRowValue(row, 'variation').toUpperCase();
+  const parentSku = getImportRowValue(row, 'parentSkuOrAsin');
+  const childSku = getImportRowValue(row, 'sku');
+  const isVariation = variation === 'YES';
+  const sku = isVariation ? childSku : parentSku || childSku;
+
+  return { variation, parentSku, childSku, isVariation, sku };
+}
+
+function validateProductImportRow(row, rowNum) {
+  const { variation, parentSku, childSku, isVariation, sku } = parseProductImportSkuFields(row);
+  const name = getImportRowValue(row, 'name') || getImportRowValue(row, 'title');
+  const title = getImportRowValue(row, 'title') || name;
+
+  const hasAnyData =
+    sku ||
+    parentSku ||
+    name ||
+    title ||
+    getImportRowValue(row, 'category') ||
+    getImportRowValue(row, 'ean') ||
+    getImportRowValue(row, 'brandName');
+
+  if (!hasAnyData) {
+    return { skip: true };
+  }
+
+  if (!sku) {
+    return {
+      error: {
+        row: rowNum,
+        field: 'sku',
+        message: isVariation
+          ? 'Child SKU is required when Variation is YES'
+          : 'Parent SKU is required',
+        data: row,
+      },
+    };
+  }
+
+  if (isVariation && !parentSku) {
+    return {
+      error: {
+        row: rowNum,
+        field: 'parentSkuOrAsin',
+        message: 'Parent SKU is required when Variation is YES',
+        data: row,
+      },
+    };
+  }
+
+  if (!name) {
+    return {
+      error: {
+        row: rowNum,
+        field: 'name',
+        message: 'Name or Title is required',
+        data: row,
+      },
+    };
+  }
+
+  return {
+    skip: false,
+    parsed: { variation, parentSku, childSku, isVariation, sku, name, title },
+  };
+}
+
+function buildProductDataFromImportRow(row, parsed, categoryRefs) {
+  const { isVariation, parentSku, sku, name, title } = parsed;
+
+  const productData = {
+    slno: getImportRowValue(row, 'slno') ? parseInt(getImportRowValue(row, 'slno'), 10) : undefined,
+    parentSkuOrAsin: isVariation ? parentSku : '',
+    variation: getImportRowValue(row, 'variation'),
+    sku,
+    ean: getImportRowValue(row, 'ean'),
+    brandName: getImportRowValue(row, 'brandName'),
+    title,
+    name,
+    colour: getImportRowValue(row, 'colour'),
+    material: getImportRowValue(row, 'material'),
+    size: getImportRowValue(row, 'size'),
+    hsnCode: getImportRowValue(row, 'hsnCode'),
+    description: getImportRowValue(row, 'description'),
+    manufacturerName: getImportRowValue(row, 'manufacturerName'),
+    contactDetails: getImportRowValue(row, 'contactDetails'),
+    bulletPoints: [
+      getImportRowValue(row, 'bulletPoint1'),
+      getImportRowValue(row, 'bulletPoint2'),
+      getImportRowValue(row, 'bulletPoint3'),
+      getImportRowValue(row, 'bulletPoint4'),
+      getImportRowValue(row, 'bulletPoint5'),
+    ].filter((bp) => bp),
+    productDimensionCm: {
+      length: getImportRowValue(row, 'productDimensionLength')
+        ? parseFloat(getImportRowValue(row, 'productDimensionLength'))
+        : undefined,
+      width: getImportRowValue(row, 'productDimensionWidth')
+        ? parseFloat(getImportRowValue(row, 'productDimensionWidth'))
+        : undefined,
+      height: getImportRowValue(row, 'productDimensionHeight')
+        ? parseFloat(getImportRowValue(row, 'productDimensionHeight'))
+        : undefined,
+    },
+    packageDimensionCm: {
+      length: getImportRowValue(row, 'packageDimensionLength')
+        ? parseFloat(getImportRowValue(row, 'packageDimensionLength'))
+        : undefined,
+      width: getImportRowValue(row, 'packageDimensionWidth')
+        ? parseFloat(getImportRowValue(row, 'packageDimensionWidth'))
+        : undefined,
+      height: getImportRowValue(row, 'packageDimensionHeight')
+        ? parseFloat(getImportRowValue(row, 'packageDimensionHeight'))
+        : undefined,
+    },
+    weight: getImportRowValue(row, 'weight') ? parseFloat(getImportRowValue(row, 'weight')) : undefined,
+    shape: getImportRowValue(row, 'shape'),
+    specialFeature: getImportRowValue(row, 'specialFeature'),
+    images: parseImagesCell(getImportRowValue(row, 'images') || row['Images (comma-separated URLs)']),
+    ...categoryRefs,
+  };
+
+  Object.keys(productData).forEach((key) => {
+    if (productData[key] === undefined) delete productData[key];
+  });
+
+  if (
+    productData.productDimensionCm &&
+    Object.values(productData.productDimensionCm).every((v) => v === undefined)
+  ) {
+    delete productData.productDimensionCm;
+  }
+  if (
+    productData.packageDimensionCm &&
+    Object.values(productData.packageDimensionCm).every((v) => v === undefined)
+  ) {
+    delete productData.packageDimensionCm;
+  }
+
+  return productData;
+}
 
 function buildProductQuery(queryParams = {}) {
   const { search, category, subCategory, brandName } = queryParams;
@@ -524,42 +748,6 @@ router.get('/', async (req, res) => {
 router.get('/template', (req, res) => {
   try {
     logger.backend.info('Generating product template');
-    const headers = [
-      { key: 'slno', label: 'SL No' },
-      { key: 'parentSkuOrAsin', label: 'Parent SKU *' },
-      { key: 'variation', label: 'Variation' },
-      { key: 'sku', label: 'Child SKU' },
-      { key: 'ean', label: 'EAN' },
-      { key: 'category', label: 'Category' },
-      { key: 'subCategory', label: 'Sub Category' },
-      { key: 'brandName', label: 'Brand Name' },
-      { key: 'title', label: 'Title' },
-      { key: 'name', label: 'Name *' },
-      { key: 'colour', label: 'Colour' },
-      { key: 'material', label: 'Material' },
-      { key: 'size', label: 'Size' },
-      { key: 'hsnCode', label: 'HSN Code' },
-      { key: 'description', label: 'Description' },
-      { key: 'manufacturerName', label: 'Manufacturer Name' },
-      { key: 'contactDetails', label: 'Contact Details' },
-      { key: 'bulletPoint1', label: 'Bullet Point 1' },
-      { key: 'bulletPoint2', label: 'Bullet Point 2' },
-      { key: 'bulletPoint3', label: 'Bullet Point 3' },
-      { key: 'bulletPoint4', label: 'Bullet Point 4' },
-      { key: 'bulletPoint5', label: 'Bullet Point 5' },
-      { key: 'productDimensionLength', label: 'Product Dimension Length (cm)' },
-      { key: 'productDimensionWidth', label: 'Product Dimension Width (cm)' },
-      { key: 'productDimensionHeight', label: 'Product Dimension Height (cm)' },
-      { key: 'packageDimensionLength', label: 'Package Dimension Length (cm)' },
-      { key: 'packageDimensionWidth', label: 'Package Dimension Width (cm)' },
-      { key: 'packageDimensionHeight', label: 'Package Dimension Height (cm)' },
-      { key: 'weight', label: 'Weight (kg)' },
-      { key: 'shape', label: 'Shape' },
-      { key: 'specialFeature', label: 'Special Feature' },
-      { key: 'images', label: 'Images (comma-separated URLs)' }
-    ];
-    
-    logger.backend.info('Calling generateTemplate with', { headerCount: headers.length });
     const sampleData = [
       {
         slno: 1,
@@ -568,15 +756,15 @@ router.get('/template', (req, res) => {
         sku: 'CHILD-001-RED',
         ean: '',
         category: 'Brass',
-        subCategory: '',
+        subCategory: 'Statues',
         brandName: 'Sample Brand',
-        title: 'Sample Product Title',
-        name: 'Sample Product Title',
+        title: 'Sample Variant Product',
+        name: 'Sample Variant Product',
         colour: 'Gold',
         material: 'Brass',
         size: 'Medium',
         hsnCode: '',
-        description: 'Sample product for import',
+        description: 'Variant row — Variation=YES requires Parent SKU and Child SKU',
         manufacturerName: '',
         contactDetails: '',
         bulletPoint1: 'Feature one',
@@ -586,8 +774,37 @@ router.get('/template', (req, res) => {
         weight: 0.5,
         images: '',
       },
+      {
+        slno: 2,
+        parentSkuOrAsin: 'SINGLE-002',
+        variation: 'NO',
+        sku: '',
+        ean: '',
+        category: 'Brass',
+        subCategory: '',
+        brandName: 'Sample Brand',
+        title: 'Sample Single SKU Product',
+        name: 'Sample Single SKU Product',
+        colour: 'Gold',
+        material: 'Brass',
+        size: 'Large',
+        hsnCode: '',
+        description: 'Single-SKU row — Parent SKU is used as the product SKU',
+        manufacturerName: '',
+        contactDetails: '',
+        bulletPoint1: 'Feature one',
+        productDimensionLength: 12,
+        productDimensionWidth: 6,
+        productDimensionHeight: 4,
+        weight: 0.8,
+        images: '',
+      },
     ];
-    const buffer = generateTemplate(headers, sampleData);
+
+    logger.backend.info('Calling generateTemplate with', { headerCount: PRODUCT_TEMPLATE_HEADERS.length });
+    const buffer = generateTemplate(PRODUCT_TEMPLATE_HEADERS, sampleData, {
+      instructions: PRODUCT_TEMPLATE_INSTRUCTIONS,
+    });
     logger.backend.info('Template generated, buffer size:', buffer.length);
     
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -917,17 +1134,6 @@ router.post('/import', productEditAccess, upload.single('file'), async (req, res
       return res.status(400).json({ error: 'Excel file is empty' });
     }
 
-    // Validate data
-    const schema = {
-      required: ['SKU *'],
-      types: {
-        'SL No': 'number',
-      },
-      unique: ['SKU *'],
-    };
-    
-    const validation = validateExcelData(excelData, schema);
-    
     let imported = 0;
     let updated = 0;
     let failed = 0;
@@ -945,72 +1151,19 @@ router.post('/import', productEditAccess, upload.single('file'), async (req, res
       const rowNum = i + 2; // +2 for header row and 0-index
 
       try {
-        const variation = (row['Variation'] || '').toString().trim().toUpperCase();
-        const parentSku = (
-          row['Parent SKU *'] ||
-          row['P-SKU (Parent SKU) *'] ||
-          row['Parent SKU/ASIN'] ||
-          ''
-        )
-          .toString()
-          .trim();
-        const childSku = (
-          row['Child SKU'] ||
-          row['C-SKU (Child SKU)'] ||
-          row['SKU *'] ||
-          ''
-        )
-          .toString()
-          .trim();
-        const isVariation = variation === 'YES';
-        const sku = isVariation ? childSku : parentSku || childSku;
-        const name = (row['Name *'] || row['Title'] || '').toString().trim();
-        const title = (row['Title'] || name || '').toString().trim();
-
-        // Skip completely empty rows (Excel often has trailing blank rows)
-        const hasAnyData = sku || parentSku || name || title ||
-          (row['Category'] && String(row['Category']).trim()) ||
-          (row['EAN'] && String(row['EAN']).trim()) ||
-          (row['Brand Name'] && String(row['Brand Name']).trim());
-        if (!hasAnyData) {
+        const rowValidation = validateProductImportRow(row, rowNum);
+        if (rowValidation.skip) {
           skipped++;
           continue;
         }
-
-        if (!sku) {
-          errors.push({
-            row: rowNum,
-            field: 'sku',
-            message: isVariation
-              ? 'Child SKU is required when Variation is YES'
-              : 'Parent SKU is required',
-            data: row,
-          });
+        if (rowValidation.error) {
+          errors.push(rowValidation.error);
           failed++;
           continue;
         }
 
-        if (isVariation && !parentSku) {
-          errors.push({
-            row: rowNum,
-            field: 'parentSkuOrAsin',
-            message: 'Parent SKU is required when Variation is YES',
-            data: row,
-          });
-          failed++;
-          continue;
-        }
-
-        if (!name) {
-          errors.push({
-            row: rowNum,
-            field: 'name',
-            message: 'Name or Title is required',
-            data: row,
-          });
-          failed++;
-          continue;
-        }
+        const { parsed } = rowValidation;
+        const { sku } = parsed;
 
         if (fileSkuFirstRow.has(sku)) {
           if (mode === 'create') {
@@ -1027,16 +1180,16 @@ router.post('/import', productEditAccess, upload.single('file'), async (req, res
           fileSkuFirstRow.set(sku, rowNum);
         }
 
-        const catNameForImport = row['Category'] ? String(row['Category']).trim() : '';
+        const catNameForImport = getImportRowValue(row, 'category');
         const categoryCountBefore = categoryCache.size;
         const subcategoryCountBefore = subcategoryCache.size;
 
         const categoryRefs = await resolveCategoryRefs(
-          row['Category'],
-          row['Sub Category'],
+          getImportRowValue(row, 'category') || row['Category'],
+          getImportRowValue(row, 'subCategory') || row['Sub Category'],
           {
             autoCreate: true,
-            productHsnCode: row['HSN Code'],
+            productHsnCode: getImportRowValue(row, 'hsnCode') || row['HSN Code'],
             categoryCache,
             subcategoryCache,
           }
@@ -1049,76 +1202,7 @@ router.post('/import', productEditAccess, upload.single('file'), async (req, res
           subcategoriesCreated += subcategoryCache.size - subcategoryCountBefore;
         }
 
-        const productData = {
-          slno: row['SL No'] ? parseInt(row['SL No'], 10) : undefined,
-          parentSkuOrAsin: isVariation ? parentSku : '',
-          variation: row['Variation'] || '',
-          sku,
-          ean: row['EAN'] || '',
-          brandName: row['Brand Name'] || '',
-          title,
-          name,
-          colour: row['Colour'] || '',
-          material: row['Material'] || '',
-          size: row['Size'] || '',
-          hsnCode: row['HSN Code'] || '',
-          description: row['Description'] || '',
-          manufacturerName: row['Manufacturer Name'] || '',
-          contactDetails: row['Contact Details'] || '',
-          bulletPoints: [
-            row['Bullet Point 1'] || '',
-            row['Bullet Point 2'] || '',
-            row['Bullet Point 3'] || '',
-            row['Bullet Point 4'] || '',
-            row['Bullet Point 5'] || '',
-          ].filter((bp) => bp),
-          productDimensionCm: {
-            length: row['Product Dimension Length (cm)']
-              ? parseFloat(row['Product Dimension Length (cm)'])
-              : undefined,
-            width: row['Product Dimension Width (cm)']
-              ? parseFloat(row['Product Dimension Width (cm)'])
-              : undefined,
-            height: row['Product Dimension Height (cm)']
-              ? parseFloat(row['Product Dimension Height (cm)'])
-              : undefined,
-          },
-          packageDimensionCm: {
-            length: row['Package Dimension Length (cm)']
-              ? parseFloat(row['Package Dimension Length (cm)'])
-              : undefined,
-            width: row['Package Dimension Width (cm)']
-              ? parseFloat(row['Package Dimension Width (cm)'])
-              : undefined,
-            height: row['Package Dimension Height (cm)']
-              ? parseFloat(row['Package Dimension Height (cm)'])
-              : undefined,
-          },
-          weight: row['Weight (kg)'] ? parseFloat(row['Weight (kg)']) : undefined,
-          shape: row['Shape'] || '',
-          specialFeature: row['Special Feature'] || '',
-          images: parseImagesCell(row['Images (comma-separated URLs)']),
-          ...categoryRefs,
-        };
-
-        // Remove undefined values
-        Object.keys(productData).forEach((key) => {
-          if (productData[key] === undefined) delete productData[key];
-        });
-
-        // Clean up dimension objects
-        if (
-          productData.productDimensionCm &&
-          Object.values(productData.productDimensionCm).every((v) => v === undefined)
-        ) {
-          delete productData.productDimensionCm;
-        }
-        if (
-          productData.packageDimensionCm &&
-          Object.values(productData.packageDimensionCm).every((v) => v === undefined)
-        ) {
-          delete productData.packageDimensionCm;
-        }
+        const productData = buildProductDataFromImportRow(row, parsed, categoryRefs);
 
         if (!productData.slno) {
           productData.slno = await generateNextSerialNumber();

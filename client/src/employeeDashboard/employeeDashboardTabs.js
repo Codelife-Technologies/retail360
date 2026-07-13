@@ -5,6 +5,7 @@ export const EMPLOYEE_DASHBOARD_TABS = [
   { id: 'work-log', label: 'Daily Work Log', icon: '📝' },
   { id: 'salary-slip', label: 'Salary Slip', icon: '💰' },
   { id: 'leave', label: 'Apply Leave', icon: '📅' },
+  { id: 'chat', label: 'Team Chat', icon: '💬' },
 ];
 
 export const EMPLOYEE_DASHBOARD_TAB_IDS = EMPLOYEE_DASHBOARD_TABS.map((tab) => tab.id);

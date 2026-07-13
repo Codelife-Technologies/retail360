@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { usersAPI, rolesAPI, groupsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import {
+  getShortRoleLabel,
+  getShortGroupLabel,
+  getRoleTitle,
+  getGroupTitle,
+} from '../utils/roleLabels';
 import './UserManagement.css';
 
 function Users() {
@@ -167,14 +173,32 @@ function Users() {
     setShowModal(true);
   };
 
-  const roleNames = (user) => {
-    const r = user.roles || [];
-    return r.map((x) => (typeof x === 'object' ? x.name || x.code : '-')).join(', ') || '-';
+  const renderRoleTags = (user) => {
+    const rolesList = user.roles || [];
+    if (rolesList.length === 0) return '—';
+
+    const labels = rolesList.map((role) => getShortRoleLabel(role));
+    const title = rolesList.map(getRoleTitle).join(', ');
+
+    return (
+      <span className="um-roles-cell" title={title}>
+        {labels.join(', ')}
+      </span>
+    );
   };
 
-  const groupNames = (user) => {
-    const g = user.groups || [];
-    return g.map((x) => (typeof x === 'object' ? x.name || x.code : '-')).join(', ') || '-';
+  const renderGroupTags = (user) => {
+    const groupsList = user.groups || [];
+    if (groupsList.length === 0) return '—';
+
+    const labels = groupsList.map((group) => getShortGroupLabel(group));
+    const title = groupsList.map(getGroupTitle).join(', ');
+
+    return (
+      <span className="um-groups-cell" title={title}>
+        {labels.join(', ')}
+      </span>
+    );
   };
 
   return (
@@ -197,7 +221,7 @@ function Users() {
         <div className="loading">Loading...</div>
       ) : (
         <div className="um-table-container">
-          <table className="um-table">
+          <table className="um-table um-table-users">
             <thead>
               <tr>
                 <th>Username</th>
@@ -214,10 +238,14 @@ function Users() {
               ) : (
                 users.map((u) => (
                   <tr key={u._id}>
-                    <td>{u.username}</td>
-                    <td>{u.email}</td>
-                    <td>{roleNames(u)}</td>
-                    <td>{groupNames(u)}</td>
+                    <td>
+                      <span className="um-cell-ellipsis" title={u.username || ''}>{u.username}</span>
+                    </td>
+                    <td>
+                      <span className="um-cell-ellipsis" title={u.email || ''}>{u.email}</span>
+                    </td>
+                    <td>{renderRoleTags(u)}</td>
+                    <td>{renderGroupTags(u)}</td>
                     <td>{u.isActive ? 'Yes' : 'No'}</td>
                     <td>
                       {hasPermission('users.update') && (
@@ -273,7 +301,7 @@ function Users() {
               </div>
               <div className="form-group">
                 <label>Roles</label>
-                <div className="multiselect-box">
+                <div className="multiselect-box um-multiselect-roles">
                   {roles.map((r) => (
                     <label key={r._id}>
                       <input
@@ -281,7 +309,7 @@ function Users() {
                         checked={(formData.roles || []).includes(r._id)}
                         onChange={() => handleRoleToggle(r._id)}
                       />
-                      {r.name} ({r.code})
+                      {getShortRoleLabel(r)}
                     </label>
                   ))}
                   {roles.length === 0 && <span>No roles defined</span>}
@@ -289,7 +317,7 @@ function Users() {
               </div>
               <div className="form-group">
                 <label>Groups</label>
-                <div className="multiselect-box">
+                <div className="multiselect-box um-multiselect-groups">
                   {groups.map((g) => (
                     <label key={g._id}>
                       <input
@@ -297,7 +325,7 @@ function Users() {
                         checked={(formData.groups || []).includes(g._id)}
                         onChange={() => handleGroupToggle(g._id)}
                       />
-                      {g.name} ({g.code})
+                      {getShortGroupLabel(g)}
                     </label>
                   ))}
                   {groups.length === 0 && <span>No groups defined</span>}

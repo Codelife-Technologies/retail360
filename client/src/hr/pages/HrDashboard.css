@@ -1,3 +1,13 @@
+.hr-dashboard .hr-error-banner {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
 .hr-dashboard .hr-empty {
   padding: 1.5rem;
 }

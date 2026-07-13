@@ -40,6 +40,7 @@ const ExcelUpload = ({
   onClose,
   templateEndpoint,
   hideImportMode = false,
+  mandatoryFieldsHelp = null,
 }) => {
   const [file, setFile] = useState(null);
   const [importMode, setImportMode] = useState('both');
@@ -214,6 +215,16 @@ const ExcelUpload = ({
             >
               Download Template
             </button>
+            {mandatoryFieldsHelp && mandatoryFieldsHelp.length > 0 && (
+              <div className="mandatory-fields-help">
+                <p className="mandatory-fields-title">Mandatory columns (*)</p>
+                <ul>
+                  {mandatoryFieldsHelp.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div 

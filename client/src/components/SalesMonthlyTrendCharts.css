@@ -8,13 +8,13 @@
 
 .sales-trend-charts h3 {
   margin: 0 0 0.35rem;
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   color: #333;
 }
 
 .sales-trend-totals {
   margin: 0 0 1rem;
-  font-size: 0.9rem;
+  font-size: 1rem;
   color: #6b7280;
 }
 
@@ -40,7 +40,7 @@
 
 .sales-trend-chart-card h4 {
   margin: 0 0 0.75rem;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   color: #555;
   font-weight: 600;
 }

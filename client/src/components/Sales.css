@@ -93,7 +93,7 @@
 .status-badge {
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 500;
   text-transform: capitalize;
 }
@@ -140,7 +140,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
   margin-right: 0.5rem;
   transition: all 0.2s;
 }
@@ -232,7 +232,7 @@
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-family: inherit;
 }
 
@@ -321,7 +321,7 @@
 }
 
 .add-item-field label {
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: #6b7280;
@@ -370,7 +370,7 @@
 }
 
 .sales-sort-controls label {
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   font-weight: 500;
   color: #374151;
 }
@@ -379,12 +379,12 @@
   padding: 0.45rem 0.6rem;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   background: white;
 }
 
 .sales-sort-hint {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #6b7280;
 }
 
@@ -395,7 +395,7 @@
   border: 1px solid #6B3894;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   transition: background 0.2s, color 0.2s;
 }
 
@@ -421,7 +421,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .btn-add-item:hover {
@@ -459,7 +459,7 @@
 
 .stock-hint {
   display: block;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   color: #6b7280;
   font-weight: 500;
   white-space: normal;
@@ -474,7 +474,7 @@
 }
 
 .stock-unavailable-badge {
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -492,12 +492,12 @@
   padding: 0.65rem 0.85rem;
   border-radius: 6px;
   margin-bottom: 0.75rem;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .items-empty-hint {
   color: #6b7280;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   margin: 0;
 }
 
@@ -513,7 +513,7 @@
 }
 
 .item-tax-rate {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #6B3894;
   font-weight: 600;
   flex: 0 0 auto;
@@ -523,7 +523,7 @@
   display: block;
   margin-top: 0.25rem;
   color: #666;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
 }
 
 .btn-remove-item {
@@ -533,7 +533,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .btn-remove-item:hover {
@@ -542,13 +542,13 @@
 
 .total-input {
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   color: #6B3894;
 }
 
 .amazon-order-id-cell {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: #374151;
   max-width: 180px;
   overflow: hidden;
@@ -568,7 +568,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .form-actions button[type="button"] {

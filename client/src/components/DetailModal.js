@@ -1,4 +1,5 @@
 import React from 'react';
+import ModalPortal from './ModalPortal';
 import './DetailModal.css';
 
 /**
@@ -32,6 +33,7 @@ function DetailModal({ title, fields = [], sections = [], children, headerAction
   );
 
   return (
+    <ModalPortal>
     <div className="modal-overlay" onClick={onClose}>
       <div
         className="modal-content detail-view-modal"
@@ -69,6 +71,7 @@ function DetailModal({ title, fields = [], sections = [], children, headerAction
         {children}
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

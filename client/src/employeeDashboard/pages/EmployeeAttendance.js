@@ -309,7 +309,7 @@ function EmployeeAttendance() {
   return (
     <EmployeeContextGate>
       {(context) => (
-        <div className="ed-page">
+        <div className="hr-page ed-page">
           <EmployeeWelcome employee={context.employee} />
           <EmployeeAttendanceContent employeeId={context.employeeId} />
         </div>

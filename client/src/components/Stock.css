@@ -53,7 +53,7 @@
   padding: 0.55rem 1rem;
   border: none;
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   font-weight: 600;
   cursor: pointer;
   background: #6B3894;
@@ -78,7 +78,7 @@
   padding: 0.55rem 1rem;
   border: 1px solid #6B3894;
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   font-weight: 600;
   cursor: pointer;
   background: #ffffff;
@@ -99,7 +99,7 @@
   color: #dc2626;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
   transition: all 0.2s;
 }
 
@@ -116,7 +116,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
   margin-left: 0.35rem;
   background: #ef4444;
   color: white;
@@ -151,7 +151,7 @@
 }
 
 .stock-status-scope-label {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -160,7 +160,7 @@
 
 .stock-status-scope-value {
   margin-top: 0.25rem;
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 600;
   color: #374151;
 }
@@ -183,11 +183,11 @@
 
 .stock-stat-primary .stock-stat-value {
   color: #6B3894;
-  font-size: 1.75rem;
+  font-size: 1.85rem;
 }
 
 .stock-stat-value {
-  font-size: 1.35rem;
+  font-size: 1.45rem;
   font-weight: 700;
   color: #111827;
   line-height: 1.2;
@@ -195,7 +195,7 @@
 
 .stock-stat-label {
   margin-top: 0.2rem;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #6b7280;
   white-space: nowrap;
 }
@@ -238,7 +238,7 @@
   background: white;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.1rem;
   transition: all 0.2s;
 }
 
@@ -268,7 +268,7 @@
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: 1.1rem;
   min-width: 300px;
 }
 
@@ -282,7 +282,7 @@
   padding: 0.75rem 1rem;
   border: 1px solid #ddd;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 1.1rem;
   box-sizing: border-box;
 }
 
@@ -318,7 +318,7 @@
   padding: 0.5rem;
   background: white;
   border-radius: 4px;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .loading {
@@ -381,7 +381,7 @@
 .sku,
 .code {
   color: #666;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .stock-product-cell {
@@ -417,7 +417,7 @@
 
 .stock-sku-value {
   display: inline-block;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   color: #374151;
@@ -445,7 +445,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
   transition: all 0.2s;
 }
 
@@ -502,7 +502,7 @@
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .form-group input:disabled {
@@ -522,7 +522,7 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.1rem;
 }
 
 .form-actions button[type="button"] {
@@ -558,7 +558,7 @@
 
 .stock-product-detail-header h2 {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 1.25rem;
 }
 
 .stock-product-detail-summary {
@@ -570,7 +570,7 @@
   background: #f8fafc;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }
 
 .stock-product-detail-table-wrap {
@@ -579,6 +579,6 @@
 
 .stock-product-breakdown-table th,
 .stock-product-breakdown-table td {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 

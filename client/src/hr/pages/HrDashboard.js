@@ -17,7 +17,6 @@ import HrKpiCard from '../components/HrKpiCard';
 import HrStatusBadge from '../components/HrStatusBadge';
 import HrEmployeeAvatar from '../components/HrEmployeeAvatar';
 import {
-  formatCurrency,
   formatDate,
   employeeName,
 } from '../utils/hrUtils';
@@ -31,7 +30,6 @@ const emptyDashboard = {
     presentToday: 0,
     absentToday: 0,
     employeesOnLeave: 0,
-    monthlyPayroll: 0,
     pendingLeaveRequests: 0,
   },
   attendanceTrend: [],
@@ -42,9 +40,28 @@ const emptyDashboard = {
   birthdayReminders: [],
 };
 
+function normalizeDashboardData(payload = {}) {
+  return {
+    ...emptyDashboard,
+    ...payload,
+    kpis: { ...emptyDashboard.kpis, ...(payload.kpis || {}) },
+    attendanceTrend: Array.isArray(payload.attendanceTrend) ? payload.attendanceTrend : [],
+    departmentDistribution: Array.isArray(payload.departmentDistribution)
+      ? payload.departmentDistribution
+      : [],
+    recentLeaveApplications: Array.isArray(payload.recentLeaveApplications)
+      ? payload.recentLeaveApplications
+      : [],
+    upcomingHolidays: Array.isArray(payload.upcomingHolidays) ? payload.upcomingHolidays : [],
+    newEmployees: Array.isArray(payload.newEmployees) ? payload.newEmployees : [],
+    birthdayReminders: Array.isArray(payload.birthdayReminders) ? payload.birthdayReminders : [],
+  };
+}
+
 function HrDashboard() {
   const [data, setData] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     fetchDashboard();
@@ -53,11 +70,13 @@ function HrDashboard() {
   const fetchDashboard = async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const response = await hrDashboardAPI.getStats();
-      setData({ ...emptyDashboard, ...response.data });
+      setData(normalizeDashboardData(response.data));
     } catch (error) {
       console.error('Error fetching HR dashboard:', error);
       setData(emptyDashboard);
+      setLoadError(error.response?.data?.error || 'Failed to load HR dashboard');
     } finally {
       setLoading(false);
     }
@@ -67,7 +86,7 @@ function HrDashboard() {
     return <div className="hr-page hr-loading">Loading HR dashboard...</div>;
   }
 
-  const { kpis } = data;
+  const kpis = data.kpis || emptyDashboard.kpis;
 
   return (
     <div className="hr-page hr-dashboard">
@@ -83,17 +102,17 @@ function HrDashboard() {
         </button>
       </header>
 
-      <div className="hr-kpi-grid hr-kpi-grid-6">
+      {loadError && (
+        <div className="hr-error-banner" role="alert">
+          {loadError}
+        </div>
+      )}
+
+      <div className="hr-kpi-grid">
         <HrKpiCard icon="👥" label="Total Employees" value={kpis.totalEmployees} variant="info" />
         <HrKpiCard icon="✅" label="Present Today" value={kpis.presentToday} variant="success" />
         <HrKpiCard icon="❌" label="Absent Today" value={kpis.absentToday} variant="danger" />
         <HrKpiCard icon="🏖️" label="Employees on Leave" value={kpis.employeesOnLeave} />
-        <HrKpiCard
-          icon="💰"
-          label="Monthly Payroll"
-          value={formatCurrency(kpis.monthlyPayroll)}
-          variant="info"
-        />
         <HrKpiCard
           icon="📋"
           label="Pending Leave Requests"
@@ -111,8 +130,8 @@ function HrDashboard() {
             <ResponsiveContainer width="100%" height={280}>
               <LineChart data={data.attendanceTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="label" tick={{ fontSize: 13 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 13 }} />
+                <XAxis dataKey="label" tick={{ fontSize: 15 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 15 }} />
                 <Tooltip />
                 <Legend />
                 <Line type="monotone" dataKey="present" stroke="#10b981" strokeWidth={2} name="Present" />
@@ -137,7 +156,9 @@ function HrDashboard() {
                   cx="50%"
                   cy="50%"
                   outerRadius={95}
-                  label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                  label={({ name, percent = 0 }) =>
+                    `${name} (${(percent * 100).toFixed(0)}%)`
+                  }
                 >
                   {data.departmentDistribution.map((entry, index) => (
                     <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />

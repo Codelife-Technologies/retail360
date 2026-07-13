@@ -199,7 +199,6 @@ function LeaveManagement() {
     try {
       await hrLeavesAPI.delete(leave._id);
       fetchLeaves();
-      const empId = leave.employee?._id || leave.employee;
       if (filters.employee) fetchBalances(filters.employee);
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to delete leave');

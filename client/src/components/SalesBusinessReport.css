@@ -15,7 +15,6 @@
   box-sizing: border-box;
   overflow-y: auto;
   min-height: 0;
-  font-family: 'Amazon Ember', 'Helvetica Neue', Arial, sans-serif;
   color: var(--asc-text);
   background: var(--asc-bg);
 }
@@ -34,12 +33,12 @@
 
 .sales-business-report .sales-dash-topbar h1 {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 1.225rem;
   font-weight: 700;
 }
 
 .sales-business-report .sales-dash-topbar-meta {
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   color: #cccccc;
   margin-top: 0.15rem;
 }
@@ -49,7 +48,7 @@
   border: 1px solid #848688;
   border-radius: 4px;
   background: linear-gradient(to bottom, #f7f8fa, #e7e9ec);
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   color: var(--asc-text);
   cursor: pointer;
 }
@@ -94,7 +93,7 @@
   border-right: 1px solid var(--asc-border);
   background: var(--asc-card);
   color: var(--asc-link);
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   padding: 0.4rem 0.85rem;
   cursor: pointer;
 }
@@ -123,7 +122,7 @@
 }
 
 .sales-br-filter-label {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--asc-text);
 }
@@ -132,7 +131,7 @@
   border: 1px solid var(--asc-border);
   border-radius: 4px;
   padding: 0.35rem 0.5rem;
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   background: #fff;
   min-width: 120px;
 }
@@ -148,11 +147,11 @@
   border: 1px solid var(--asc-border);
   border-radius: 4px;
   padding: 0.35rem 0.5rem;
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
 }
 
 .sales-br-date-sep {
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   color: var(--asc-text-muted);
 }
 
@@ -166,7 +165,7 @@
   border: 1px solid #c6e2ff;
   border-left: 4px solid #007185;
   border-radius: 4px;
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   color: var(--asc-text);
   margin-left: auto;
 }
@@ -180,7 +179,7 @@
   border-radius: 50%;
   background: #007185;
   color: #fff;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -199,7 +198,7 @@
   border-radius: 999px;
   background: #007185;
   color: #fff;
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   padding: 0.45rem 1rem;
   cursor: pointer;
 }
@@ -217,7 +216,7 @@
   border: none;
   background: none;
   color: var(--asc-link);
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   cursor: pointer;
   padding: 0;
 }
@@ -239,7 +238,7 @@
   background: var(--asc-card);
   border: 1px solid var(--asc-border);
   border-radius: 4px;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   margin: 1rem;
 }
 
@@ -253,7 +252,7 @@
 .sales-br-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   min-width: 1100px;
 }
 
@@ -292,7 +291,7 @@
   border: none;
   background: transparent;
   padding: 0.55rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--asc-text);
   cursor: pointer;
@@ -303,7 +302,7 @@
   display: flex;
   flex-direction: column;
   line-height: 0.65;
-  font-size: 0.55rem;
+  font-size: 0.65rem;
   color: #aab7b8;
 }
 

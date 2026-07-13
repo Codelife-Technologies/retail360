@@ -26,20 +26,20 @@ function generateGrnPdfHtml(grn) {
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><title>${grn.grnNumber}</title>
 <style>
-  body{font-family:Arial,sans-serif;color:#111;margin:24px;font-size:12px}
-  h1{font-size:20px;margin:0 0 4px;color:#6B3894}
+  body{font-family:Arial,sans-serif;color:#111;margin:24px;font-size: 14px}
+  h1{font-size: 18px;margin:0 0 4px;color:#6B3894}
   .header{display:flex;justify-content:space-between;border-bottom:2px solid #6B3894;padding-bottom:12px;margin-bottom:16px}
   .meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
   .box{border:1px solid #ddd;border-radius:6px;padding:10px}
-  .box h3{margin:0 0 8px;font-size:11px;text-transform:uppercase;color:#666}
+  .box h3{margin:0 0 8px;font-size: 14px;text-transform:uppercase;color:#666}
   table{width:100%;border-collapse:collapse;margin:12px 0}
   th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}
-  th{background:#f5f5f5;font-size:11px}
+  th{background:#f5f5f5;font-size: 14px}
   .num{text-align:right}
   .totals{float:right;width:280px;margin-top:12px}
   .totals div{display:flex;justify-content:space-between;padding:4px 0}
-  .grand{font-weight:bold;font-size:14px;border-top:2px solid #333;padding-top:6px}
-  .footer{margin-top:40px;font-size:10px;color:#666;text-align:center}
+  .grand{font-weight:bold;font-size: 14px;border-top:2px solid #333;padding-top:6px}
+  .footer{margin-top:40px;font-size: 14px;color:#666;text-align:center}
   .seal{border:1px dashed #999;height:60px;margin-top:20px;text-align:center;line-height:60px;color:#999}
 </style></head><body>
   <div class="header">

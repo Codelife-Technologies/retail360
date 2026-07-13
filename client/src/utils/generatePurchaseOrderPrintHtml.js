@@ -85,21 +85,21 @@ export function generatePurchaseOrderPrintHtml(po, products, helpers) {
   <style>
     * { box-sizing: border-box; }
     @page { margin: 18mm; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #1f2937; padding: 24px; font-size: 13px; }
-    h1 { margin: 0 0 4px; color: #6B3894; font-size: 23px; }
-    h3 { margin: 0 0 8px; color: #6B3894; font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; }
-    .po-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #6B3894; padding-bottom: 12px; margin-bottom: 16px; }
-    .po-title-sub { font-size: 14px; color: #6b7280; }
+    body { font-family: "Amazon Ember", "Helvetica Neue", Helvetica, Arial, sans-serif; color: #0f1111; padding: 24px; font-size: 17px; }
+    h1 { margin: 0 0 4px; color: #232f3e; font-size: 24px; font-weight: 700; }
+    h3 { margin: 0 0 8px; color: #232f3e; font-size: 15px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
+    .po-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #232f3e; padding-bottom: 12px; margin-bottom: 16px; }
+    .po-title-sub { font-size: 17px; color: #565959; }
     .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
     .party-box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #fafafa; }
-    .party-box .label { display: block; color: #6b7280; font-size: 11px; text-transform: uppercase; margin-top: 6px; }
+    .party-box .label { display: block; color: #565959; font-size: 15px; text-transform: uppercase; margin-top: 6px; }
     .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
     .meta-cell { border: 1px solid #e5e7eb; padding: 8px; border-radius: 6px; }
-    .meta-cell .label { color: #6b7280; font-size: 11px; text-transform: uppercase; }
+    .meta-cell .label { color: #565959; font-size: 15px; text-transform: uppercase; }
     .address-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
     .address-box { border: 1px solid #e5e7eb; padding: 12px; border-radius: 8px; }
     table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    th, td { padding: 6px 8px; border: 1px solid #e5e7eb; font-size: 12px; vertical-align: middle; }
+    th, td { padding: 6px 8px; border: 1px solid #d5d9d9; font-size: 16px; vertical-align: middle; }
     th { background: #f8f5fb; color: #4b5563; font-weight: 600; }
     .totals { margin-top: 12px; margin-left: auto; width: 320px; }
     .totals tr td { border: none; padding: 4px 8px; }
@@ -107,9 +107,9 @@ export function generatePurchaseOrderPrintHtml(po, products, helpers) {
     .section { margin-top: 16px; }
     .terms ol { margin: 8px 0 0 18px; padding: 0; line-height: 1.6; }
     .terms li { margin-bottom: 4px; }
-    .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: flex-end; font-size: 11px; color: #6b7280; }
-    .seal { width: 80px; height: 80px; border: 2px dashed #d1d5db; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; text-align: center; color: #9ca3af; }
-    .status { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #ede7f3; color: #6B3894; font-size: 12px; text-transform: capitalize; }
+    .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #d5d9d9; display: flex; justify-content: space-between; align-items: flex-end; font-size: 15px; color: #565959; }
+    .seal { width: 80px; height: 80px; border: 2px dashed #d1d5db; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; text-align: center; color: #9ca3af; }
+    .status { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eaeded; color: #232f3e; font-size: 15px; text-transform: capitalize; }
     .po-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid #e5e7eb; }
     a { color: #6B3894; text-decoration: none; }
     @media print {

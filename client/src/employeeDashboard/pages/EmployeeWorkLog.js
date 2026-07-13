@@ -439,7 +439,7 @@ function EmployeeWorkLog() {
   return (
     <EmployeeContextGate>
       {(context) => (
-        <div className="ed-page">
+        <div className="hr-page ed-page">
           <EmployeeWelcome employee={context.employee} />
           <EmployeeWorkLogContent employeeId={context.employeeId} />
         </div>

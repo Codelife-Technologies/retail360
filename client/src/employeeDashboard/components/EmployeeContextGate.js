@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { employeeDashboardAPI } from '../services/employeeDashboardApi';
 import { employeeName } from '../../hr/utils/hrUtils';
+import HrEmployeeAvatar from '../../hr/components/HrEmployeeAvatar';
 
 function EmployeeContextGate({ children }) {
   const [loading, setLoading] = useState(true);
@@ -34,17 +35,21 @@ function EmployeeContextGate({ children }) {
   return children(context);
 }
 
-export function EmployeeWelcome({ employee }) {
+export function EmployeeWelcome({ employee, actions = null }) {
   if (!employee) return null;
   return (
-    <div className="ed-welcome">
-      <div>
-        <h1>Welcome, {employeeName(employee)}</h1>
-        <p className="ed-welcome-meta">
-          {employee.employeeId} · {employee.department} · {employee.designation}
-        </p>
+    <header className="hr-page-header ed-welcome">
+      <div className="ed-welcome-main">
+        <HrEmployeeAvatar employee={employee} size={56} />
+        <div>
+          <h1>Welcome, {employeeName(employee)}</h1>
+          <p className="hr-page-subtitle">
+            {employee.employeeId} · {employee.department} · {employee.designation}
+          </p>
+        </div>
       </div>
-    </div>
+      {actions}
+    </header>
   );
 }
 

@@ -288,7 +288,7 @@ function EmployeeLeave() {
   return (
     <EmployeeContextGate>
       {(context) => (
-        <div className="ed-page">
+        <div className="hr-page ed-page">
           <EmployeeWelcome employee={context.employee} />
           <EmployeeLeaveContent employeeId={context.employeeId} employee={context.employee} />
         </div>

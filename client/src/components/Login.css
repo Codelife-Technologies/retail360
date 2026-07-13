@@ -18,14 +18,14 @@
 
 .login-card h1 {
   margin: 0 0 0.5rem;
-  font-size: 1.75rem;
+  font-size: 1.85rem;
   color: #333;
   text-align: center;
 }
 
 .login-card h2 {
   margin: 0 0 1.5rem;
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   font-weight: 500;
   color: #666;
   text-align: center;
@@ -47,7 +47,7 @@
   padding: 0.75rem 1rem;
   border: 1px solid #ddd;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 1.1rem;
   box-sizing: border-box;
 }
 
@@ -59,7 +59,7 @@
 
 .login-error {
   color: #ef4444;
-  font-size: 0.9rem;
+  font-size: 1rem;
   margin-bottom: 1rem;
   text-align: center;
 }
@@ -71,7 +71,7 @@
   color: white;
   border: none;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.2s;
@@ -88,7 +88,7 @@
 
 .login-seed-hint {
   margin-top: 1.25rem;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   color: #666;
   text-align: center;
 }

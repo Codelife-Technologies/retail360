@@ -13,7 +13,7 @@
   padding: 0.4rem 0.75rem;
   border-radius: 6px;
   border: 1px solid transparent;
-  font-size: 0.8125rem;
+  font-size: 0.9125rem;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -92,12 +92,12 @@
 }
 
 .po-created-share-vendor {
-  font-size: 0.875rem;
+  font-size: 0.975rem;
   color: #6b7280;
 }
 
 .po-created-share-subtitle {
   margin: 0 0 1rem;
   color: #6b7280;
-  font-size: 0.875rem;
+  font-size: 0.975rem;
 }

@@ -5,6 +5,7 @@ import logger from '../utils/logger';
 import Pagination from './Pagination';
 import ExcelUpload from './ExcelUpload';
 import ProductDetailsModal from './ProductDetailsModal';
+import ModalPortal from './ModalPortal';
 import {
   PRODUCT_IMAGE_PLACEHOLDER,
   getProductDisplayName,
@@ -110,6 +111,7 @@ function ProductSuppliersModal({
     link.supplier || allSuppliers.find((s) => s._id === link.supplierId);
 
   return (
+    <ModalPortal>
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content product-suppliers-modal" onClick={(e) => e.stopPropagation()}>
         <div className="detail-modal-header">
@@ -251,6 +253,7 @@ function ProductSuppliersModal({
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -1041,9 +1044,9 @@ function Products() {
     <div className="products-container">
       <div className="products-header">
         <h1>Products</h1>
-        <div className="header-actions">
+        <div className="products-header-actions">
           <button
-            className="btn-secondary"
+            className="btn-export"
             onClick={handleExportExcel}
             disabled={exporting}
           >
@@ -1052,7 +1055,7 @@ function Products() {
           {canEdit && (
             <>
           <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
-            📥 Upload Excel
+            ⬆ Upload Excel
           </button>
           <button className="btn-primary" onClick={openAddModal}>
             + Add Product
@@ -1062,6 +1065,7 @@ function Products() {
         </div>
       </div>
 
+      <div className="products-scroll-area">
       <div className="products-filters">
         <div className="products-filters-header">
           <h3 className="products-filters-title">Search &amp; Filters</h3>
@@ -1225,6 +1229,7 @@ function Products() {
           )}
         </div>
       )}
+      </div>
 
       {viewingProduct && (
         <ProductDetailsModal
@@ -1257,12 +1262,19 @@ function Products() {
         <ExcelUpload
           moduleName="products"
           templateEndpoint="/products/template"
+          mandatoryFieldsHelp={[
+            'Parent SKU * — always required',
+            'Child SKU * — required only when Variation = YES',
+            'Title * or Name * — at least one required',
+            'All other columns are optional (see Instructions sheet in template)',
+          ]}
           onUploadComplete={handleExcelUploadComplete}
           onClose={() => setShowExcelUpload(false)}
         />
       )}
 
       {showModal && (
+        <ModalPortal>
         <div className="modal-overlay" onClick={closeModal}>
           <div
             className="modal-content large-modal"
@@ -1659,7 +1671,7 @@ function Products() {
                             >
                               ×
                             </button>
-                            <div style={{ fontSize: '13px', marginTop: '5px', wordBreak: 'break-word' }}>
+                            <div style={{ fontSize: '14px', marginTop: '5px', wordBreak: 'break-word' }}>
                               {preview.file.name}
                             </div>
                           </div>
@@ -1864,7 +1876,7 @@ function Products() {
                               cursor: 'pointer',
                               padding: '0',
                               marginLeft: '4px',
-                              fontSize: '17px',
+                              fontSize: '16px',
                               lineHeight: '1',
                               fontWeight: 'bold'
                             }}
@@ -1926,6 +1938,7 @@ function Products() {
             </form>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

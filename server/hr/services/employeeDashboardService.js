@@ -3,9 +3,19 @@ const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
 const Payroll = require('../models/Payroll');
 const EmployeeTask = require('../models/EmployeeTask');
+const Holiday = require('../models/Holiday');
 const { getEmployeeLeaveBalances } = require('./leaveBalanceService');
+const { dedupeHolidaysByDate } = require('../utils/holidayUtils');
 const { startOfDay, endOfDay } = require('../utils/employeeId');
 const { getEmployeeIdForUser, withComputedWorkingHours } = require('../utils/attendanceAccess');
+
+async function countActiveHolidaysInRange(rangeStart, rangeEnd) {
+  const holidays = await Holiday.find({
+    date: { $gte: rangeStart, $lte: rangeEnd },
+    status: 'Active',
+  }).lean();
+  return dedupeHolidaysByDate(holidays).length;
+}
 
 async function getEmployeeContext(userId) {
   const employeeId = await getEmployeeIdForUser(userId);
@@ -35,7 +45,7 @@ async function getEmployeeDashboard(userId) {
       recentLeaves: [],
       latestPayroll: null,
       leaveBalances: [],
-      attendanceSummary: { present: 0, absent: 0, late: 0, leave: 0 },
+      attendanceSummary: { present: 0, absent: 0, late: 0, leave: 0, holidays: 0 },
     };
   }
 
@@ -58,6 +68,7 @@ async function getEmployeeDashboard(userId) {
     absent,
     late,
     leaveCount,
+    holidaysInMonth,
   ] = await Promise.all([
     Attendance.findOne({
       employee: employeeId,
@@ -101,6 +112,7 @@ async function getEmployeeDashboard(userId) {
       date: { $gte: monthStart, $lte: monthEnd },
       status: 'Leave',
     }),
+    countActiveHolidaysInRange(monthStart, monthEnd),
   ]);
 
   return {
@@ -116,6 +128,7 @@ async function getEmployeeDashboard(userId) {
       absent,
       late,
       leave: leaveCount,
+      holidays: holidaysInMonth,
       month,
       year,
     },

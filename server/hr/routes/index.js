@@ -10,6 +10,7 @@ const holidaysRoutes = require('./holidays');
 const employeeDashboardRoutes = require('./employeeDashboard');
 const tasksRoutes = require('./tasks');
 const workLogsRoutes = require('./workLogs');
+const chatRoutes = require('./chat');
 
 router.use('/dashboard', dashboardRoutes);
 router.use('/employees', employeesRoutes);
@@ -20,5 +21,6 @@ router.use('/holidays', holidaysRoutes);
 router.use('/employee-dashboard', employeeDashboardRoutes);
 router.use('/tasks', tasksRoutes);
 router.use('/work-logs', workLogsRoutes);
+router.use('/chat', chatRoutes);
 
 module.exports = router;

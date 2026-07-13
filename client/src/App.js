@@ -8,6 +8,7 @@ import SalesModule from './sales/SalesModule';
 import HrModule from './hr/HrModule';
 import UserManagementModule from './userManagement/UserManagementModule';
 import EmployeeDashboardModule from './employeeDashboard/EmployeeDashboardModule';
+import EmployeeChatNotifications from './employeeDashboard/components/EmployeeChatNotifications';
 import InventoryModule from './inventory/InventoryModule';
 import Login from './components/Login';
 import { MASTER_GROUPS, isMasterTab, resolveMasterSubTab } from './master/masterTabs';
@@ -44,13 +45,7 @@ import './App.css';
 function App() {
   const { user, login, logout, isAuthenticated, loading, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [masterOpen, setMasterOpen] = useState(false);
-  const [procurementOpen, setProcurementOpen] = useState(false);
-  const [salesOpen, setSalesOpen] = useState(false);
-  const [hrOpen, setHrOpen] = useState(false);
-  const [userManagementOpen, setUserManagementOpen] = useState(false);
-  const [employeeDashboardOpen, setEmployeeDashboardOpen] = useState(false);
-  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [openNavDropdown, setOpenNavDropdown] = useState(null);
 
   const showMasterNav = canViewMaster(hasPermission);
   const showInventoryNav = !showMasterNav && filterTabGroups(hasPermission, user, INVENTORY_GROUPS).length > 0;
@@ -84,272 +79,122 @@ function App() {
   const activeInventorySubTab = resolveInventorySubTab(activeTab);
 
   useEffect(() => {
-    if (isInventoryActive) setInventoryOpen(true);
-  }, [isInventoryActive]);
+    if (!openNavDropdown) return undefined;
 
-  useEffect(() => {
-    if (isMasterActive) setMasterOpen(true);
-  }, [isMasterActive]);
+    const handlePointerDown = (event) => {
+      if (!event.target.closest('.nav-dropdown')) {
+        setOpenNavDropdown(null);
+      }
+    };
 
-  useEffect(() => {
-    if (isProcurementActive) setProcurementOpen(true);
-  }, [isProcurementActive]);
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [openNavDropdown]);
 
-  useEffect(() => {
-    if (isSalesActive) setSalesOpen(true);
-  }, [isSalesActive]);
-
-  useEffect(() => {
-    if (isHrActive) setHrOpen(true);
-  }, [isHrActive]);
-
-  useEffect(() => {
-    if (isUserManagementActive) setUserManagementOpen(true);
-  }, [isUserManagementActive]);
-
-  useEffect(() => {
-    if (isEmployeeDashboardActive) setEmployeeDashboardOpen(true);
-  }, [isEmployeeDashboardActive]);
-
-  const closeModuleDropdowns = useCallback(() => {
-    setMasterOpen(false);
-    setInventoryOpen(false);
-    setProcurementOpen(false);
-    setSalesOpen(false);
-    setHrOpen(false);
-    setUserManagementOpen(false);
-    setEmployeeDashboardOpen(false);
+  const toggleNavDropdown = useCallback((id) => {
+    setOpenNavDropdown((current) => (current === id ? null : id));
   }, []);
 
   const handleNavigate = useCallback(
     (tab) => {
+      setOpenNavDropdown(null);
+
       if (tab.startsWith('inventory:')) {
         setActiveTab(tab);
-        setInventoryOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab.startsWith('master:')) {
         setActiveTab(tab);
-        setMasterOpen(true);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab.startsWith('procurement:')) {
         setActiveTab(tab);
-        setProcurementOpen(true);
-        setMasterOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab.startsWith('sales-module:')) {
         setActiveTab(tab);
-        setSalesOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab.startsWith('hr:')) {
         setActiveTab(tab);
-        setHrOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab.startsWith('user-management:')) {
         setActiveTab(tab);
-        setUserManagementOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab.startsWith('employee-dashboard:')) {
         setActiveTab(tab);
-        setEmployeeDashboardOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
         return;
       }
       if (isInventoryTab(tab)) {
         setActiveTab(`inventory:${tab}`);
-        setInventoryOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (isMasterTab(tab)) {
         setActiveTab(`master:${tab}`);
-        setMasterOpen(true);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (isProcurementTab(tab)) {
         setActiveTab(`procurement:${tab}`);
-        setProcurementOpen(true);
-        setMasterOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (isSalesModuleTab(tab)) {
         setActiveTab(`sales-module:${tab}`);
-        setSalesOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (isHrTab(tab)) {
         setActiveTab(`hr:${tab}`);
-        setHrOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (isUserManagementTab(tab)) {
         setActiveTab(`user-management:${tab}`);
-        setUserManagementOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (isEmployeeDashboardTab(tab)) {
         setActiveTab(`employee-dashboard:${tab}`);
-        setEmployeeDashboardOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
         return;
       }
       if (tab === 'inventory') {
         const firstTab = visibleInventoryGroups[0]?.tabs[0]?.id || 'stock';
         setActiveTab(`inventory:${firstTab}`);
-        setInventoryOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab === 'master') {
         setActiveTab('master:products');
-        setMasterOpen(true);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab === 'procurement') {
         const firstTab = visibleProcurementTabs[0]?.id || 'purchase-requisite';
         setActiveTab(`procurement:${firstTab}`);
-        setProcurementOpen(true);
-        setMasterOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab === 'sales-module') {
         const firstTab = visibleSalesTabs[0]?.id || 'shipments';
         setActiveTab(`sales-module:${firstTab}`);
-        setSalesOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab === 'dashboard' || tab === 'mis' || tab === 'business-reports') {
         setActiveTab(tab === 'business-reports' ? 'mis' : tab);
-        closeModuleDropdowns();
         return;
       }
       if (tab === 'hr') {
         const firstTab = visibleHrTabs[0]?.id || 'hr-dashboard';
         setActiveTab(`hr:${firstTab}`);
-        setHrOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setUserManagementOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab === 'user-management') {
         const firstTab = visibleUserManagementTabs[0]?.id || 'users';
         setActiveTab(`user-management:${firstTab}`);
-        setUserManagementOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setEmployeeDashboardOpen(false);
         return;
       }
       if (tab === 'employee-dashboard') {
         setActiveTab('employee-dashboard:home');
-        setEmployeeDashboardOpen(true);
-        setMasterOpen(false);
-        setProcurementOpen(false);
-        setSalesOpen(false);
-        setHrOpen(false);
-        setUserManagementOpen(false);
         return;
       }
       setActiveTab(tab);
-      closeModuleDropdowns();
     },
-    [closeModuleDropdowns, visibleUserManagementTabs, visibleInventoryGroups, visibleProcurementTabs, visibleSalesTabs, visibleHrTabs]
+    [visibleUserManagementTabs, visibleInventoryGroups, visibleProcurementTabs, visibleSalesTabs, visibleHrTabs]
   );
 
   if (loading) {
@@ -396,24 +241,27 @@ function App() {
         );
       default:
         return canViewReports ? <Dashboard onNavigate={handleNavigate} /> : (
-          <div className="app-access-denied">Select a module from the sidebar for your role.</div>
+          <div className="app-access-denied">Select a module from the navigation menu for your role.</div>
         );
     }
   };
 
   return (
     <div className="App">
-      <div className="sidebar">
-        <div className="sidebar-header">
+      <div className="app-header-shell">
+      <header className="app-topbar">
+        <div className="app-topbar-brand">
           <h1>RetailOS</h1>
-          <div className="sidebar-user">
-            <span>{user?.username || user?.email}</span>
-            <button type="button" className="btn-logout" onClick={logout}>
-              Logout
-            </button>
-          </div>
         </div>
-        <nav className="sidebar-nav">
+        <div className="app-topbar-user">
+          <span>{user?.username || user?.email}</span>
+          <button type="button" className="btn-logout" onClick={logout}>
+            Logout
+          </button>
+        </div>
+      </header>
+
+      <nav className="app-navbar" aria-label="Main navigation">
           {canViewReports && (
             <>
               <button
@@ -435,13 +283,13 @@ function App() {
             <button
               type="button"
               className={`nav-item nav-dropdown-toggle${isMasterActive ? ' active' : ''}`}
-              onClick={() => setMasterOpen((open) => !open)}
-              aria-expanded={masterOpen}
+              onClick={() => toggleNavDropdown('master')}
+              aria-expanded={openNavDropdown === 'master'}
             >
               <span>🗂️ Master</span>
-              <span className={`nav-chevron${masterOpen ? ' open' : ''}`}>▾</span>
+              <span className={`nav-chevron${openNavDropdown === 'master' ? ' open' : ''}`}>▾</span>
             </button>
-            {masterOpen && (
+            {openNavDropdown === 'master' && (
               <div className="nav-dropdown-menu">
                 {MASTER_GROUPS.map((group) => (
                   <div key={group.label} className="nav-subgroup">
@@ -468,13 +316,13 @@ function App() {
             <button
               type="button"
               className={`nav-item nav-dropdown-toggle${isInventoryActive ? ' active' : ''}`}
-              onClick={() => setInventoryOpen((open) => !open)}
-              aria-expanded={inventoryOpen}
+              onClick={() => toggleNavDropdown('inventory')}
+              aria-expanded={openNavDropdown === 'inventory'}
             >
               <span>📦 Inventory</span>
-              <span className={`nav-chevron${inventoryOpen ? ' open' : ''}`}>▾</span>
+              <span className={`nav-chevron${openNavDropdown === 'inventory' ? ' open' : ''}`}>▾</span>
             </button>
-            {inventoryOpen && (
+            {openNavDropdown === 'inventory' && (
               <div className="nav-dropdown-menu">
                 {visibleInventoryGroups.map((group) => (
                   <div key={group.label} className="nav-subgroup">
@@ -501,13 +349,13 @@ function App() {
             <button
               type="button"
               className={`nav-item nav-dropdown-toggle${isProcurementActive ? ' active' : ''}`}
-              onClick={() => setProcurementOpen((open) => !open)}
-              aria-expanded={procurementOpen}
+              onClick={() => toggleNavDropdown('procurement')}
+              aria-expanded={openNavDropdown === 'procurement'}
             >
               <span>📑 Procurement</span>
-              <span className={`nav-chevron${procurementOpen ? ' open' : ''}`}>▾</span>
+              <span className={`nav-chevron${openNavDropdown === 'procurement' ? ' open' : ''}`}>▾</span>
             </button>
-            {procurementOpen && (
+            {openNavDropdown === 'procurement' && (
               <div className="nav-dropdown-menu">
                 {visibleProcurementTabs.map((tab) => (
                   <button
@@ -529,13 +377,13 @@ function App() {
             <button
               type="button"
               className={`nav-item nav-dropdown-toggle${isSalesActive ? ' active' : ''}`}
-              onClick={() => setSalesOpen((open) => !open)}
-              aria-expanded={salesOpen}
+              onClick={() => toggleNavDropdown('sales')}
+              aria-expanded={openNavDropdown === 'sales'}
             >
               <span>📦 Shipments</span>
-              <span className={`nav-chevron${salesOpen ? ' open' : ''}`}>▾</span>
+              <span className={`nav-chevron${openNavDropdown === 'sales' ? ' open' : ''}`}>▾</span>
             </button>
-            {salesOpen && (
+            {openNavDropdown === 'sales' && (
               <div className="nav-dropdown-menu">
                 {visibleSalesTabs.map((tab) => (
                   <button
@@ -557,13 +405,13 @@ function App() {
             <button
               type="button"
               className={`nav-item nav-dropdown-toggle${isHrActive ? ' active' : ''}`}
-              onClick={() => setHrOpen((open) => !open)}
-              aria-expanded={hrOpen}
+              onClick={() => toggleNavDropdown('hr')}
+              aria-expanded={openNavDropdown === 'hr'}
             >
               <span>👔 HR</span>
-              <span className={`nav-chevron${hrOpen ? ' open' : ''}`}>▾</span>
+              <span className={`nav-chevron${openNavDropdown === 'hr' ? ' open' : ''}`}>▾</span>
             </button>
-            {hrOpen && (
+            {openNavDropdown === 'hr' && (
               <div className="nav-dropdown-menu">
                 {visibleHrTabs.map((tab) => (
                   <button
@@ -585,13 +433,13 @@ function App() {
             <button
               type="button"
               className={`nav-item nav-dropdown-toggle${isEmployeeDashboardActive ? ' active' : ''}`}
-              onClick={() => setEmployeeDashboardOpen((open) => !open)}
-              aria-expanded={employeeDashboardOpen}
+              onClick={() => toggleNavDropdown('employee')}
+              aria-expanded={openNavDropdown === 'employee'}
             >
               <span>👤 Employee Dashboard</span>
-              <span className={`nav-chevron${employeeDashboardOpen ? ' open' : ''}`}>▾</span>
+              <span className={`nav-chevron${openNavDropdown === 'employee' ? ' open' : ''}`}>▾</span>
             </button>
-            {employeeDashboardOpen && (
+            {openNavDropdown === 'employee' && (
               <div className="nav-dropdown-menu">
                 {EMPLOYEE_DASHBOARD_TABS.map((tab) => (
                   <button
@@ -613,13 +461,13 @@ function App() {
               <button
                 type="button"
                 className={`nav-item nav-dropdown-toggle${isUserManagementActive ? ' active' : ''}`}
-                onClick={() => setUserManagementOpen((open) => !open)}
-                aria-expanded={userManagementOpen}
+                onClick={() => toggleNavDropdown('user-management')}
+                aria-expanded={openNavDropdown === 'user-management'}
               >
                 <span>🔐 User Management</span>
-                <span className={`nav-chevron${userManagementOpen ? ' open' : ''}`}>▾</span>
+                <span className={`nav-chevron${openNavDropdown === 'user-management' ? ' open' : ''}`}>▾</span>
               </button>
-              {userManagementOpen && (
+              {openNavDropdown === 'user-management' && (
                 <div className="nav-dropdown-menu">
                   {visibleUserManagementTabs.map((tab) => (
                     <button
@@ -638,9 +486,11 @@ function App() {
           )}
         </nav>
       </div>
-      <div className="main-content">
+
+      <main className="main-content">
         <PageZoomShell contentKey={activeTab}>{renderContent()}</PageZoomShell>
-      </div>
+      </main>
+      <EmployeeChatNotifications />
     </div>
   );
 }

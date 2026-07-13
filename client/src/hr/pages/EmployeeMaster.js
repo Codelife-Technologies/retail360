@@ -20,6 +20,108 @@ const STATUS_OPTIONS = ['Active', 'Inactive', 'On Leave', 'Terminated'];
 const GENDER_OPTIONS = ['', 'Male', 'Female', 'Other'];
 const MARITAL_OPTIONS = ['', 'Single', 'Married', 'Divorced', 'Widowed'];
 
+function displayValue(value) {
+  if (value == null || value === '') return '—';
+  return value;
+}
+
+function DetailField({ label, value }) {
+  return (
+    <div className="hr-detail-field">
+      <span className="hr-detail-label">{label}</span>
+      <span className="hr-detail-value">{displayValue(value)}</span>
+    </div>
+  );
+}
+
+function EmployeeDetailView({ employee }) {
+  const personal = employee.personalInfo || {};
+  const contact = employee.contactInfo || {};
+  const emergency = employee.emergencyContact || {};
+  const bank = employee.bankDetails || {};
+
+  return (
+    <>
+      <div className="hr-employee-detail-header">
+        <HrEmployeeAvatar employee={employee} size={72} />
+        <div>
+          <h3 className="hr-employee-detail-name">{employeeName(employee)}</h3>
+          <p className="hr-employee-detail-meta">
+            {employee.employeeId} · {employee.designation} · {employee.department}
+          </p>
+          <HrStatusBadge status={employee.status} />
+        </div>
+      </div>
+
+      <div className="hr-form-section">
+        <h3>Personal Information</h3>
+        <div className="hr-form-grid hr-detail-grid">
+          <DetailField label="Employee ID" value={employee.employeeId} />
+          <DetailField label="First Name" value={employee.firstName} />
+          <DetailField label="Last Name" value={employee.lastName} />
+          <DetailField label="Date of Birth" value={formatDate(personal.dateOfBirth)} />
+          <DetailField label="Gender" value={personal.gender} />
+          <DetailField label="Marital Status" value={personal.maritalStatus} />
+        </div>
+      </div>
+
+      <div className="hr-form-section">
+        <h3>Employment Information</h3>
+        <div className="hr-form-grid hr-detail-grid">
+          <DetailField label="Department" value={employee.department} />
+          <DetailField label="Designation" value={employee.designation} />
+          <DetailField label="Joining Date" value={formatDate(employee.joiningDate)} />
+          <DetailField label="Employment Type" value={employee.employmentType} />
+          <DetailField label="Status" value={employee.status} />
+          <DetailField
+            label="Basic Salary"
+            value={`₹${Number(employee.basicSalary || 0).toLocaleString('en-IN')}`}
+          />
+        </div>
+      </div>
+
+      <div className="hr-form-section">
+        <h3>Contact Information</h3>
+        <div className="hr-form-grid hr-detail-grid">
+          <DetailField label="Email" value={employee.email} />
+          <DetailField label="Phone" value={employee.phone} />
+        </div>
+      </div>
+
+      <div className="hr-form-section">
+        <h3>Address</h3>
+        <div className="hr-form-grid hr-detail-grid">
+          <DetailField label="Address" value={contact.address} />
+          <DetailField label="City" value={contact.city} />
+          <DetailField label="State" value={contact.state} />
+          <DetailField label="Pin Code" value={contact.pinCode} />
+        </div>
+      </div>
+
+      <div className="hr-form-section">
+        <h3>Emergency Contact</h3>
+        <div className="hr-form-grid hr-detail-grid">
+          <DetailField label="Name" value={emergency.name} />
+          <DetailField label="Relationship" value={emergency.relationship} />
+          <DetailField label="Phone" value={emergency.phone} />
+        </div>
+      </div>
+
+      <div className="hr-form-section">
+        <h3>Bank Details</h3>
+        <div className="hr-form-grid hr-detail-grid">
+          <DetailField label="Bank Name" value={bank.bankName} />
+          <DetailField label="Account Holder Name" value={bank.accountHolderName} />
+          <DetailField label="Account Number" value={bank.accountNumber} />
+          <DetailField label="IFSC Code" value={bank.ifscCode} />
+        </div>
+      </div>
+
+      <HrLeaveBalancePanel employeeId={employee._id} />
+    </>
+  );
+}
+
 const emptyForm = () => ({
   employeeId: '',
   photo: '',
@@ -53,6 +155,7 @@ function EmployeeMaster() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [viewingEmployee, setViewingEmployee] = useState(null);
+  const [viewingLoading, setViewingLoading] = useState(false);
   const [formData, setFormData] = useState(emptyForm());
   const [formErrors, setFormErrors] = useState({});
   const [syncingUsers, setSyncingUsers] = useState(false);
@@ -206,9 +309,18 @@ function EmployeeMaster() {
     setShowViewModal(false);
   };
 
-  const openView = (emp) => {
+  const openView = async (emp) => {
     setViewingEmployee(emp);
     setShowViewModal(true);
+    setViewingLoading(true);
+    try {
+      const response = await hrEmployeesAPI.getById(emp._id);
+      setViewingEmployee(response.data);
+    } catch (error) {
+      console.error('Error loading employee details:', error);
+    } finally {
+      setViewingLoading(false);
+    }
   };
 
   const handleDelete = async (emp) => {
@@ -323,17 +435,12 @@ function EmployeeMaster() {
                 <th className="sortable" onClick={() => handleSort('joiningDate')}>
                   Joining Date{sortIndicator('joiningDate')}
                 </th>
-                <th>Employment Type</th>
-                <th className="sortable" onClick={() => handleSort('status')}>
-                  Status{sortIndicator('status')}
-                </th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {employees.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="hr-empty">No employees found</td>
+                  <td colSpan={8} className="hr-empty">No employees found</td>
                 </tr>
               ) : (
                 employees.map((emp) => (
@@ -346,15 +453,6 @@ function EmployeeMaster() {
                     <td>{emp.email}</td>
                     <td>{emp.phone}</td>
                     <td>{formatDate(emp.joiningDate)}</td>
-                    <td>{emp.employmentType}</td>
-                    <td><HrStatusBadge status={emp.status} /></td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <div className="hr-actions-cell">
-                        <button type="button" className="hr-btn hr-btn-secondary hr-btn-sm" onClick={() => openView(emp)}>View</button>
-                        <button type="button" className="hr-btn hr-btn-primary hr-btn-sm" onClick={() => openEdit(emp)}>Edit</button>
-                        <button type="button" className="hr-btn hr-btn-danger hr-btn-sm" onClick={() => handleDelete(emp)}>Delete</button>
-                      </div>
-                    </td>
                   </tr>
                 ))
               )}
@@ -556,25 +654,11 @@ function EmployeeMaster() {
               <button type="button" className="hr-modal-close" onClick={() => setShowViewModal(false)}>×</button>
             </div>
             <div className="hr-modal-body">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                <HrEmployeeAvatar employee={viewingEmployee} size={64} />
-                <div>
-                  <p><strong>{viewingEmployee.employeeId}</strong> · {viewingEmployee.designation}</p>
-                  <p>{viewingEmployee.department} · <HrStatusBadge status={viewingEmployee.status} /></p>
-                </div>
-              </div>
-              <div className="hr-form-grid">
-                <div><strong>Email:</strong> {viewingEmployee.email}</div>
-                <div><strong>Phone:</strong> {viewingEmployee.phone}</div>
-                <div><strong>Joining Date:</strong> {formatDate(viewingEmployee.joiningDate)}</div>
-                <div><strong>Employment Type:</strong> {viewingEmployee.employmentType}</div>
-                <div><strong>Basic Salary:</strong> ₹{viewingEmployee.basicSalary?.toLocaleString() || 0}</div>
-                <div><strong>Address:</strong> {[viewingEmployee.contactInfo?.address, viewingEmployee.contactInfo?.city, viewingEmployee.contactInfo?.state].filter(Boolean).join(', ') || '—'}</div>
-                <div><strong>Emergency Contact:</strong> {viewingEmployee.emergencyContact?.name ? `${viewingEmployee.emergencyContact.name} (${viewingEmployee.emergencyContact.phone})` : '—'}</div>
-                <div><strong>Bank:</strong> {viewingEmployee.bankDetails?.bankName || '—'} {viewingEmployee.bankDetails?.accountNumber ? `· A/C ${viewingEmployee.bankDetails.accountNumber}` : ''}</div>
-              </div>
-
-              <HrLeaveBalancePanel employeeId={viewingEmployee._id} />
+              {viewingLoading ? (
+                <div className="hr-loading">Loading employee details...</div>
+              ) : (
+                <EmployeeDetailView employee={viewingEmployee} />
+              )}
             </div>
             <div className="hr-modal-footer">
               <button type="button" className="hr-btn hr-btn-danger" onClick={() => handleDelete(viewingEmployee)}>Delete</button>

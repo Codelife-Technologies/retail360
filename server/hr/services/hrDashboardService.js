@@ -1,7 +1,6 @@
 const Employee = require('../models/Employee');
 const Attendance = require('../models/Attendance');
 const Leave = require('../models/Leave');
-const Payroll = require('../models/Payroll');
 const Holiday = require('../models/Holiday');
 const { dedupeHolidaysByDate } = require('../utils/holidayUtils');
 const { startOfDay, endOfDay } = require('../utils/employeeId');
@@ -9,16 +8,11 @@ const { startOfDay, endOfDay } = require('../utils/employeeId');
 async function getDashboardStats() {
   const today = startOfDay(new Date());
   const todayEnd = endOfDay(new Date());
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
-
   const [
     totalEmployees,
     presentToday,
     absentToday,
     onLeaveToday,
-    monthlyPayrollAgg,
     pendingLeaves,
     attendanceTrend,
     departmentDistribution,
@@ -35,10 +29,6 @@ async function getDashboardStats() {
       fromDate: { $lte: todayEnd },
       toDate: { $gte: today },
     }),
-    Payroll.aggregate([
-      { $match: { month, year } },
-      { $group: { _id: null, total: { $sum: '$netSalary' } } },
-    ]),
     Leave.countDocuments({ status: 'Pending' }),
     getAttendanceTrend(14),
     getDepartmentDistribution(),
@@ -54,7 +44,6 @@ async function getDashboardStats() {
       presentToday,
       absentToday,
       employeesOnLeave: onLeaveToday,
-      monthlyPayroll: monthlyPayrollAgg[0]?.total || 0,
       pendingLeaveRequests: pendingLeaves,
     },
     attendanceTrend,

@@ -1,4 +1,5 @@
 import React from 'react';
+import ModalPortal from './ModalPortal';
 import {
   PRODUCT_IMAGE_PLACEHOLDER,
   getProductDisplayName,
@@ -71,6 +72,7 @@ function ProductDetailsModal({
   const formattedPrice = formatPrice(price, priceCurrency);
 
   return (
+    <ModalPortal>
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content large-modal" onClick={(e) => e.stopPropagation()}>
         <div className="detail-modal-header">
@@ -282,6 +284,7 @@ function ProductDetailsModal({
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

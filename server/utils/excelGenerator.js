@@ -6,7 +6,7 @@ const XLSX = require('xlsx');
  * @param {Array} sampleData - Optional sample data rows
  * @returns {Buffer} Excel file buffer
  */
-function generateTemplate(headers, sampleData = []) {
+function generateTemplate(headers, sampleData = [], options = {}) {
   // Create workbook
   const workbook = XLSX.utils.book_new();
 
@@ -36,6 +36,13 @@ function generateTemplate(headers, sampleData = []) {
 
   // Add worksheet to workbook
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+
+  if (options.instructions && options.instructions.length > 0) {
+    const instructionRows = options.instructions.map((line) => [line]);
+    const instructionSheet = XLSX.utils.aoa_to_sheet(instructionRows);
+    instructionSheet['!cols'] = [{ wch: 90 }];
+    XLSX.utils.book_append_sheet(workbook, instructionSheet, 'Instructions');
+  }
 
   // Generate buffer
   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
