@@ -1,4 +1,11 @@
 const Employee = require('../models/Employee');
+const {
+  APP_TIMEZONE,
+  startOfDayInAppTz,
+  endOfDayInAppTz,
+  formatTimeHHMMInAppTz,
+  getDateKeyInAppTz,
+} = require('../../utils/appTimezone');
 
 async function generateNextEmployeeId() {
   const employees = await Employee.find({ employeeId: /^EMP-/i }).select('employeeId').lean();
@@ -11,19 +18,20 @@ async function generateNextEmployeeId() {
 }
 
 function startOfDay(d) {
-  const date = new Date(d);
-  date.setHours(0, 0, 0, 0);
-  return date;
+  return startOfDayInAppTz(d || new Date());
 }
 
 function endOfDay(d) {
-  const date = new Date(d);
-  date.setHours(23, 59, 59, 999);
-  return date;
+  const end = endOfDayInAppTz(d || new Date());
+  end.setMilliseconds(999);
+  return end;
 }
 
 function dayName(date) {
-  return new Date(date).toLocaleDateString('en-US', { weekday: 'long' });
+  return new Date(date).toLocaleDateString('en-US', {
+    weekday: 'long',
+    timeZone: APP_TIMEZONE,
+  });
 }
 
 function calcLeaveDays(fromDate, toDate) {
@@ -34,10 +42,11 @@ function calcLeaveDays(fromDate, toDate) {
 }
 
 function formatTimeHHMM(date) {
-  const d = new Date(date);
-  const h = String(d.getHours()).padStart(2, '0');
-  const m = String(d.getMinutes()).padStart(2, '0');
-  return `${h}:${m}`;
+  return formatTimeHHMMInAppTz(date);
+}
+
+function getLocalDateKey(date = new Date()) {
+  return getDateKeyInAppTz(date);
 }
 
 module.exports = {
@@ -47,4 +56,5 @@ module.exports = {
   dayName,
   calcLeaveDays,
   formatTimeHHMM,
+  getLocalDateKey,
 };

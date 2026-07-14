@@ -27,6 +27,8 @@ import { validateGSTIN, validatePAN, validateQuantity, validatePrice } from '../
 import {
   groupPoItemsBySupplier,
   sortItemsBySupplier,
+  getDesignatedSupplierId,
+  getVendorOptionsForProduct,
 } from '../utils/purchaseOrderVendorSplit';
 import { UOM_OPTIONS } from '../types/purchaseOrderTypes';
 import { isPoEligibleForGrn } from '../goods-receipt-note/types/grn.types';
@@ -92,6 +94,7 @@ function PurchaseOrders({ onNavigate }) {
   const [loadingPrs, setLoadingPrs] = useState(false);
   const [createSource, setCreateSource] = useState('new');
   const [companyProfile, setCompanyProfile] = useState(null);
+  const [bulkVendorId, setBulkVendorId] = useState('');
   const [formData, setFormData] = useState(() => createEmptyPurchaseOrderForm());
   const [newItem, setNewItem] = useState({
     product: '',
@@ -151,6 +154,11 @@ function PurchaseOrders({ onNavigate }) {
               discountPercent: item.discountPercent || 0,
               unitOfMeasure: getProductUom(product),
               taxRate,
+              supplierId:
+                item.supplierId ||
+                item.supplier ||
+                getDesignatedSupplierId(product) ||
+                '',
             },
             product
           );
@@ -256,33 +264,61 @@ function PurchaseOrders({ onNavigate }) {
 
   const vendorDisplayGroups = useMemo(() => {
     if (editingPO || formData.items.length === 0) return null;
-    const bySupplier = new Map();
-    const unassigned = [];
+    const { bySupplier, unassigned } = groupPoItemsBySupplier(
+      formData.items,
+      products,
+      suppliers
+    );
 
-    formData.items.forEach((item, index) => {
-      const productId = item.product?._id || item.product;
-      const product = products.find((p) => p._id === productId);
-      const { bySupplier: grouped } = groupPoItemsBySupplier([item], products, suppliers);
-      const groups = [...grouped.values()];
-      if (groups.length === 0) {
-        unassigned.push({ item, index, product });
-        return;
-      }
-      const { supplierId, supplierName } = groups[0];
-      if (!bySupplier.has(supplierId)) {
-        bySupplier.set(supplierId, { supplierId, supplierName, entries: [] });
-      }
-      bySupplier.get(supplierId).entries.push({ item, index, product });
-    });
+    const groups = [...bySupplier.values()]
+      .map((group) => ({
+        ...group,
+        entries: group.items.map((item) => {
+          const index = formData.items.indexOf(item);
+          const productId = item.product?._id || item.product;
+          const product = products.find((p) => p._id === productId);
+          return { item, index, product };
+        }),
+      }))
+      .sort((a, b) => a.supplierName.localeCompare(b.supplierName));
 
     return {
-      groups: [...bySupplier.values()].sort((a, b) =>
-        a.supplierName.localeCompare(b.supplierName)
-      ),
-      unassigned,
+      groups,
+      unassigned: unassigned.map(({ item, product }) => ({
+        item,
+        product,
+        index: formData.items.indexOf(item),
+      })),
       vendorCount: bySupplier.size,
     };
   }, [formData.items, products, suppliers, editingPO]);
+
+  const applyBulkVendorToItems = () => {
+    if (!bulkVendorId) return;
+    setFormData((prev) => ({
+      ...prev,
+      items: sortItemsBySupplier(
+        prev.items.map((item) => ({
+          ...item,
+          supplierId: bulkVendorId,
+        })),
+        products,
+        suppliers
+      ),
+    }));
+  };
+
+  const handleItemVendorChange = (index, supplierId) => {
+    setFormData((prev) => {
+      const items = prev.items.map((item, i) =>
+        i === index ? { ...item, supplierId: supplierId || '' } : item
+      );
+      return {
+        ...prev,
+        items: sortItemsBySupplier(items, products, suppliers),
+      };
+    });
+  };
 
   const buildPoPayload = (baseForm, items, supplierId, applyCharges = false) => {
     const supplier = suppliers.find((s) => s._id === supplierId);
@@ -332,6 +368,11 @@ function PurchaseOrders({ onNavigate }) {
           discountPercent: item.discountPercent || 0,
           unitOfMeasure: getProductUom(product),
           taxRate,
+          supplierId:
+            item.supplierId ||
+            item.supplier ||
+            getDesignatedSupplierId(product) ||
+            '',
         },
         product
       );
@@ -394,6 +435,7 @@ function PurchaseOrders({ onNavigate }) {
   const openNewPoForm = () => {
     setEditingPO(null);
     resetForm();
+    setBulkVendorId('');
     setCreateSource('new');
     setPendingPrLinkId(null);
     setShowCreateChoice(false);
@@ -464,6 +506,7 @@ function PurchaseOrders({ onNavigate }) {
       sku: product?.sku || '',
       hsnCode: getProductHsn(product),
       receivedQuantity: 0,
+      supplierId: getDesignatedSupplierId(product) || '',
     };
     rawItem.total = rawItem.quantity * rawItem.unitPrice;
     const enriched = enrichLineItem(rawItem, product, formData.defaultTaxRate);
@@ -543,7 +586,7 @@ function PurchaseOrders({ onNavigate }) {
             })
             .join('\n• ');
           alert(
-            `These products have no designated supplier. Assign a supplier on the Products page before saving:\n\n• ${names}`
+            `These products have no vendor assigned. Select a vendor for each product (or apply one vendor to all):\n\n• ${names}`
           );
           return;
         }
@@ -664,6 +707,7 @@ function PurchaseOrders({ onNavigate }) {
   const closePoModal = () => {
     setShowModal(false);
     setEditingPO(null);
+    setBulkVendorId('');
     closeCreateFlow();
     resetForm();
   };
@@ -671,6 +715,7 @@ function PurchaseOrders({ onNavigate }) {
   const openAddModal = () => {
     setEditingPO(null);
     resetForm();
+    setBulkVendorId('');
     setCreateStep('choice');
     setSelectedPrId('');
     setCreateSource('new');
@@ -682,10 +727,35 @@ function PurchaseOrders({ onNavigate }) {
     const productId = item.product?._id || item.product;
     const product = products.find((p) => p._id === productId);
     const enriched = enrichLineItem(item, product, formData.defaultTaxRate);
+    const vendorOptions = getVendorOptionsForProduct(product, suppliers);
     return (
-      <div key={index} className="item-row po-item-row-extended">
+      <div key={`${productId}-${index}`} className="item-row po-item-row-extended">
         <span>{product?.title || product?.name || 'Unknown'}</span>
         <span>{enriched.sku || '-'}</span>
+        {autoVendorSplit && (
+          <span className="po-item-vendor-cell">
+            <select
+              value={item.supplierId || ''}
+              onChange={(e) => handleItemVendorChange(index, e.target.value)}
+              aria-label={`Vendor for ${product?.title || product?.name || 'product'}`}
+            >
+              <option value="">Select vendor</option>
+              {vendorOptions.map((vendor) => (
+                <option key={vendor._id} value={vendor._id}>
+                  {vendor.name}
+                </option>
+              ))}
+              {/* Keep current value visible even if not in product-linked list */}
+              {item.supplierId &&
+                !vendorOptions.some((v) => String(v._id) === String(item.supplierId)) && (
+                  <option value={item.supplierId}>
+                    {suppliers.find((s) => String(s._id) === String(item.supplierId))?.name ||
+                      'Selected vendor'}
+                  </option>
+                )}
+            </select>
+          </span>
+        )}
         <span>{item.quantity}</span>
         <span>{enriched.unitOfMeasure}</span>
         <span>{formatINR(item.unitPrice)}</span>
@@ -729,7 +799,7 @@ function PurchaseOrders({ onNavigate }) {
     <div className="purchase-orders-container">
       <div className="purchase-orders-header">
         <h1>Purchase Orders</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="page-header-actions">
           <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
             ⬆ Upload Excel
           </button>
@@ -965,8 +1035,8 @@ function PurchaseOrders({ onNavigate }) {
               <>
                 <h2>Create Purchase Order</h2>
                 <p className="po-create-choice-subtitle">
-                  Choose how you want to create purchase orders. Items are grouped by each
-                  product&apos;s designated supplier — one PO per vendor on save.
+                  Choose how you want to create purchase orders. You can assign vendors per product
+                  or apply one vendor to all items — one PO is created per vendor on save.
                 </p>
                 <div className="po-create-choice-cards">
                   <button
@@ -989,8 +1059,7 @@ function PurchaseOrders({ onNavigate }) {
                   >
                     <strong>New Purchase Order</strong>
                     <span>
-                      Add products manually. Multiple POs will be created when items belong to
-                      different suppliers.
+                      Add products and pick vendors product-wise, or choose one vendor for all.
                     </span>
                   </button>
                 </div>
@@ -1099,18 +1168,47 @@ function PurchaseOrders({ onNavigate }) {
 
               <div className="items-section">
                 <h3>Items</h3>
+                {autoVendorSplit && formData.items.length > 0 && (
+                  <div className="po-vendor-bulk-panel">
+                    <div className="po-vendor-bulk-row">
+                      <label htmlFor="po-bulk-vendor">One vendor for all products</label>
+                      <select
+                        id="po-bulk-vendor"
+                        value={bulkVendorId}
+                        onChange={(e) => setBulkVendorId(e.target.value)}
+                      >
+                        <option value="">Select vendor</option>
+                        {suppliers.map((supplier) => (
+                          <option key={supplier._id} value={String(supplier._id)}>
+                            {supplier.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={!bulkVendorId}
+                        onClick={applyBulkVendorToItems}
+                      >
+                        Apply to all
+                      </button>
+                    </div>
+                    <p className="po-vendor-bulk-hint">
+                      Or choose a different vendor for each product in the list below. Same-vendor
+                      items share one PO on save.
+                    </p>
+                  </div>
+                )}
                 {autoVendorSplit && vendorDisplayGroups && formData.items.length > 0 && (
                   <div className="po-vendor-split-summary">
                     {vendorDisplayGroups.unassigned.length > 0 ? (
                       <p className="po-vendor-warning">
-                        {vendorDisplayGroups.unassigned.length} item(s) have no designated supplier
-                        and must be assigned before saving.
+                        {vendorDisplayGroups.unassigned.length} item(s) need a vendor before saving.
                       </p>
                     ) : (
                       <p className="po-vendor-info">
                         {vendorDisplayGroups.vendorCount} vendor PO
-                        {vendorDisplayGroups.vendorCount === 1 ? '' : 's'} will be created on save
-                        (items grouped and sorted by supplier).
+                        {vendorDisplayGroups.vendorCount === 1 ? '' : 's'} will be created on save.
                       </p>
                     )}
                   </div>
@@ -1228,9 +1326,14 @@ function PurchaseOrders({ onNavigate }) {
                 </div>
 
                 {formData.items.length > 0 && (
-                  <div className="items-list-header po-items-header-extended">
+                  <div
+                    className={`items-list-header po-items-header-extended${
+                      autoVendorSplit ? ' has-vendor-col' : ''
+                    }`}
+                  >
                     <span>Product</span>
                     <span>SKU</span>
+                    {autoVendorSplit && <span>Vendor</span>}
                     <span>Qty</span>
                     <span>UOM</span>
                     <span>Price</span>
@@ -1240,7 +1343,7 @@ function PurchaseOrders({ onNavigate }) {
                     <span></span>
                   </div>
                 )}
-                <div className="items-list">
+                <div className={`items-list${autoVendorSplit ? ' has-vendor-col' : ''}`}>
                   {autoVendorSplit && vendorDisplayGroups ? (
                     <>
                       {vendorDisplayGroups.groups.map((group) => (

@@ -1,5 +1,8 @@
 .user-management-module {
   height: 100%;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
+  box-sizing: border-box;
 }

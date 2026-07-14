@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { rolesAPI, permissionsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import DetailModal from './DetailModal';
@@ -6,11 +6,20 @@ import { getShortRoleLabel } from '../utils/roleLabels';
 import './UserManagement.css';
 import './DetailModal.css';
 
+const PAGE_SIZE = 10;
+
 function truncateText(text, maxLength = 50) {
   if (!text) return '—';
   const trimmed = String(text).trim();
   if (trimmed.length <= maxLength) return trimmed;
   return `${trimmed.slice(0, maxLength)}…`;
+}
+
+function getInitials(name = '') {
+  const parts = String(name).trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
 function getRolePermissions(role) {
@@ -26,13 +35,6 @@ function getRolePermissions(role) {
   });
 }
 
-function permissionSummary(role) {
-  const perms = getRolePermissions(role);
-  if (perms.length === 0) return '—';
-  if (perms.length === 1) return truncateText(perms[0].name, 28);
-  return `${perms.length} permissions`;
-}
-
 function Roles() {
   const { hasPermission } = useAuth();
   const [roles, setRoles] = useState([]);
@@ -42,6 +44,7 @@ function Roles() {
   const [showModal, setShowModal] = useState(false);
   const [viewingRole, setViewingRole] = useState(null);
   const [editingRole, setEditingRole] = useState(null);
+  const [page, setPage] = useState(1);
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -49,41 +52,57 @@ function Roles() {
     permissions: [],
   });
 
-  useEffect(() => {
-    fetchRoles();
-  }, []);
-
-  useEffect(() => {
-    if (showModal) fetchPermissions();
-  }, [showModal]);
-
-  const fetchRoles = async () => {
+  const fetchRoles = useCallback(async (search = searchTerm) => {
     try {
       setLoading(true);
-      const response = await rolesAPI.getAll({ search: searchTerm });
+      const response = await rolesAPI.getAll({ search });
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
       setRoles(data);
+      setPage(1);
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to fetch roles');
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchPermissions = async () => {
-    try {
-      const response = await permissionsAPI.getAll();
-      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setPermissions(data);
-    } catch (error) {
-      console.error('Failed to fetch permissions:', error);
-    }
-  };
+  }, [searchTerm]);
 
   useEffect(() => {
-    const t = setTimeout(() => fetchRoles(), 300);
-    return () => clearTimeout(t);
-  }, [searchTerm]);
+    const timer = setTimeout(() => fetchRoles(searchTerm), searchTerm ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [searchTerm, fetchRoles]);
+
+  useEffect(() => {
+    if (!showModal) return undefined;
+    let cancelled = false;
+    permissionsAPI
+      .getAll()
+      .then((response) => {
+        if (cancelled) return;
+        const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+        setPermissions(data);
+      })
+      .catch((error) => console.error('Failed to fetch permissions:', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [showModal]);
+
+  const totalPages = Math.max(1, Math.ceil(roles.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRoles = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return roles.slice(start, start + PAGE_SIZE);
+  }, [roles, currentPage]);
+
+  const pageNumbers = useMemo(() => {
+    const maxButtons = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+    let end = Math.min(totalPages, start + maxButtons - 1);
+    start = Math.max(1, end - maxButtons + 1);
+    const nums = [];
+    for (let i = start; i <= end; i += 1) nums.push(i);
+    return nums;
+  }, [currentPage, totalPages]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -98,6 +117,10 @@ function Roles() {
     });
   };
 
+  const resetForm = () => {
+    setFormData({ name: '', code: '', description: '', permissions: [] });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -110,7 +133,7 @@ function Roles() {
       setShowModal(false);
       setEditingRole(null);
       resetForm();
-      fetchRoles();
+      fetchRoles(searchTerm);
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to save role');
     }
@@ -119,12 +142,11 @@ function Roles() {
   const handleEdit = (item) => {
     setViewingRole(null);
     setEditingRole(item);
-    const permIds = (item.permissions || []).map((p) => (typeof p === 'object' ? p._id : p));
     setFormData({
       name: item.name || '',
       code: item.code || '',
       description: item.description || '',
-      permissions: permIds,
+      permissions: (item.permissions || []).map((p) => (typeof p === 'object' ? p._id : p)),
     });
     setShowModal(true);
   };
@@ -133,14 +155,10 @@ function Roles() {
     if (!window.confirm('Are you sure you want to delete this role?')) return;
     try {
       await rolesAPI.delete(id);
-      fetchRoles();
+      fetchRoles(searchTerm);
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to delete role');
     }
-  };
-
-  const resetForm = () => {
-    setFormData({ name: '', code: '', description: '', permissions: [] });
   };
 
   const openAddModal = () => {
@@ -150,105 +168,179 @@ function Roles() {
     setShowModal(true);
   };
 
-  const openViewRole = (role) => {
-    setViewingRole(role);
-  };
-
-  const closeViewRole = () => {
-    setViewingRole(null);
-  };
-
-  const handleViewEdit = () => {
-    if (!viewingRole) return;
-    handleEdit(viewingRole);
-  };
-
-  const handleViewDelete = () => {
-    if (!viewingRole) return;
-    handleDelete(viewingRole._id);
-    setViewingRole(null);
-  };
-
-  const stopRowClick = (event) => {
-    event.stopPropagation();
-  };
+  const stopRowClick = (event) => event.stopPropagation();
 
   return (
-    <div className="um-container">
-      <div className="um-header">
-        <h1>Roles</h1>
-        {hasPermission('roles.create') && (
-          <button className="btn-primary" onClick={openAddModal}>+ Add Role</button>
+    <div className="um-mgmt-page">
+      <div className="um-mgmt-card">
+        <div className="um-mgmt-card-top">
+          <div className="um-mgmt-heading">
+            <h1>Role Management</h1>
+            <p className="um-mgmt-breadcrumb">
+              Home <span>›</span> Permissions &amp; Accounts <span>›</span> Roles
+            </p>
+          </div>
+          <div className="um-mgmt-toolbar">
+            <label className="um-mgmt-search">
+              <span className="um-mgmt-search-icon" aria-hidden="true">
+                🔍
+              </span>
+              <input
+                type="search"
+                placeholder="Search Role"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </label>
+            {hasPermission('roles.create') && (
+              <button type="button" className="um-mgmt-add-btn" onClick={openAddModal}>
+                Add Role
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="um-mgmt-status-row">
+          Showing <strong>{pageRoles.length}</strong> of <strong>{roles.length}</strong> total Roles
+        </div>
+
+        {loading ? (
+          <div className="um-mgmt-loading">Loading...</div>
+        ) : (
+          <>
+            <div className="um-mgmt-list" role="table" aria-label="Roles">
+              <div className="um-mgmt-row roles um-mgmt-row-head" role="row">
+                <div className="um-mgmt-cell name" role="columnheader">
+                  Name
+                </div>
+                <div className="um-mgmt-cell desc" role="columnheader">
+                  Description
+                </div>
+                <div className="um-mgmt-cell meta" role="columnheader">
+                  Permissions
+                </div>
+                <div className="um-mgmt-cell actions" role="columnheader">
+                  Actions
+                </div>
+              </div>
+
+              {roles.length === 0 ? (
+                <div className="um-mgmt-empty">No roles found</div>
+              ) : (
+                pageRoles.map((r) => {
+                  const perms = getRolePermissions(r);
+                  return (
+                    <div
+                      key={r._id}
+                      className="um-mgmt-row roles clickable"
+                      role="row"
+                      onClick={() => setViewingRole(r)}
+                      title="Click to view role details"
+                    >
+                      <div className="um-mgmt-cell name" role="cell">
+                        <div className="um-mgmt-entity">
+                          <div className="um-mgmt-avatar tone-navy" aria-hidden="true">
+                            {getInitials(r.name)}
+                          </div>
+                          <div className="um-mgmt-entity-meta">
+                            <span className="um-mgmt-entity-name" title={r.name}>
+                              {r.name}
+                            </span>
+                            <span className="um-mgmt-entity-sub">{getShortRoleLabel(r, 16)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="um-mgmt-cell desc" role="cell">
+                        <span className="um-mgmt-text" title={r.description || ''}>
+                          {truncateText(r.description, 48)}
+                        </span>
+                      </div>
+                      <div className="um-mgmt-cell meta" role="cell">
+                        {perms.length === 0 ? (
+                          <span className="um-mgmt-muted">No permissions</span>
+                        ) : (
+                          <span className="um-mgmt-badge tone-green" title={perms.map((p) => p.name).join(', ')}>
+                            {perms.length} permission{perms.length === 1 ? '' : 's'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="um-mgmt-cell actions" role="cell" onClick={stopRowClick}>
+                        <div className="um-mgmt-actions">
+                          {hasPermission('roles.update') && (
+                            <button
+                              type="button"
+                              className="um-mgmt-action-link"
+                              onClick={() => handleEdit(r)}
+                            >
+                              <span aria-hidden="true">⚙</span>
+                              Modify Role
+                            </button>
+                          )}
+                          {hasPermission('roles.delete') && (
+                            <button
+                              type="button"
+                              className="um-mgmt-action-link danger"
+                              onClick={() => handleDelete(r._id)}
+                            >
+                              <span aria-hidden="true">⊘</span>
+                              Remove Role
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {roles.length > PAGE_SIZE && (
+              <div className="um-mgmt-pagination">
+                <span className="um-mgmt-page-label">
+                  displaying page <strong>{currentPage}</strong>
+                </span>
+                <div className="um-mgmt-page-controls">
+                  <button type="button" disabled={currentPage <= 1} onClick={() => setPage(1)}>
+                    First
+                  </button>
+                  <button
+                    type="button"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    ‹
+                  </button>
+                  {pageNumbers.map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      className={num === currentPage ? 'active' : ''}
+                      onClick={() => setPage(num)}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  >
+                    ›
+                  </button>
+                  <button
+                    type="button"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage(totalPages)}
+                  >
+                    Last
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
-      <div className="search-bar">
-        <input
-          type="text"
-          placeholder="Search by name or code..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
-      {loading ? (
-        <div className="loading">Loading...</div>
-      ) : (
-        <div className="um-table-container">
-          <table className="um-table um-table-roles">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Code</th>
-                <th className="col-description">Description</th>
-                <th className="col-permissions">Permissions</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {roles.length === 0 ? (
-                <tr><td colSpan="5" className="no-data">No roles found</td></tr>
-              ) : (
-                roles.map((r) => (
-                  <tr
-                    key={r._id}
-                    className="clickable-row"
-                    onClick={() => openViewRole(r)}
-                    title="Click to view role details"
-                  >
-                    <td>
-                      <span className="um-cell-ellipsis" title={r.name || ''}>
-                        {truncateText(r.name, 14)}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="um-cell-ellipsis" title={r.code || ''}>
-                        {getShortRoleLabel(r, 8)}
-                      </span>
-                    </td>
-                    <td className="col-description">
-                      <span className="um-cell-ellipsis" title={r.description || ''}>
-                        {truncateText(r.description, 28)}
-                      </span>
-                    </td>
-                    <td className="col-permissions">
-                      <span className="um-cell-ellipsis" title={getRolePermissions(r).map((p) => p.name).join(', ')}>
-                        {permissionSummary(r)}
-                      </span>
-                    </td>
-                    <td onClick={stopRowClick}>
-                      {hasPermission('roles.update') && (
-                        <button type="button" className="btn-edit" onClick={() => handleEdit(r)}>Edit</button>
-                      )}
-                      {hasPermission('roles.delete') && (
-                        <button type="button" className="btn-delete" onClick={() => handleDelete(r._id)}>Delete</button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+
       {viewingRole && (
         <DetailModal
           title={viewingRole.name}
@@ -256,9 +348,16 @@ function Roles() {
             { label: 'Code', value: viewingRole.code },
             { label: 'Description', value: viewingRole.description || '—', full: true },
           ]}
-          onClose={closeViewRole}
-          onEdit={hasPermission('roles.update') ? handleViewEdit : undefined}
-          onDelete={hasPermission('roles.delete') ? handleViewDelete : undefined}
+          onClose={() => setViewingRole(null)}
+          onEdit={hasPermission('roles.update') ? () => handleEdit(viewingRole) : undefined}
+          onDelete={
+            hasPermission('roles.delete')
+              ? () => {
+                  handleDelete(viewingRole._id);
+                  setViewingRole(null);
+                }
+              : undefined
+          }
         >
           <div className="detail-view-section">
             <h3>Permissions ({getRolePermissions(viewingRole).length})</h3>
@@ -277,10 +376,11 @@ function Roles() {
           </div>
         </DetailModal>
       )}
+
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content modal-content-roles" onClick={(e) => e.stopPropagation()}>
-            <h2>{editingRole ? 'Edit Role' : 'Add Role'}</h2>
+        <div className="um-mgmt-modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="um-mgmt-modal wide" onClick={(e) => e.stopPropagation()}>
+            <h2>{editingRole ? 'Modify Role' : 'Add Role'}</h2>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Name *</label>
@@ -288,11 +388,23 @@ function Roles() {
               </div>
               <div className="form-group">
                 <label>Code *</label>
-                <input type="text" name="code" value={formData.code} onChange={handleInputChange} required placeholder="e.g. manager" />
+                <input
+                  type="text"
+                  name="code"
+                  value={formData.code}
+                  onChange={handleInputChange}
+                  required
+                  placeholder="e.g. manager"
+                />
               </div>
               <div className="form-group">
                 <label>Description</label>
-                <textarea name="description" value={formData.description} onChange={handleInputChange} rows="2" />
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  rows="2"
+                />
               </div>
               <div className="form-group">
                 <label>Permissions</label>
@@ -304,15 +416,19 @@ function Roles() {
                         checked={(formData.permissions || []).includes(p._id)}
                         onChange={() => handlePermissionToggle(p._id)}
                       />
-                      {getShortRoleLabel(p, 10)}
+                      {getShortRoleLabel(p, 18)}
                     </label>
                   ))}
                   {permissions.length === 0 && <span>No permissions defined</span>}
                 </div>
               </div>
               <div className="form-actions">
-                <button type="button" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">{editingRole ? 'Update' : 'Create'}</button>
+                <button type="button" onClick={() => setShowModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="um-mgmt-modal-submit">
+                  {editingRole ? 'Update' : 'Create'}
+                </button>
               </div>
             </form>
           </div>

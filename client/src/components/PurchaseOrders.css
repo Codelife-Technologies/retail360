@@ -10,7 +10,9 @@
 .purchase-orders-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
   margin-bottom: 1.5rem;
 }
 
@@ -211,6 +213,58 @@
 .po-items-header-extended,
 .po-item-row-extended {
   grid-template-columns: 2fr 0.8fr 0.6fr 0.5fr 0.8fr 0.5fr 0.5fr 0.9fr auto;
+}
+
+.po-items-header-extended.has-vendor-col,
+.items-list.has-vendor-col .po-item-row-extended {
+  grid-template-columns: 1.6fr 0.7fr 1.2fr 0.5fr 0.45fr 0.7fr 0.45fr 0.45fr 0.8fr auto;
+}
+
+.po-item-vendor-cell select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+.po-vendor-bulk-panel {
+  margin-bottom: 0.85rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #e9d5ff;
+  border-radius: 8px;
+  background: #faf5ff;
+}
+
+.po-vendor-bulk-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.po-vendor-bulk-row label {
+  font-size: 0.975rem;
+  font-weight: 600;
+  color: #4c1d95;
+}
+
+.po-vendor-bulk-row select {
+  min-width: 200px;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.po-vendor-bulk-hint {
+  margin: 0.55rem 0 0;
+  font-size: 0.9rem;
+  color: #6b7280;
+  line-height: 1.4;
 }
 
 .po-detail-items-table {

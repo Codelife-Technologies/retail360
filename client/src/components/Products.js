@@ -1121,23 +1121,19 @@ function Products() {
               ))}
             </select>
           </div>
-          <div className="filter-group filter-apply">
-            <label>&nbsp;</label>
-            <button type="button" className="btn-primary" onClick={handleApplyFilters}>
-              Apply
-            </button>
-          </div>
-          <div className="filter-group filter-clear">
-            <label>&nbsp;</label>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={handleClearFilters}
-              disabled={activeFilterCount === 0 && !filters.search && !filters.category && !filters.subCategory}
-            >
-              Clear
-            </button>
-          </div>
+        </div>
+        <div className="products-filter-actions">
+          <button type="button" className="btn-primary" onClick={handleApplyFilters}>
+            Apply
+          </button>
+          <button
+            type="button"
+            className="btn-clear-filters"
+            onClick={handleClearFilters}
+            disabled={activeFilterCount === 0 && !filters.search && !filters.category && !filters.subCategory}
+          >
+            Clear
+          </button>
         </div>
       </div>
 

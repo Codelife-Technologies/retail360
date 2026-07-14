@@ -93,13 +93,13 @@
 .hr-kpi-body h3 {
   margin: 0;
   font-size: 1.75rem;
-  color: var(--text, #333);
+  color: #000;
   font-weight: 700;
 }
 
 .hr-kpi-body p {
   margin: 0.2rem 0 0;
-  color: var(--text-muted, #666);
+  color: #000;
   font-size: 0.975rem;
 }
 

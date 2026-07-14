@@ -40,10 +40,20 @@ import {
   resolveEmployeeDashboardSubTab,
 } from './employeeDashboard/employeeDashboardTabs';
 import PageZoomShell from './components/PageZoomShell';
+import BirthdayCelebration from './components/BirthdayCelebration';
 import './App.css';
 
 function App() {
-  const { user, login, logout, isAuthenticated, loading, hasPermission } = useAuth();
+  const {
+    user,
+    login,
+    logout,
+    isAuthenticated,
+    loading,
+    hasPermission,
+    birthdayGreeting,
+    dismissBirthdayGreeting,
+  } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [openNavDropdown, setOpenNavDropdown] = useState(null);
 
@@ -251,7 +261,8 @@ function App() {
       <div className="app-header-shell">
       <header className="app-topbar">
         <div className="app-topbar-brand">
-          <h1>RetailOS</h1>
+          <h1>RetailOSA</h1>
+          <p className="app-brand-powered-by">Powered by CodeLife Technologies Pvt. Ltd.</p>
         </div>
         <div className="app-topbar-user">
           <span>{user?.username || user?.email}</span>
@@ -491,6 +502,12 @@ function App() {
         <PageZoomShell contentKey={activeTab}>{renderContent()}</PageZoomShell>
       </main>
       <EmployeeChatNotifications />
+      {birthdayGreeting && (
+        <BirthdayCelebration
+          greeting={birthdayGreeting}
+          onClose={dismissBirthdayGreeting}
+        />
+      )}
     </div>
   );
 }

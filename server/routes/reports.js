@@ -1120,7 +1120,8 @@ const SALES_ORDER_EXPORT_HEADERS = [
   { key: 'amazonOrderId', label: 'Amazon Order ID' },
   { key: 'saleDate', label: 'Sale Date' },
   { key: 'channel', label: 'Channel' },
-  { key: 'items', label: 'Items' },
+  { key: 'items', label: 'Line Items' },
+  { key: 'qtyOrdered', label: 'Qty Ordered' },
   { key: 'subtotal', label: 'Subtotal' },
   { key: 'total', label: 'Total' },
   { key: 'paymentStatus', label: 'Payment Status' },
@@ -1166,12 +1167,17 @@ function mapSalesToExportRows(sales) {
     const skus = (sale.items || [])
       .map((item) => item.product?.sku || item.sku || '')
       .filter(Boolean);
+    const qtyOrdered = (sale.items || []).reduce(
+      (sum, item) => sum + (item.quantity || 0),
+      0
+    );
     return {
       productSkus: [...new Set(skus)].join(', '),
       amazonOrderId: sale.amazonOrderId || '',
       saleDate: sale.salesDate ? new Date(sale.salesDate).toISOString().slice(0, 10) : '',
       channel: sale.salesChannel?.name || '',
       items: sale.items?.length || 0,
+      qtyOrdered,
       subtotal: sale.subtotal ?? '',
       total: sale.total ?? '',
       paymentStatus: sale.paymentStatus || '',

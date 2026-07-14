@@ -554,6 +554,9 @@ function SalesSkuReport({ onClose }) {
     return [...new Set(skus)].join(', ') || '—';
   };
 
+  const getSaleQuantityOrdered = (sale) =>
+    (sale.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0);
+
   const openSaleDetail = async (sale) => {
     setViewingSale(sale);
     setViewingSaleLoading(true);
@@ -630,29 +633,34 @@ function SalesSkuReport({ onClose }) {
             <table className="sales-sku-table sales-detail-table">
               <thead>
                 <tr>
-                  <th>Product SKU</th>
-                  <th>Amazon Order ID</th>
-                  <th>Sale Date</th>
-                  <th>Channel</th>
-                  <th>Items</th>
-                  <th>Subtotal</th>
+                  <th className="sales-by-sale-col-sku">Product SKU</th>
+                  <th className="sales-by-sale-col-order">Amazon Order ID</th>
+                  <th className="sales-by-sale-col-date">Sale Date</th>
+                  <th className="sales-by-sale-col-channel">Channel</th>
+                  <th className="sales-by-sale-col-num">Line Items</th>
+                  <th className="sales-by-sale-col-num">Qty Ordered</th>
+                  <th className="sales-by-sale-col-money">Subtotal</th>
                 </tr>
               </thead>
               <tbody>
                 {orderRows.map((sale) => {
                   const itemCount = sale.items?.length || 0;
+                  const qtyOrdered = getSaleQuantityOrdered(sale);
                   return (
                     <tr
                       key={sale._id}
                       className="sales-detail-row"
                       onClick={() => openSaleDetail(sale)}
                     >
-                      <td className="mono">{getSaleProductSkus(sale)}</td>
-                      <td className="mono">{sale.amazonOrderId || '—'}</td>
-                      <td>{new Date(sale.salesDate).toLocaleDateString('en-IN')}</td>
-                      <td>{sale.salesChannel?.name || '—'}</td>
-                      <td className="num">{itemCount}</td>
-                      <td className="num">{formatAed(sale.subtotal)}</td>
+                      <td className="mono sales-by-sale-col-sku">{getSaleProductSkus(sale)}</td>
+                      <td className="mono sales-by-sale-col-order">{sale.amazonOrderId || '—'}</td>
+                      <td className="sales-by-sale-col-date">
+                        {new Date(sale.salesDate).toLocaleDateString('en-IN')}
+                      </td>
+                      <td className="sales-by-sale-col-channel">{sale.salesChannel?.name || '—'}</td>
+                      <td className="num sales-by-sale-col-num">{itemCount}</td>
+                      <td className="num sales-by-sale-col-num">{qtyOrdered}</td>
+                      <td className="num sales-by-sale-col-money">{formatAed(sale.subtotal)}</td>
                     </tr>
                   );
                 })}

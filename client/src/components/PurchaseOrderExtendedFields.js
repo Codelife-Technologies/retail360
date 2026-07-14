@@ -26,7 +26,9 @@ function PurchaseOrderExtendedFields({
           <p className="po-master-hint">Pre-filled from Company Master. Edit here only if this PO needs different buyer details.</p>
         )}
         {autoVendorSplit && (
-          <p className="po-master-hint">Pre-filled from Company Master for all vendor POs created on save.</p>
+          <p className="po-master-hint">
+            Pre-filled from Company Master for all vendor POs created on save.
+          </p>
         )}
         <div className="form-row">
           <div className="form-group">
@@ -73,8 +75,8 @@ function PurchaseOrderExtendedFields({
             <div className="form-group full-width">
               <label>Supplier</label>
               <p className="po-auto-vendor-hint">
-                Suppliers are assigned automatically from each product&apos;s designated supplier.
-                One purchase order will be created per vendor when you save.
+                Choose a vendor for each product, or apply one vendor to all items. Products with the
+                same vendor are grouped into one purchase order when you save.
               </p>
             </div>
           ) : (

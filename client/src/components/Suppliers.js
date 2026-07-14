@@ -215,7 +215,7 @@ function Suppliers() {
             Supplier details and payment terms auto-fill when you select a vendor on purchase orders.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="page-header-actions">
           <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
             ⬆ Upload Excel
           </button>
@@ -248,16 +248,13 @@ function Suppliers() {
                 <th>Contact Person</th>
                 <th>Linked Products</th>
                 <th>GST No.</th>
-                <th>Bank Detail</th>
-                <th>IFSC Code</th>
-                <th>Bank Pin Code</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {suppliers.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="no-data">
+                  <td colSpan="8" className="no-data">
                     No suppliers found
                   </td>
                 </tr>
@@ -306,11 +303,6 @@ function Suppliers() {
                       })()}
                     </td>
                     <td className="supplier-id-cell">{supplier.gstin || '—'}</td>
-                    <td className="supplier-bank-cell" title={supplier.bankDetails || ''}>
-                      {supplier.bankDetails || '—'}
-                    </td>
-                    <td className="supplier-id-cell">{supplier.ifscCode || '—'}</td>
-                    <td>{supplier.bankPinCode || '—'}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <button
                         className="btn-edit"

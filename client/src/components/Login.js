@@ -36,7 +36,8 @@ function Login({ onLogin }) {
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1>RetailOS</h1>
+        <h1>RetailOSA</h1>
+        <p className="login-brand-powered-by">Powered by CodeLife Technologies Pvt. Ltd.</p>
         <h2>Sign In</h2>
         <form onSubmit={handleSubmit}>
           <div className="form-group">

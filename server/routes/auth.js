@@ -13,6 +13,7 @@ const {
   ensureTodayAttendanceSession,
 } = require('../utils/attendanceSession');
 const { syncAttendanceRecordOnLogout } = require('../hr/utils/attendanceAccess');
+const { getBirthdayGreetingForUser } = require('../utils/birthdayGreeting');
 
 // POST /login - no auth required
 router.post('/login', async (req, res) => {
@@ -38,7 +39,12 @@ router.post('/login', async (req, res) => {
     );
     const permissions = await getEffectivePermissions(user._id);
     const { password: _, ...safeUser } = user.toObject();
-    res.json({ token, user: { ...safeUser, permissions: Array.from(permissions) } });
+    const birthdayGreeting = await getBirthdayGreetingForUser(user);
+    res.json({
+      token,
+      user: { ...safeUser, permissions: Array.from(permissions) },
+      birthdayGreeting: birthdayGreeting || null,
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

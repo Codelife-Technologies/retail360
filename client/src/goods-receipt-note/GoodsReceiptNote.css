@@ -44,6 +44,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
@@ -62,6 +63,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  flex-shrink: 0;
+  align-items: center;
 }
 
 .sticky-header {
@@ -108,7 +111,7 @@
 .grn-kpi-label {
   display: block;
   font-size: 0.85rem;
-  color: #6b7280;
+  color: #000;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -464,14 +467,6 @@
   background: #6B3894;
   color: white;
   border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.btn-secondary {
-  background: white;
-  border: 1px solid #ddd;
   padding: 0.5rem 1rem;
   border-radius: 6px;
   cursor: pointer;

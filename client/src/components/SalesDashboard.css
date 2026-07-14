@@ -339,7 +339,7 @@
 .sales-dash-kpi-label {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #64748b;
+  color: #000;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -353,7 +353,7 @@
 
 .sales-dash-kpi-sub {
   font-size: 0.85rem;
-  color: #64748b;
+  color: #000;
 }
 
 .sales-dash-change {

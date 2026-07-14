@@ -731,6 +731,72 @@
   background: #f3f4f6;
 }
 
+.sales-sku-table.sales-detail-table {
+  table-layout: fixed;
+  min-width: 920px;
+}
+
+.sales-sku-table.sales-detail-table th,
+.sales-sku-table.sales-detail-table td {
+  padding: 0.7rem 1rem;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+.sales-by-sale-col-sku {
+  width: 22%;
+  min-width: 9rem;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
+  padding-right: 1.1rem;
+}
+
+.sales-by-sale-col-order {
+  width: 20%;
+  min-width: 9rem;
+  white-space: normal;
+  word-break: break-all;
+  line-height: 1.35;
+  padding-right: 1rem;
+}
+
+.sales-by-sale-col-date {
+  width: 11%;
+  min-width: 6.5rem;
+  white-space: nowrap;
+}
+
+.sales-by-sale-col-channel {
+  width: 14%;
+  min-width: 7rem;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.sales-by-sale-col-num {
+  width: 9%;
+  min-width: 5.5rem;
+  text-align: right;
+  white-space: nowrap;
+  padding-left: 0.85rem;
+  padding-right: 1rem;
+}
+
+.sales-by-sale-col-money {
+  width: 12%;
+  min-width: 6.5rem;
+  text-align: right;
+  white-space: nowrap;
+  padding-left: 0.85rem;
+  padding-right: 1.1rem;
+}
+
+.sales-sku-table.sales-detail-table th.sales-by-sale-col-num,
+.sales-sku-table.sales-detail-table th.sales-by-sale-col-money {
+  text-align: right;
+}
+
 .sales-sku-report .btn-delete,
 .sale-details-modal .btn-delete {
   padding: 0.4rem 0.75rem;

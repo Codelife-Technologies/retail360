@@ -11,6 +11,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
@@ -475,10 +476,28 @@
   background: #fde68a;
 }
 
-.btn-secondary {
-  background: white;
-  border: 1px solid #ddd;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  cursor: pointer;
+.pr-linked-pos-section {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.pr-linked-pos-toggle {
+  margin-bottom: 0.65rem;
+}
+
+.pr-linked-pos-list {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  list-style: none;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.pr-linked-pos-list li {
+  padding: 0.35rem 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+  color: #111827;
 }

@@ -545,8 +545,8 @@ function Prices() {
           <table className="prices-table">
             <thead>
               <tr>
-                <th>Product</th>
                 <th>Parent SKU</th>
+                <th>Product</th>
                 <th>Vendor</th>
                 <th>Child SKU</th>
                 <th>Vendor Price</th>
@@ -580,12 +580,6 @@ function Prices() {
                     >
                       {vendorIndex === 0 && (
                         <>
-                          <td rowSpan={vendorCount} className="vendor-price-product-cell-wrap">
-                            <VendorPriceProductCell
-                              product={group.product}
-                              vendorCount={vendorCount}
-                            />
-                          </td>
                           <td rowSpan={vendorCount} className="vendor-price-sku-cell">
                             <span
                               className={`vendor-price-sku-value${
@@ -594,6 +588,12 @@ function Prices() {
                             >
                               {getParentSku(group.product) || '—'}
                             </span>
+                          </td>
+                          <td rowSpan={vendorCount} className="vendor-price-product-cell-wrap">
+                            <VendorPriceProductCell
+                              product={group.product}
+                              vendorCount={vendorCount}
+                            />
                           </td>
                         </>
                       )}

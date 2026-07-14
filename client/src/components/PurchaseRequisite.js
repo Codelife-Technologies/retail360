@@ -45,6 +45,7 @@ function PurchaseRequisite({ onNavigate }) {
   const [currentUser, setCurrentUserState] = useState(() => getCurrentUser());
   const [poGeneratedModal, setPoGeneratedModal] = useState(null);
   const [assigningVendorForPo, setAssigningVendorForPo] = useState(null);
+  const [showLinkedPos, setShowLinkedPos] = useState(false);
 
   useEffect(() => {
     fetchRequisites();
@@ -56,6 +57,10 @@ function PurchaseRequisite({ onNavigate }) {
     const timer = setTimeout(fetchRequisites, 300);
     return () => clearTimeout(timer);
   }, [searchTerm, statusFilter]);
+
+  useEffect(() => {
+    setShowLinkedPos(false);
+  }, [viewingPR?._id]);
 
   const fetchRequisites = async () => {
     try {
@@ -299,7 +304,6 @@ function PurchaseRequisite({ onNavigate }) {
     { label: 'Line Items', value: pr.items?.length || 0 },
     { label: 'Vendors', value: uniqueVendors(pr).join(', ') || '—' },
     { label: 'Total Requested Qty', value: totalRequestedQty(pr) },
-    { label: 'Linked PO', value: pr.purchaseOrderNumber || '—' },
     { label: 'Approved By', value: pr.approvedBy },
     {
       label: 'Approved At',
@@ -312,6 +316,14 @@ function PurchaseRequisite({ onNavigate }) {
     },
   ];
 
+  const getLinkedPoNumbers = (pr) => {
+    if (!pr?.purchaseOrderNumber) return [];
+    return String(pr.purchaseOrderNumber)
+      .split(',')
+      .map((po) => po.trim())
+      .filter(Boolean);
+  };
+
   return (
     <div className="purchase-requisite-container">
       <div className="pr-header">
@@ -321,9 +333,11 @@ function PurchaseRequisite({ onNavigate }) {
             Internal stock requests — on approval, purchase orders are created automatically per vendor.
           </p>
         </div>
-        <button className="btn-secondary" onClick={fetchRequisites} disabled={loading}>
-          {loading ? 'Refreshing…' : '🔄 Refresh'}
-        </button>
+        <div className="page-header-actions">
+          <button className="btn-secondary" onClick={fetchRequisites} disabled={loading}>
+            {loading ? 'Refreshing…' : '🔄 Refresh'}
+          </button>
+        </div>
       </div>
 
       <div className="pr-user-bar">
@@ -376,7 +390,6 @@ function PurchaseRequisite({ onNavigate }) {
                 <th>Items</th>
                 <th>Vendors</th>
                 <th>Total Qty</th>
-                <th>Linked PO</th>
                 <th>Created</th>
                 <th>Actions</th>
               </tr>
@@ -384,7 +397,7 @@ function PurchaseRequisite({ onNavigate }) {
             <tbody>
               {requisites.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="pr-no-data">
+                  <td colSpan="8" className="pr-no-data">
                     No purchase requisitions yet. Create one from the Replenish Report when stock needs reordering.
                   </td>
                 </tr>
@@ -412,7 +425,6 @@ function PurchaseRequisite({ onNavigate }) {
                       {vendors.length > 0 ? vendors.join(', ') : '—'}
                     </td>
                     <td className="text-center font-semibold">{totalRequestedQty(pr)}</td>
-                    <td className="pr-number-cell">{pr.purchaseOrderNumber || '—'}</td>
                     <td>{pr.createdAt ? new Date(pr.createdAt).toLocaleDateString() : '—'}</td>
                     <td onClick={(e) => e.stopPropagation()} className="pr-actions-cell">
                       {isPendingPR(pr) && (
@@ -455,7 +467,10 @@ function PurchaseRequisite({ onNavigate }) {
         <DetailModal
           title={`Purchase Requisition ${viewingPR.prNumber}`}
           fields={detailFields(viewingPR)}
-          onClose={() => setViewingPR(null)}
+          onClose={() => {
+            setViewingPR(null);
+            setShowLinkedPos(false);
+          }}
           onEdit={
             isEditablePR(viewingPR)
               ? () => {
@@ -499,6 +514,24 @@ function PurchaseRequisite({ onNavigate }) {
                 ))}
               </tbody>
             </table>
+            {getLinkedPoNumbers(viewingPR).length > 0 && (
+              <div className="pr-linked-pos-section">
+                <button
+                  type="button"
+                  className="btn-secondary pr-linked-pos-toggle"
+                  onClick={() => setShowLinkedPos((prev) => !prev)}
+                >
+                  {showLinkedPos ? 'Hide linked POs' : `Show linked POs (${getLinkedPoNumbers(viewingPR).length})`}
+                </button>
+                {showLinkedPos && (
+                  <ul className="pr-linked-pos-list">
+                    {getLinkedPoNumbers(viewingPR).map((poNumber) => (
+                      <li key={poNumber}>{poNumber}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {isEditablePR(viewingPR) && (
               <div className="pr-detail-actions">
                 {isPendingPR(viewingPR) && (

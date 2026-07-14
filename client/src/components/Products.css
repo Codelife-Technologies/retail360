@@ -98,7 +98,8 @@
   background: #f3e8ff;
 }
 
-.btn-secondary {
+.products-modal .btn-secondary,
+.modal-overlay .btn-secondary {
   padding: 10px 20px;
   background-color: #6c757d;
   color: white;
@@ -109,7 +110,8 @@
   transition: background-color 0.2s;
 }
 
-.btn-secondary:hover {
+.products-modal .btn-secondary:hover,
+.modal-overlay .btn-secondary:hover {
   background-color: #5a6268;
 }
 
@@ -178,16 +180,24 @@
   grid-column: span 2;
 }
 
-.products-filters-grid .filter-apply,
-.products-filters-grid .filter-clear {
+.products-filter-actions {
   display: flex;
-  align-items: flex-end;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
 }
 
-.products-filters-grid .filter-apply .btn-primary,
-.products-filters-grid .filter-clear .btn-secondary {
-  width: 100%;
+.products-filter-actions .btn-primary {
+  min-width: 6.5rem;
   padding: 0.55rem 1rem;
+}
+
+.products-filter-actions .btn-clear-filters {
+  width: auto;
+  min-width: 6.5rem;
 }
 
 @media (max-width: 768px) {

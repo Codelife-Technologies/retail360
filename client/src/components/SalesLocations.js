@@ -169,7 +169,7 @@ function SalesLocations() {
     <div className="sales-locations-container">
       <div className="sales-locations-header">
         <h1>Sales Locations</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="page-header-actions">
           <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
             ⬆ Upload Excel
           </button>

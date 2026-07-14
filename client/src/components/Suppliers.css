@@ -10,6 +10,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
   margin-bottom: 1.5rem;
   gap: 1rem;
 }
@@ -60,7 +61,7 @@
 
 .suppliers-table {
   width: 100%;
-  min-width: 1480px;
+  min-width: 980px;
   border-collapse: collapse;
 }
 

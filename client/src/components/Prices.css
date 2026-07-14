@@ -14,7 +14,9 @@
 .prices-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
   margin-bottom: 1.5rem;
   flex-shrink: 0;
   position: sticky;
@@ -447,15 +449,6 @@
 
 .recent-acq-empty {
   color: #94a3b8;
-}
-
-.btn-secondary {
-  padding: 0.75rem 1.25rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: white;
-  cursor: pointer;
-  font-weight: 600;
 }
 
 .view-selector {

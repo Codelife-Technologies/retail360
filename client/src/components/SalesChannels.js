@@ -207,7 +207,7 @@ function SalesChannels() {
     <div className="sales-channels-container">
       <div className="sales-channels-header">
         <h1>Sales Channels</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="page-header-actions">
           <button className="btn-secondary" onClick={() => setShowExcelUpload(true)}>
             ⬆ Upload Excel
           </button>

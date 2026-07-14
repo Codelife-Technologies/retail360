@@ -472,7 +472,7 @@
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
-  color: #64748b;
+  color: #000;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -486,7 +486,7 @@
 
 .stat-card small {
   font-size: 0.9rem;
-  color: #94a3b8;
+  color: #000;
 }
 
 /* Alert styles for specific KPI cards */

@@ -73,6 +73,16 @@
   font-weight: 700;
   color: #ffffff;
   letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.app-brand-powered-by {
+  margin: 0.15rem 0 0;
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.72);
+  letter-spacing: 0.02em;
+  line-height: 1.3;
 }
 
 .app-topbar-user {

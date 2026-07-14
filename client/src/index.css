@@ -114,6 +114,73 @@ code {
     monospace;
 }
 
+/* Shared secondary buttons — visible on list page headers and toolbars */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid #6B3894;
+  border-radius: 8px;
+  font-size: 0.975rem;
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+  background: #ffffff;
+  color: #6B3894;
+  white-space: nowrap;
+  box-sizing: border-box;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #f3e8ff;
+  color: #5a2d7a;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+  color: #6B3894;
+  background: #fafafa;
+}
+
+.page-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.btn-clear-filters {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 5.5rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  font-size: 0.975rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: #ffffff;
+  color: #111827;
+  box-sizing: border-box;
+}
+
+.btn-clear-filters:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.btn-clear-filters:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ===== Dark theme overrides ===== */
 /* App surfaces */
 [data-theme="dark"] .App,

@@ -14,6 +14,7 @@ const {
   withComputedWorkingHours,
 } = require('../utils/attendanceAccess');
 const { calcWorkingHoursFromTimes, getDateKey, pickEarlierTime, pickLaterTime } = require('../../utils/attendanceSession');
+const { zonedDateTimeToUtc, APP_TIMEZONE } = require('../../utils/appTimezone');
 
 function enrichAttendanceRecord(record) {
   if (!record) return record;
@@ -35,8 +36,12 @@ function parseDateRange(date, month, year) {
   if (month && year) {
     const m = parseInt(month, 10);
     const y = parseInt(year, 10);
-    const start = new Date(y, m - 1, 1);
-    const end = new Date(y, m, 0, 23, 59, 59, 999);
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const startKey = `${y}-${String(m).padStart(2, '0')}-01`;
+    const endKey = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const start = zonedDateTimeToUtc(startKey, '00:00:00');
+    const end = zonedDateTimeToUtc(endKey, '23:59:59');
+    end.setMilliseconds(999);
     return { $gte: start, $lte: end };
   }
   const today = startOfDay(new Date());
@@ -82,9 +87,9 @@ router.get('/trend', async (req, res) => {
   try {
     const scope = await resolveAttendanceScope(req);
     const { month, year } = req.query;
-    const m = parseInt(month, 10) || new Date().getMonth() + 1;
-    const y = parseInt(year, 10) || new Date().getFullYear();
-    const daysInMonth = new Date(y, m, 0).getDate();
+    const m = parseInt(month, 10) || Number(getDateKey(new Date()).slice(5, 7));
+    const y = parseInt(year, 10) || Number(getDateKey(new Date()).slice(0, 4));
+    const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
 
     if (!scope.canManageAll && !scope.employeeId) {
       return res.json({ trend: [] });
@@ -92,9 +97,9 @@ router.get('/trend', async (req, res) => {
 
     const trend = [];
     for (let d = 1; d <= daysInMonth; d += 1) {
-      const dateObj = new Date(y, m - 1, d);
-      const dayStart = startOfDay(dateObj);
-      const dayEnd = endOfDay(dateObj);
+      const dateKey = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayStart = zonedDateTimeToUtc(dateKey, '00:00:00');
+      const dayEnd = endOfDay(dateKey);
       const match = { date: { $gte: dayStart, $lte: dayEnd } };
       applyEmployeeScope(match, scope, req.query.employee);
 
@@ -105,8 +110,12 @@ router.get('/trend', async (req, res) => {
       ]);
 
       trend.push({
-        date: dayStart.toISOString().slice(0, 10),
-        label: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        date: dateKey,
+        label: dayStart.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          timeZone: APP_TIMEZONE,
+        }),
         present,
         absent,
         leave,
