@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAuth } from './context/AuthContext';
 import Dashboard from './components/Dashboard';
 import MIS from './components/MIS';
@@ -55,7 +55,6 @@ function App() {
     dismissBirthdayGreeting,
   } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [openNavDropdown, setOpenNavDropdown] = useState(null);
 
   const showMasterNav = canViewMaster(hasPermission);
   const showInventoryNav = !showMasterNav && filterTabGroups(hasPermission, user, INVENTORY_GROUPS).length > 0;
@@ -87,28 +86,72 @@ function App() {
   const activeUserManagementSubTab = resolveUserManagementSubTab(activeTab);
   const activeEmployeeDashboardSubTab = resolveEmployeeDashboardSubTab(activeTab);
   const activeInventorySubTab = resolveInventorySubTab(activeTab);
+  const visibleInventoryTabs = visibleInventoryGroups.flatMap((group) => group.tabs);
+  const showEmployeeDashboardNav = !hasPermission('admin.all');
 
-  useEffect(() => {
-    if (!openNavDropdown) return undefined;
-
-    const handlePointerDown = (event) => {
-      if (!event.target.closest('.nav-dropdown')) {
-        setOpenNavDropdown(null);
-      }
+  /** Secondary sub-header: only when an active folder has multiple pages. */
+  let moduleSubNav = null;
+  if (isMasterActive && showMasterNav) {
+    const items = MASTER_GROUPS.flatMap((group) =>
+      group.tabs.map((tab) => ({ ...tab, group: group.label }))
+    );
+    if (items.length > 1) {
+      moduleSubNav = {
+        label: 'Master',
+        items,
+        activeId: activeMasterSubTab,
+        prefix: 'master',
+        grouped: true,
+      };
+    }
+  } else if (isInventoryActive && showInventoryNav) {
+    if (visibleInventoryTabs.length > 1) {
+      moduleSubNav = {
+        label: 'Inventory',
+        items: visibleInventoryTabs,
+        activeId: activeInventorySubTab,
+        prefix: 'inventory',
+      };
+    }
+  } else if (isProcurementActive && visibleProcurementTabs.length > 1) {
+    moduleSubNav = {
+      label: 'Procurement',
+      items: visibleProcurementTabs,
+      activeId: activeProcurementSubTab,
+      prefix: 'procurement',
     };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [openNavDropdown]);
-
-  const toggleNavDropdown = useCallback((id) => {
-    setOpenNavDropdown((current) => (current === id ? null : id));
-  }, []);
+  } else if (isSalesActive && visibleSalesTabs.length > 1) {
+    moduleSubNav = {
+      label: 'Shipments',
+      items: visibleSalesTabs,
+      activeId: activeSalesSubTab,
+      prefix: 'sales-module',
+    };
+  } else if (isHrActive && visibleHrTabs.length > 1) {
+    moduleSubNav = {
+      label: 'HR',
+      items: visibleHrTabs,
+      activeId: activeHrSubTab,
+      prefix: 'hr',
+    };
+  } else if (isEmployeeDashboardActive && showEmployeeDashboardNav && EMPLOYEE_DASHBOARD_TABS.length > 1) {
+    moduleSubNav = {
+      label: 'Employee Dashboard',
+      items: EMPLOYEE_DASHBOARD_TABS,
+      activeId: activeEmployeeDashboardSubTab,
+      prefix: 'employee-dashboard',
+    };
+  } else if (isUserManagementActive && visibleUserManagementTabs.length > 1) {
+    moduleSubNav = {
+      label: 'User Management',
+      items: visibleUserManagementTabs,
+      activeId: activeUserManagementSubTab,
+      prefix: 'user-management',
+    };
+  }
 
   const handleNavigate = useCallback(
     (tab) => {
-      setOpenNavDropdown(null);
-
       if (tab.startsWith('inventory:')) {
         setActiveTab(tab);
         return;
@@ -276,12 +319,14 @@ function App() {
           {canViewReports && (
             <>
               <button
+                type="button"
                 className={activeTab === 'dashboard' ? 'nav-item active' : 'nav-item'}
                 onClick={() => handleNavigate('dashboard')}
               >
                 📊 Dashboard
               </button>
               <button
+                type="button"
                 className={activeTab === 'mis' ? 'nav-item active' : 'nav-item'}
                 onClick={() => handleNavigate('mis')}
               >
@@ -290,212 +335,105 @@ function App() {
             </>
           )}
           {showMasterNav && (
-          <div className="nav-dropdown">
             <button
               type="button"
-              className={`nav-item nav-dropdown-toggle${isMasterActive ? ' active' : ''}`}
-              onClick={() => toggleNavDropdown('master')}
-              aria-expanded={openNavDropdown === 'master'}
+              className={`nav-item${isMasterActive ? ' active' : ''}`}
+              onClick={() => handleNavigate('master')}
             >
-              <span>🗂️ Master</span>
-              <span className={`nav-chevron${openNavDropdown === 'master' ? ' open' : ''}`}>▾</span>
+              🗂️ Master
             </button>
-            {openNavDropdown === 'master' && (
-              <div className="nav-dropdown-menu">
-                {MASTER_GROUPS.map((group) => (
-                  <div key={group.label} className="nav-subgroup">
-                    <span className="nav-subgroup-label">{group.label}</span>
-                    {group.tabs.map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        className={`nav-subitem${activeMasterSubTab === tab.id && isMasterActive ? ' active' : ''}`}
-                        onClick={() => handleNavigate(`master:${tab.id}`)}
-                      >
-                        <span>{tab.icon}</span>
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
           )}
           {showInventoryNav && (
-          <div className="nav-dropdown">
             <button
               type="button"
-              className={`nav-item nav-dropdown-toggle${isInventoryActive ? ' active' : ''}`}
-              onClick={() => toggleNavDropdown('inventory')}
-              aria-expanded={openNavDropdown === 'inventory'}
+              className={`nav-item${isInventoryActive ? ' active' : ''}`}
+              onClick={() => handleNavigate('inventory')}
             >
-              <span>📦 Inventory</span>
-              <span className={`nav-chevron${openNavDropdown === 'inventory' ? ' open' : ''}`}>▾</span>
+              📦 Inventory
             </button>
-            {openNavDropdown === 'inventory' && (
-              <div className="nav-dropdown-menu">
-                {visibleInventoryGroups.map((group) => (
-                  <div key={group.label} className="nav-subgroup">
-                    <span className="nav-subgroup-label">{group.label}</span>
-                    {group.tabs.map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        className={`nav-subitem${activeInventorySubTab === tab.id && isInventoryActive ? ' active' : ''}`}
-                        onClick={() => handleNavigate(`inventory:${tab.id}`)}
-                      >
-                        <span>{tab.icon}</span>
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
           )}
           {visibleProcurementTabs.length > 0 && (
-          <div className="nav-dropdown">
             <button
               type="button"
-              className={`nav-item nav-dropdown-toggle${isProcurementActive ? ' active' : ''}`}
-              onClick={() => toggleNavDropdown('procurement')}
-              aria-expanded={openNavDropdown === 'procurement'}
+              className={`nav-item${isProcurementActive ? ' active' : ''}`}
+              onClick={() => handleNavigate('procurement')}
             >
-              <span>📑 Procurement</span>
-              <span className={`nav-chevron${openNavDropdown === 'procurement' ? ' open' : ''}`}>▾</span>
+              📑 Procurement
             </button>
-            {openNavDropdown === 'procurement' && (
-              <div className="nav-dropdown-menu">
-                {visibleProcurementTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    className={`nav-subitem${activeProcurementSubTab === tab.id && isProcurementActive ? ' active' : ''}`}
-                    onClick={() => handleNavigate(`procurement:${tab.id}`)}
-                  >
-                    <span>{tab.icon}</span>
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           )}
           {visibleSalesTabs.length > 0 && (
-          <div className="nav-dropdown">
             <button
               type="button"
-              className={`nav-item nav-dropdown-toggle${isSalesActive ? ' active' : ''}`}
-              onClick={() => toggleNavDropdown('sales')}
-              aria-expanded={openNavDropdown === 'sales'}
+              className={`nav-item${isSalesActive ? ' active' : ''}`}
+              onClick={() => handleNavigate('sales-module')}
             >
-              <span>📦 Shipments</span>
-              <span className={`nav-chevron${openNavDropdown === 'sales' ? ' open' : ''}`}>▾</span>
+              📦 Shipments
             </button>
-            {openNavDropdown === 'sales' && (
-              <div className="nav-dropdown-menu">
-                {visibleSalesTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    className={`nav-subitem${activeSalesSubTab === tab.id && isSalesActive ? ' active' : ''}`}
-                    onClick={() => handleNavigate(`sales-module:${tab.id}`)}
-                  >
-                    <span>{tab.icon}</span>
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           )}
           {visibleHrTabs.length > 0 && (
-          <div className="nav-dropdown">
             <button
               type="button"
-              className={`nav-item nav-dropdown-toggle${isHrActive ? ' active' : ''}`}
-              onClick={() => toggleNavDropdown('hr')}
-              aria-expanded={openNavDropdown === 'hr'}
+              className={`nav-item${isHrActive ? ' active' : ''}`}
+              onClick={() => handleNavigate('hr')}
             >
-              <span>👔 HR</span>
-              <span className={`nav-chevron${openNavDropdown === 'hr' ? ' open' : ''}`}>▾</span>
+              👔 HR
             </button>
-            {openNavDropdown === 'hr' && (
-              <div className="nav-dropdown-menu">
-                {visibleHrTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    className={`nav-subitem${activeHrSubTab === tab.id && isHrActive ? ' active' : ''}`}
-                    onClick={() => handleNavigate(`hr:${tab.id}`)}
-                  >
-                    <span>{tab.icon}</span>
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           )}
-          {!hasPermission('admin.all') && (
-          <div className="nav-dropdown">
+          {showEmployeeDashboardNav && (
             <button
               type="button"
-              className={`nav-item nav-dropdown-toggle${isEmployeeDashboardActive ? ' active' : ''}`}
-              onClick={() => toggleNavDropdown('employee')}
-              aria-expanded={openNavDropdown === 'employee'}
+              className={`nav-item${isEmployeeDashboardActive ? ' active' : ''}`}
+              onClick={() => handleNavigate('employee-dashboard')}
             >
-              <span>👤 Employee Dashboard</span>
-              <span className={`nav-chevron${openNavDropdown === 'employee' ? ' open' : ''}`}>▾</span>
+              👤 Employee Dashboard
             </button>
-            {openNavDropdown === 'employee' && (
-              <div className="nav-dropdown-menu">
-                {EMPLOYEE_DASHBOARD_TABS.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    className={`nav-subitem${activeEmployeeDashboardSubTab === tab.id && isEmployeeDashboardActive ? ' active' : ''}`}
-                    onClick={() => handleNavigate(`employee-dashboard:${tab.id}`)}
-                  >
-                    <span>{tab.icon}</span>
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           )}
           {visibleUserManagementTabs.length > 0 && (
-            <div className="nav-dropdown">
-              <button
-                type="button"
-                className={`nav-item nav-dropdown-toggle${isUserManagementActive ? ' active' : ''}`}
-                onClick={() => toggleNavDropdown('user-management')}
-                aria-expanded={openNavDropdown === 'user-management'}
-              >
-                <span>🔐 User Management</span>
-                <span className={`nav-chevron${openNavDropdown === 'user-management' ? ' open' : ''}`}>▾</span>
-              </button>
-              {openNavDropdown === 'user-management' && (
-                <div className="nav-dropdown-menu">
-                  {visibleUserManagementTabs.map((tab) => (
+            <button
+              type="button"
+              className={`nav-item${isUserManagementActive ? ' active' : ''}`}
+              onClick={() => handleNavigate('user-management')}
+            >
+              🔐 User Management
+            </button>
+          )}
+        </nav>
+
+        {moduleSubNav && (
+          <nav className="app-subnav" aria-label={`${moduleSubNav.label} sub navigation`}>
+            <span className="app-subnav-module">{moduleSubNav.label}</span>
+            <div className="app-subnav-items">
+              {moduleSubNav.grouped
+                ? MASTER_GROUPS.map((group) => (
+                    <div key={group.label} className="app-subnav-group">
+                      <span className="app-subnav-group-label">{group.label}</span>
+                      {group.tabs.map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          className={`app-subnav-item${moduleSubNav.activeId === tab.id ? ' active' : ''}`}
+                          onClick={() => handleNavigate(`${moduleSubNav.prefix}:${tab.id}`)}
+                        >
+                          {tab.icon ? <span className="app-subnav-icon">{tab.icon}</span> : null}
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  ))
+                : moduleSubNav.items.map((tab) => (
                     <button
                       key={tab.id}
                       type="button"
-                      className={`nav-subitem${activeUserManagementSubTab === tab.id && isUserManagementActive ? ' active' : ''}`}
-                      onClick={() => handleNavigate(`user-management:${tab.id}`)}
+                      className={`app-subnav-item${moduleSubNav.activeId === tab.id ? ' active' : ''}`}
+                      onClick={() => handleNavigate(`${moduleSubNav.prefix}:${tab.id}`)}
                     >
-                      <span>{tab.icon}</span>
+                      {tab.icon ? <span className="app-subnav-icon">{tab.icon}</span> : null}
                       {tab.label}
                     </button>
                   ))}
-                </div>
-              )}
             </div>
-          )}
-        </nav>
+          </nav>
+        )}
       </div>
 
       <main className="main-content">

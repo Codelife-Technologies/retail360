@@ -5,13 +5,13 @@ const Supplier = require('../models/Supplier');
 const Product = require('../models/Product');
 const mongoose = require('mongoose');
 const { paginate } = require('../utils/pagination');
-const { parseExcel, validateExcelData } = require('../utils/excelParser');
+const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
 const { requirePermission } = require('../middleware/auth');
 
-const upload = multer({ 
+const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 async function generateNextSupplierId() {
@@ -120,7 +120,7 @@ router.get('/', requirePermission('suppliers.view'), async (req, res) => {
   try {
     const { search, page, limit } = req.query;
     const query = {};
-    
+
     if (search) {
       query.$or = [
         { supplierId: { $regex: search, $options: 'i' } },
@@ -134,12 +134,12 @@ router.get('/', requirePermission('suppliers.view'), async (req, res) => {
         { pan: { $regex: search, $options: 'i' } },
       ];
     }
-    
+
     if (page || limit) {
       const result = await paginate(Supplier, query, {
         page: page || 1,
         limit: limit || 25,
-        sort: { createdAt: -1 }
+        sort: { createdAt: -1 },
       });
       result.data = await attachLinkedProductsToSuppliers(result.data);
       res.json(result);
@@ -152,119 +152,7 @@ router.get('/', requirePermission('suppliers.view'), async (req, res) => {
   }
 });
 
-// GET products linked to a supplier
-router.get('/:id/products', async (req, res) => {
-  try {
-    const supplierId = req.params.id;
-    if (!mongoose.Types.ObjectId.isValid(supplierId)) {
-      return res.status(400).json({ error: 'Invalid supplier id' });
-    }
-
-    const supplier = await Supplier.findById(supplierId);
-    if (!supplier) {
-      return res.status(404).json({ error: 'Supplier not found' });
-    }
-
-    const products = await Product.find({
-      $or: [{ 'suppliers.supplier': supplierId }, { suppliers: supplierId }],
-    })
-      .populate('category', 'name')
-      .select('sku title name unit category suppliers')
-      .sort({ title: 1, name: 1 })
-      .lean();
-
-    const data = products.map((product) => {
-      const link = extractSupplierLinkForProduct(product, supplierId);
-      return {
-        _id: product._id,
-        sku: link.sku,
-        unit: link.unit,
-        title: product.title || product.name || '',
-        category: product.category?.name || '',
-      };
-    });
-
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET single supplier
-router.get('/:id', requirePermission('suppliers.view'), async (req, res) => {
-  try {
-    const supplier = await Supplier.findById(req.params.id);
-    if (!supplier) {
-      return res.status(404).json({ error: 'Supplier not found' });
-    }
-    res.json(supplier);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// POST create supplier
-router.post('/', requirePermission('suppliers.create'), async (req, res) => {
-  try {
-    const body = { ...req.body };
-    if (!body.supplierId || !String(body.supplierId).trim()) {
-      body.supplierId = await generateNextSupplierId();
-    } else {
-      body.supplierId = String(body.supplierId).trim().toUpperCase();
-    }
-    const supplier = new Supplier(body);
-    await supplier.save();
-    res.status(201).json(supplier);
-  } catch (error) {
-    if (error.code === 11000) {
-      const field = error.keyPattern?.supplierId ? 'Supplier ID' : 'field';
-      return res.status(400).json({ error: `${field} already exists` });
-    }
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// PUT update supplier
-router.put('/:id', requirePermission('suppliers.update'), async (req, res) => {
-  try {
-    const existing = await Supplier.findById(req.params.id);
-    if (!existing) {
-      return res.status(404).json({ error: 'Supplier not found' });
-    }
-    const body = { ...req.body };
-    if (body.supplierId) {
-      body.supplierId = String(body.supplierId).trim().toUpperCase();
-    } else if (!existing.supplierId) {
-      body.supplierId = await generateNextSupplierId();
-    }
-    const supplier = await Supplier.findByIdAndUpdate(
-      req.params.id,
-      body,
-      { new: true, runValidators: true }
-    );
-    res.json(supplier);
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ error: 'Supplier ID already exists' });
-    }
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// DELETE supplier
-router.delete('/:id', requirePermission('suppliers.delete'), async (req, res) => {
-  try {
-    const supplier = await Supplier.findByIdAndDelete(req.params.id);
-    if (!supplier) {
-      return res.status(404).json({ error: 'Supplier not found' });
-    }
-    res.json({ message: 'Supplier deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET Excel template
+// GET Excel template (must be registered before /:id)
 router.get('/template', requirePermission('suppliers.view'), (req, res) => {
   try {
     const headers = [
@@ -277,8 +165,11 @@ router.get('/template', requirePermission('suppliers.view'), (req, res) => {
       { key: 'bankDetails', label: 'Bank Detail' },
       { key: 'ifscCode', label: 'IFSC Code' },
       { key: 'bankPinCode', label: 'Bank Pin Code' },
+      { key: 'email', label: 'Email' },
+      { key: 'address', label: 'Address' },
+      { key: 'pan', label: 'PAN Number' },
     ];
-    
+
     const sampleData = [
       {
         supplierId: 'SUP-0001',
@@ -290,9 +181,12 @@ router.get('/template', requirePermission('suppliers.view'), (req, res) => {
         bankDetails: 'HDFC Bank, A/C 1234567890',
         ifscCode: 'HDFC0001234',
         bankPinCode: '201301',
+        email: 'supplier@example.com',
+        address: 'Noida, Uttar Pradesh',
+        pan: 'AAAAA0000A',
       },
     ];
-    
+
     const buffer = generateTemplate(headers, sampleData);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=suppliers_template.xlsx');
@@ -302,7 +196,7 @@ router.get('/template', requirePermission('suppliers.view'), (req, res) => {
   }
 });
 
-// POST import suppliers from Excel
+// POST import suppliers from Excel (must be registered before /:id)
 router.post('/import', requirePermission('suppliers.create'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -312,7 +206,7 @@ router.post('/import', requirePermission('suppliers.create'), upload.single('fil
     const { mode = 'both' } = req.body;
     const fileBuffer = req.file.buffer;
     const excelData = parseExcel(fileBuffer);
-    
+
     if (excelData.length === 0) {
       return res.status(400).json({ error: 'Excel file is empty' });
     }
@@ -392,5 +286,118 @@ router.post('/import', requirePermission('suppliers.create'), upload.single('fil
   }
 });
 
-module.exports = router;
+// GET products linked to a supplier
+router.get('/:id/products', async (req, res) => {
+  try {
+    const supplierId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(supplierId)) {
+      return res.status(400).json({ error: 'Invalid supplier id' });
+    }
 
+    const supplier = await Supplier.findById(supplierId);
+    if (!supplier) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+
+    const products = await Product.find({
+      $or: [{ 'suppliers.supplier': supplierId }, { suppliers: supplierId }],
+    })
+      .populate('category', 'name')
+      .select('sku title name unit category suppliers')
+      .sort({ title: 1, name: 1 })
+      .lean();
+
+    const data = products.map((product) => {
+      const link = extractSupplierLinkForProduct(product, supplierId);
+      return {
+        _id: product._id,
+        sku: link.sku,
+        unit: link.unit,
+        title: product.title || product.name || '',
+        category: product.category?.name || '',
+      };
+    });
+
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET single supplier
+router.get('/:id', requirePermission('suppliers.view'), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid supplier id' });
+    }
+    const supplier = await Supplier.findById(req.params.id);
+    if (!supplier) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+    res.json(supplier);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST create supplier
+router.post('/', requirePermission('suppliers.create'), async (req, res) => {
+  try {
+    const body = { ...req.body };
+    if (!body.supplierId || !String(body.supplierId).trim()) {
+      body.supplierId = await generateNextSupplierId();
+    } else {
+      body.supplierId = String(body.supplierId).trim().toUpperCase();
+    }
+    const supplier = new Supplier(body);
+    await supplier.save();
+    res.status(201).json(supplier);
+  } catch (error) {
+    if (error.code === 11000) {
+      const field = error.keyPattern?.supplierId ? 'Supplier ID' : 'field';
+      return res.status(400).json({ error: `${field} already exists` });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// PUT update supplier
+router.put('/:id', requirePermission('suppliers.update'), async (req, res) => {
+  try {
+    const existing = await Supplier.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+    const body = { ...req.body };
+    if (body.supplierId) {
+      body.supplierId = String(body.supplierId).trim().toUpperCase();
+    } else if (!existing.supplierId) {
+      body.supplierId = await generateNextSupplierId();
+    }
+    const supplier = await Supplier.findByIdAndUpdate(req.params.id, body, {
+      new: true,
+      runValidators: true,
+    });
+    res.json(supplier);
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'Supplier ID already exists' });
+    }
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// DELETE supplier
+router.delete('/:id', requirePermission('suppliers.delete'), async (req, res) => {
+  try {
+    const supplier = await Supplier.findByIdAndDelete(req.params.id);
+    if (!supplier) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+    res.json({ message: 'Supplier deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+module.exports = router;

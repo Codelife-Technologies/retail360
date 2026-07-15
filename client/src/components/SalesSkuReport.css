@@ -1,19 +1,38 @@
 .sales-sku-report {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 24px;
   height: 100%;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 20px;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .sales-sku-report-body {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 0 1rem 1rem;
+  gap: 24px;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.sales-sku-report-body > .sales-report-aligned,
+.sales-sku-report-body > .sales-report-overview {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .sales-sku-report .sales-business-report {
@@ -22,6 +41,8 @@
   background: transparent;
   flex: 1;
   min-height: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .sales-sku-report-header {
@@ -29,12 +50,32 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  flex-wrap: wrap;
   gap: 1rem;
   position: sticky;
   top: 0;
   z-index: 30;
   background: var(--app-bg);
-  padding: 1rem 1rem 0.25rem;
+  padding: 0 0 0.25rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.sales-sku-report-header > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.sales-sku-report-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .sales-sku-report-header h2 {
@@ -46,13 +87,6 @@
   margin: 0;
   color: #6b7280;
   font-size: 0.975rem;
-}
-
-.sales-sku-report-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
 }
 
 .sales-sku-report-header-actions .btn-export {
@@ -273,7 +307,9 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  min-width: 150px;
+  min-width: min(150px, 100%);
+  flex: 1 1 140px;
+  max-width: 100%;
 }
 
 .sales-detail-date-filters label {
@@ -299,7 +335,7 @@
 }
 
 .sales-sku-sort-hint {
-  margin: 0;
+  margin: 0 0 0.15rem;
   font-size: 0.9rem;
   color: #6b7280;
 }
@@ -338,8 +374,13 @@
 .sales-sku-filters {
   padding: 1rem 1.25rem;
   background: #f9fafb;
-  border-radius: 10px;
+  border-radius: 14px;
   border: 1px solid #e5e7eb;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .sales-sku-filters-title {
@@ -351,8 +392,11 @@
 
 .sales-sku-filters-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
   gap: 0.75rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .sales-sku-filters-grid .filter-group {
@@ -376,7 +420,7 @@
 }
 
 .sales-sku-filters-grid .filter-search {
-  grid-column: span 2;
+  grid-column: 1 / -1;
 }
 
 .sales-sku-filters-grid .filter-apply {
@@ -384,52 +428,166 @@
   align-items: flex-end;
 }
 
-.sales-sku-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.75rem;
+.sales-report-aligned {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  overflow-x: hidden;
 }
 
+.sales-report-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* KPI cards */
+.sales-report-aligned .sales-sku-summary,
+.sales-sku-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  align-items: stretch;
+}
+
+@media (min-width: 1400px) {
+  .sales-report-aligned .sales-sku-summary,
+  .sales-sku-summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1399px) {
+  .sales-report-aligned .sales-sku-summary,
+  .sales-sku-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.sales-report-aligned .summary-card,
 .summary-card {
   background: white;
   border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 88px;
+  height: 100%;
+  max-height: none;
+  box-sizing: border-box;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
 }
 
+.sales-report-aligned .summary-card span,
 .summary-card span {
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   color: #6b7280;
+  line-height: 1.25;
 }
 
+.sales-report-aligned .summary-card strong,
 .summary-card strong {
   font-size: 1.25rem;
   color: #111827;
+  line-height: 1.25;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
+.sales-report-aligned .summary-card-note,
 .summary-card-note {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #6b7280;
-  margin-top: 0.15rem;
+  margin-top: 0.1rem;
 }
 
+/* Top / Least selling */
+.sales-report-aligned .sales-product-extremes,
 .sales-product-extremes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
+@media (max-width: 1023px) {
+  .sales-report-aligned .sales-product-extremes,
+  .sales-product-extremes {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sales-report-aligned .product-extreme-card,
 .product-extreme-card {
   background: white;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 0.55rem 0.75rem;
+  border-radius: 14px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  max-height: 240px;
+  overflow: hidden;
+}
+
+.sales-report-aligned .sales-trend-charts {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 20px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+
+.sales-report-detail-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.sales-report-aligned .sales-sku-period-hint,
+.sales-report-aligned .sales-detail-heading {
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.sales-report-aligned .sales-sku-table-wrap,
+.sales-report-aligned .sales-sku-table-wrap:has(.sales-detail-table) {
+  width: 100%;
+  max-width: 100%;
 }
 
 .product-extreme-card-header {
@@ -449,7 +607,11 @@
 .product-extreme-carousel {
   display: flex;
   align-items: stretch;
-  gap: 0.25rem;
+  gap: 0.35rem;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .product-extreme-slide {
@@ -458,6 +620,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  overflow: hidden;
 }
 
 .product-extreme-nav {
@@ -547,30 +710,49 @@
   color: #6b7280;
 }
 
-.product-extreme-stats {
-  font-size: 0.85rem;
-  color: #374151;
-  padding-top: 0.2rem;
-  border-top: 1px solid #f3f4f6;
-}
-
 .product-extreme-card .product-sku-summary {
-  gap: 0.5rem;
+  gap: 0.65rem;
+  min-width: 0;
+  width: 100%;
 }
 
 .product-extreme-card .product-sku-summary-image {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.product-extreme-card .product-sku-summary-text {
+  min-width: 0;
+  flex: 1;
 }
 
 .product-extreme-card .product-sku-summary-name {
-  font-size: 0.9rem;
-  line-height: 1.25;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
 }
 
 .product-extreme-card .product-sku-summary-sku {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.product-extreme-stats {
+  font-size: 0.875rem;
+  color: #374151;
+  padding-top: 0.35rem;
+  border-top: 1px solid #f3f4f6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: center;
 }
 
 .product-sku-summary {
@@ -607,6 +789,10 @@
   font-weight: 600;
   color: #111827;
   line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   white-space: normal;
 }
 
@@ -632,8 +818,12 @@
 
 .sales-sku-table td.product-sku-summary-cell {
   white-space: normal;
-  min-width: 160px;
+  min-width: 32px;
   padding: 0.45rem 0.6rem;
+}
+
+.sales-sku-report .sales-sku-table td.product-sku-summary-cell {
+  min-width: 0;
 }
 
 .sales-sku-table td.product-sku-summary-cell .product-sku-summary {
@@ -657,7 +847,35 @@
   overflow-x: auto;
   overflow-y: visible;
   border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: white;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+
+.sales-sku-report .sales-trend-chart-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .sales-sku-report .sales-trend-chart-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.sales-sku-report .sales-trend-chart-card {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .sales-sku-table {
@@ -733,68 +951,94 @@
 
 .sales-sku-table.sales-detail-table {
   table-layout: fixed;
-  min-width: 920px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .sales-sku-table.sales-detail-table th,
 .sales-sku-table.sales-detail-table td {
-  padding: 0.7rem 1rem;
+  padding: 0.5rem 0.45rem;
   vertical-align: middle;
   box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sales-by-sale-col-sku {
-  width: 22%;
-  min-width: 9rem;
+  width: 20%;
+  min-width: 0;
   white-space: normal;
   word-break: break-word;
-  line-height: 1.35;
-  padding-right: 1.1rem;
+  line-height: 1.3;
 }
 
 .sales-by-sale-col-order {
-  width: 20%;
-  min-width: 9rem;
+  width: 22%;
+  min-width: 0;
   white-space: normal;
   word-break: break-all;
-  line-height: 1.35;
-  padding-right: 1rem;
+  line-height: 1.3;
 }
 
 .sales-by-sale-col-date {
   width: 11%;
-  min-width: 6.5rem;
+  min-width: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sales-by-sale-col-channel {
   width: 14%;
-  min-width: 7rem;
+  min-width: 0;
   white-space: normal;
   word-break: break-word;
+  line-height: 1.3;
 }
 
 .sales-by-sale-col-num {
-  width: 9%;
-  min-width: 5.5rem;
+  width: 10%;
+  min-width: 0;
   text-align: right;
   white-space: nowrap;
-  padding-left: 0.85rem;
-  padding-right: 1rem;
+  padding-left: 0.35rem;
+  padding-right: 0.5rem;
 }
 
 .sales-by-sale-col-money {
-  width: 12%;
-  min-width: 6.5rem;
+  width: 13%;
+  min-width: 0;
   text-align: right;
   white-space: nowrap;
-  padding-left: 0.85rem;
-  padding-right: 1.1rem;
+  padding-left: 0.35rem;
+  padding-right: 0.55rem;
 }
 
 .sales-sku-table.sales-detail-table th.sales-by-sale-col-num,
 .sales-sku-table.sales-detail-table th.sales-by-sale-col-money {
   text-align: right;
+}
+
+/* Keep By SKU table within the page width as well */
+.sales-sku-report .sales-sku-table:not(.sales-detail-table) {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sales-sku-report .sales-sku-table:not(.sales-detail-table) th,
+.sales-sku-report .sales-sku-table:not(.sales-detail-table) td {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  padding: 0.5rem 0.45rem;
+}
+
+.sales-sku-report .sales-sku-table:not(.sales-detail-table) td.num,
+.sales-sku-report .sales-sku-table:not(.sales-detail-table) th:nth-child(n + 5) {
+  white-space: nowrap;
 }
 
 .sales-sku-report .btn-delete,
@@ -984,4 +1228,34 @@
   border: 1px solid #e5e7eb;
   background: #f9fafb;
   display: block;
+}
+
+@media (max-width: 767px) {
+  .sales-sku-report {
+    padding: 16px;
+    gap: 20px;
+  }
+
+  .sales-sku-report-body {
+    gap: 20px;
+  }
+
+  .sales-report-aligned .summary-card,
+  .summary-card {
+    padding: 16px 18px;
+    min-height: 80px;
+  }
+
+  .sales-report-aligned .product-extreme-card,
+  .product-extreme-card {
+    padding: 16px;
+    max-height: none;
+  }
+
+  .sales-sku-report-header-actions .btn-export,
+  .sales-sku-report-header-actions .btn-export-outline,
+  .sales-sku-report-header-actions .btn-secondary,
+  .btn-filters {
+    white-space: normal;
+  }
 }

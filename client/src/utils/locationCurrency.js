@@ -87,6 +87,20 @@ export function formatMoney(amount, currency = 'INR') {
 }
 
 export function getCurrencyForSalesLocationId(salesLocationId, salesLocations = []) {
-  const match = salesLocations.find((loc) => loc._id === salesLocationId);
+  const match = salesLocations.find((loc) => loc._id === salesLocationId || String(loc._id) === String(salesLocationId));
   return getCurrencyForLocation(match);
+}
+
+/** Resolve report currency from a sales channel (falls back to AED). */
+export function getCurrencyForSalesChannelId(salesChannelId, salesChannels = []) {
+  if (!salesChannelId) return 'AED';
+  const match = salesChannels.find(
+    (channel) => channel._id === salesChannelId || String(channel._id) === String(salesChannelId)
+  );
+  const fromChannel = String(match?.defaultCurrency || '').trim().toUpperCase();
+  if (/^[A-Z]{3}$/.test(fromChannel)) return fromChannel;
+  const country = String(match?.country || '').trim().toUpperCase();
+  if (country === 'IN') return 'INR';
+  if (country === 'AE') return 'AED';
+  return 'AED';
 }

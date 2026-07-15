@@ -12,6 +12,7 @@ import './SalesSkuReport.css';
 const SalesBusinessReport = lazy(() => import('./SalesBusinessReport'));
 
 const formatAed = (amount) => formatMoney(amount, 'AED');
+
 const defaultFilters = () => ({
   startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0],
   endDate: new Date().toISOString().split('T')[0],
@@ -337,13 +338,18 @@ function SalesSkuReport({ onClose }) {
         setSummary({
           totalSkus: skuSummary.totalSkus ?? null,
           totalSales: orders.length,
-          totalQuantitySold: orders.reduce(
-            (sum, sale) =>
-              sum + (sale.items || []).reduce((itemSum, item) => itemSum + (item.quantity || 0), 0),
-            0
-          ),
-          totalRevenue: Math.round(orders.reduce((sum, sale) => sum + (sale.total || 0), 0) * 100) / 100,
-          totalOrders: orders.length,
+          totalQuantitySold:
+            skuSummary.totalQuantitySold ??
+            orders.reduce(
+              (sum, sale) =>
+                sum + (sale.items || []).reduce((itemSum, item) => itemSum + (item.quantity || 0), 0),
+              0
+            ),
+          totalRevenue:
+            skuSummary.totalRevenue ??
+            Math.round(orders.reduce((sum, sale) => sum + (sale.total || 0), 0) * 100) / 100,
+          totalOrders: skuSummary.totalOrders ?? orders.length,
+          lineItemRevenue: skuSummary.lineItemRevenue,
           topSellingProducts: skuSummary.topSellingProducts || [],
           leastSellingProducts: skuSummary.leastSellingProducts || [],
         });
@@ -613,7 +619,7 @@ function SalesSkuReport({ onClose }) {
     if (!isOrdersView) return null;
 
     return (
-      <>
+      <div className="sales-report-aligned sales-report-detail-block">
         {appliedDateRange && (
           <p className="sales-sku-period-hint">
             Showing sales from{' '}
@@ -629,7 +635,9 @@ function SalesSkuReport({ onClose }) {
             No sales found for the selected date range.
           </div>
         ) : (
-          <div className="sales-sku-table-wrap">
+          <>
+            <h3 className="sales-detail-heading">Sales Detail</h3>
+            <div className="sales-sku-table-wrap">
             <table className="sales-sku-table sales-detail-table">
               <thead>
                 <tr>
@@ -666,9 +674,10 @@ function SalesSkuReport({ onClose }) {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
-      </>
+      </div>
     );
   };
 
@@ -884,78 +893,67 @@ function SalesSkuReport({ onClose }) {
       </div>
       )}
 
-      {appliedFilters.sortBy && (
+      {appliedFilters.sortBy && isSkuView && (
         <p className="sales-sku-sort-hint">
           Sorted by <strong>{sortOptions.find((o) => o.value === appliedFilters.sortBy)?.label}</strong>
           {' '}({sortDirLabel()})
         </p>
       )}
 
-      {summary && (
-        <div className="sales-sku-summary">
-          {isSkuView ? (
+      <div className="sales-report-overview sales-report-aligned">
+        {summary && (
+          <div className="sales-sku-summary">
             <div className="summary-card">
               <span>SKUs Sold</span>
-              <strong>{summary.totalSkus}</strong>
+              <strong>{summary.totalSkus ?? summary.totalSales ?? 0}</strong>
             </div>
-          ) : (
             <div className="summary-card">
-              <span>Total Sales</span>
-              <strong>{summary.totalSales}</strong>
+              <span>Total Qty Sold</span>
+              <strong>{summary.totalQuantitySold}</strong>
             </div>
-          )}
-          <div className="summary-card">
-            <span>Total Qty Sold</span>
-            <strong>{summary.totalQuantitySold}</strong>
-          </div>
-          <div className="summary-card">
-            <span>Total Revenue</span>
-            <strong>{formatAed(summary.totalRevenue)}</strong>
-            {isSkuView && summary.lineItemRevenue != null && summary.lineItemRevenue !== summary.totalRevenue && (
-              <span className="summary-card-note">
-                Line items: {formatAed(summary.lineItemRevenue)}
-              </span>
-            )}
-          </div>
-          {isSkuView ? (
+            <div className="summary-card">
+              <span>Total Revenue</span>
+              <strong>{formatAed(summary.totalRevenue)}</strong>
+              {summary.lineItemRevenue != null && summary.lineItemRevenue !== summary.totalRevenue && (
+                <span className="summary-card-note">
+                  Line items: {formatAed(summary.lineItemRevenue)}
+                </span>
+              )}
+            </div>
             <div className="summary-card">
               <span>Orders</span>
               <strong>{summary.totalOrders}</strong>
             </div>
-          ) : (
-            <div className="summary-card">
-              <span>Orders Shown</span>
-              <strong>{summary.totalOrders}</strong>
-            </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {summary && (summary.topSellingProducts?.length > 0 || summary.leastSellingProducts?.length > 0) && (
-        <div className="sales-product-extremes">
-          <ProductExtremeCarousel
-            label="Top Selling Product"
-            products={summary.topSellingProducts}
-            variant="top"
-            onOpenProduct={handleOpenProductDetail}
-          />
-          <ProductExtremeCarousel
-            label="Least Selling Product"
-            products={summary.leastSellingProducts}
-            variant="least"
-            onOpenProduct={handleOpenProductDetail}
-          />
-        </div>
-      )}
+        {summary && (summary.topSellingProducts?.length > 0 || summary.leastSellingProducts?.length > 0) && (
+          <div className="sales-product-extremes">
+            <ProductExtremeCarousel
+              label="Top Selling Product"
+              products={summary.topSellingProducts}
+              variant="top"
+              onOpenProduct={handleOpenProductDetail}
+            />
+            <ProductExtremeCarousel
+              label="Least Selling Product"
+              products={summary.leastSellingProducts}
+              variant="least"
+              onOpenProduct={handleOpenProductDetail}
+            />
+          </div>
+        )}
 
-      <SalesMonthlyTrendCharts groupedData={monthlyTrend} formatCurrency={formatAed} />
+        <SalesMonthlyTrendCharts groupedData={monthlyTrend} formatCurrency={formatAed} />
+      </div>
 
       {isSkuView && loading ? (
         <div className="sales-sku-loading">Loading report…</div>
       ) : (
         isSkuView && hasSkuRows && (
+          <div className="sales-report-aligned sales-report-detail-block">
+            <h3 className="sales-detail-heading">By SKU</h3>
             <div className="sales-sku-table-wrap">
-              <h3 className="sales-detail-heading">By SKU</h3>
               <table className="sales-sku-table">
                 <thead>
                   <tr>
@@ -992,6 +990,7 @@ function SalesSkuReport({ onClose }) {
                 </tbody>
               </table>
             </div>
+          </div>
         )
       )}
 

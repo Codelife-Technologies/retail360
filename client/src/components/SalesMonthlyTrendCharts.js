@@ -69,50 +69,56 @@ function SalesMonthlyTrendCharts({ groupedData, formatCurrency }) {
       <div className="sales-trend-chart-grid">
         <div className="sales-trend-chart-card">
           <h4>Revenue &amp; Quantity Sold by Month</h4>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData} barCategoryGap="20%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="label" tick={{ fontSize: 15 }} interval={0} angle={-25} textAnchor="end" height={60} />
-              <YAxis
-                yAxisId="revenue"
-                orientation="left"
-                tick={{ fontSize: 15 }}
-                tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
-              />
-              <YAxis
-                yAxisId="quantity"
-                orientation="right"
-                allowDecimals={false}
-                tick={{ fontSize: 15 }}
-              />
-              <Tooltip formatter={tooltipFormatter} />
-              <Legend />
-              <Bar yAxisId="revenue" dataKey="revenue" fill="#667eea" name="Revenue" radius={[4, 4, 0, 0]} />
-              <Bar yAxisId="quantity" dataKey="quantity" fill="#10b981" name="Quantity Sold" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="sales-trend-chart-plot sales-trend-chart-plot-bar">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} barCategoryGap="20%">
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="label" tick={{ fontSize: 13 }} interval={0} angle={-25} textAnchor="end" height={55} />
+                <YAxis
+                  yAxisId="revenue"
+                  orientation="left"
+                  tick={{ fontSize: 13 }}
+                  tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                  width={42}
+                />
+                <YAxis
+                  yAxisId="quantity"
+                  orientation="right"
+                  allowDecimals={false}
+                  tick={{ fontSize: 13 }}
+                  width={42}
+                />
+                <Tooltip formatter={tooltipFormatter} />
+                <Legend />
+                <Bar yAxisId="revenue" dataKey="revenue" fill="#667eea" name="Revenue" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="quantity" dataKey="quantity" fill="#10b981" name="Quantity Sold" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         <div className="sales-trend-chart-card">
           <h4>Quantity Sold by Month</h4>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={chartData}
-                dataKey="quantity"
-                nameKey="label"
-                cx="50%"
-                cy="50%"
-                outerRadius={95}
-                label={({ label, value, percent }) => `${label}: ${value} (${(percent * 100).toFixed(0)}%)`}
-              >
-                {chartData.map((entry, index) => (
-                  <Cell key={entry.month} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value) => [`${value} units`, 'Quantity Sold']} />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="sales-trend-chart-plot sales-trend-chart-plot-pie">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  dataKey="quantity"
+                  nameKey="label"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius="70%"
+                  label={({ label, value, percent }) => `${label}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={entry.month} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => [`${value} units`, 'Quantity Sold']} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
     </div>
