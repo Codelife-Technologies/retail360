@@ -75,6 +75,109 @@ router.get('/', requirePermission('locations.view'), async (req, res) => {
   }
 });
 
+// GET Excel template (must be before /:id)
+router.get('/template', requirePermission('locations.view'), (req, res) => {
+  try {
+    const headers = [
+      { key: 'code', label: 'Code *' },
+      { key: 'name', label: 'Name *' },
+      { key: 'address', label: 'Address' },
+      { key: 'city', label: 'City' },
+      { key: 'state', label: 'State' },
+      { key: 'country', label: 'Country' },
+      { key: 'pincode', label: 'Pincode' },
+      { key: 'contactPerson', label: 'Contact Person' },
+      { key: 'phone', label: 'Phone' },
+      { key: 'email', label: 'Email' }
+    ];
+    
+    const buffer = generateTemplate(headers);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=locations_template.xlsx');
+    res.send(buffer);
+  } catch (error) {
+    logger.backend.error('Error generating location template', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST import locations from Excel (must be before /:id)
+router.post('/import', requirePermission('locations.create'), upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const { mode = 'both' } = req.body;
+    const fileBuffer = req.file.buffer;
+    const excelData = parseExcel(fileBuffer);
+    
+    if (excelData.length === 0) {
+      return res.status(400).json({ error: 'Excel file is empty' });
+    }
+
+    let imported = 0;
+    let updated = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (let i = 0; i < excelData.length; i++) {
+      const row = excelData[i];
+      const rowNum = i + 2;
+
+      try {
+        const locationData = {
+          code: (row['Code *'] || '').toString().toUpperCase().trim(),
+          name: row['Name *'] || '',
+          address: row['Address'] || '',
+          city: row['City'] || '',
+          state: row['State'] || '',
+          country: row['Country'] || 'India',
+          pincode: row['Pincode'] || '',
+          contactPerson: row['Contact Person'] || '',
+          phone: row['Phone'] || '',
+          email: (row['Email'] || '').toLowerCase().trim()
+        };
+
+        if (!locationData.code || !locationData.name) {
+          errors.push({ row: rowNum, field: 'code/name', message: 'Code and Name are required', data: row });
+          failed++;
+          continue;
+        }
+
+        const existingLocation = await Location.findOne({ code: locationData.code });
+
+        if (existingLocation) {
+          if (mode === 'create') {
+            errors.push({ row: rowNum, field: 'code', message: 'Location code already exists', data: row });
+            failed++;
+            continue;
+          }
+          await Location.findByIdAndUpdate(existingLocation._id, locationData, { runValidators: true });
+          updated++;
+        } else {
+          if (mode === 'update') {
+            errors.push({ row: rowNum, field: 'code', message: 'Location not found for update', data: row });
+            failed++;
+            continue;
+          }
+          const location = new Location(locationData);
+          await location.save();
+          imported++;
+        }
+      } catch (error) {
+        errors.push({ row: rowNum, field: 'general', message: error.message, data: row });
+        failed++;
+      }
+    }
+
+    res.json({ success: true, imported, updated, failed, errors: errors.slice(0, 100) });
+  } catch (error) {
+    logger.backend.error('Error importing locations', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST set location as home branch
 router.post('/:id/home-branch', async (req, res) => {
   try {
@@ -163,109 +266,6 @@ router.delete('/:id', requirePermission('locations.delete'), async (req, res) =>
     }
     res.json({ message: 'Location deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET Excel template
-router.get('/template', requirePermission('locations.view'), (req, res) => {
-  try {
-    const headers = [
-      { key: 'code', label: 'Code *' },
-      { key: 'name', label: 'Name *' },
-      { key: 'address', label: 'Address' },
-      { key: 'city', label: 'City' },
-      { key: 'state', label: 'State' },
-      { key: 'country', label: 'Country' },
-      { key: 'pincode', label: 'Pincode' },
-      { key: 'contactPerson', label: 'Contact Person' },
-      { key: 'phone', label: 'Phone' },
-      { key: 'email', label: 'Email' }
-    ];
-    
-    const buffer = generateTemplate(headers);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=locations_template.xlsx');
-    res.send(buffer);
-  } catch (error) {
-    logger.backend.error('Error generating location template', { error: error.message, stack: error.stack });
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// POST import locations from Excel
-router.post('/import', requirePermission('locations.create'), upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    const { mode = 'both' } = req.body;
-    const fileBuffer = req.file.buffer;
-    const excelData = parseExcel(fileBuffer);
-    
-    if (excelData.length === 0) {
-      return res.status(400).json({ error: 'Excel file is empty' });
-    }
-
-    let imported = 0;
-    let updated = 0;
-    let failed = 0;
-    const errors = [];
-
-    for (let i = 0; i < excelData.length; i++) {
-      const row = excelData[i];
-      const rowNum = i + 2;
-
-      try {
-        const locationData = {
-          code: (row['Code *'] || '').toString().toUpperCase().trim(),
-          name: row['Name *'] || '',
-          address: row['Address'] || '',
-          city: row['City'] || '',
-          state: row['State'] || '',
-          country: row['Country'] || 'India',
-          pincode: row['Pincode'] || '',
-          contactPerson: row['Contact Person'] || '',
-          phone: row['Phone'] || '',
-          email: (row['Email'] || '').toLowerCase().trim()
-        };
-
-        if (!locationData.code || !locationData.name) {
-          errors.push({ row: rowNum, field: 'code/name', message: 'Code and Name are required', data: row });
-          failed++;
-          continue;
-        }
-
-        const existingLocation = await Location.findOne({ code: locationData.code });
-
-        if (existingLocation) {
-          if (mode === 'create') {
-            errors.push({ row: rowNum, field: 'code', message: 'Location code already exists', data: row });
-            failed++;
-            continue;
-          }
-          await Location.findByIdAndUpdate(existingLocation._id, locationData, { runValidators: true });
-          updated++;
-        } else {
-          if (mode === 'update') {
-            errors.push({ row: rowNum, field: 'code', message: 'Location not found for update', data: row });
-            failed++;
-            continue;
-          }
-          const location = new Location(locationData);
-          await location.save();
-          imported++;
-        }
-      } catch (error) {
-        errors.push({ row: rowNum, field: 'general', message: error.message, data: row });
-        failed++;
-      }
-    }
-
-    res.json({ success: true, imported, updated, failed, errors: errors.slice(0, 100) });
-  } catch (error) {
-    logger.backend.error('Error importing locations', { error: error.message, stack: error.stack });
     res.status(500).json({ error: error.message });
   }
 });

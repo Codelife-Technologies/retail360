@@ -52,69 +52,7 @@ router.get('/', requirePermission('shipmentVendors.view'), async (req, res) => {
   }
 });
 
-// GET single vendor
-router.get('/:id', requirePermission('shipmentVendors.view'), async (req, res) => {
-  try {
-    const vendor = await ShipmentVendor.findById(req.params.id);
-    if (!vendor) {
-      return res.status(404).json({ error: 'Shipment vendor not found' });
-    }
-    res.json(vendor);
-  } catch (error) {
-    logger.backend.error('Error fetching shipment vendor', { error: error.message, stack: error.stack });
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// POST create vendor
-router.post('/', requirePermission('shipmentVendors.create'), async (req, res) => {
-  try {
-    const vendor = new ShipmentVendor(req.body);
-    await vendor.save();
-    res.status(201).json(vendor);
-  } catch (error) {
-    logger.backend.error('Error creating shipment vendor', { error: error.message, stack: error.stack });
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// PUT update vendor
-router.put('/:id', requirePermission('shipmentVendors.update'), async (req, res) => {
-  try {
-    const vendor = await ShipmentVendor.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
-    if (!vendor) {
-      return res.status(404).json({ error: 'Shipment vendor not found' });
-    }
-    res.json(vendor);
-  } catch (error) {
-    logger.backend.error('Error updating shipment vendor', { error: error.message, stack: error.stack });
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// DELETE vendor (soft delete)
-router.delete('/:id', requirePermission('shipmentVendors.delete'), async (req, res) => {
-  try {
-    const vendor = await ShipmentVendor.findByIdAndUpdate(
-      req.params.id,
-      { isActive: false },
-      { new: true }
-    );
-    if (!vendor) {
-      return res.status(404).json({ error: 'Shipment vendor not found' });
-    }
-    res.json({ message: 'Shipment vendor deactivated successfully' });
-  } catch (error) {
-    logger.backend.error('Error deleting shipment vendor', { error: error.message, stack: error.stack });
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET Excel template
+// GET Excel template (must be before /:id)
 router.get('/template', requirePermission('shipmentVendors.view'), (req, res) => {
   try {
     const headers = [
@@ -140,7 +78,7 @@ router.get('/template', requirePermission('shipmentVendors.view'), (req, res) =>
   }
 });
 
-// POST import shipment vendors from Excel
+// POST import shipment vendors from Excel (must be before /:id)
 router.post('/import', requirePermission('shipmentVendors.create'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -213,6 +151,68 @@ router.post('/import', requirePermission('shipmentVendors.create'), upload.singl
     res.json({ success: true, imported, updated, failed, errors: errors.slice(0, 100) });
   } catch (error) {
     logger.backend.error('Error importing shipment vendors', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET single vendor
+router.get('/:id', requirePermission('shipmentVendors.view'), async (req, res) => {
+  try {
+    const vendor = await ShipmentVendor.findById(req.params.id);
+    if (!vendor) {
+      return res.status(404).json({ error: 'Shipment vendor not found' });
+    }
+    res.json(vendor);
+  } catch (error) {
+    logger.backend.error('Error fetching shipment vendor', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST create vendor
+router.post('/', requirePermission('shipmentVendors.create'), async (req, res) => {
+  try {
+    const vendor = new ShipmentVendor(req.body);
+    await vendor.save();
+    res.status(201).json(vendor);
+  } catch (error) {
+    logger.backend.error('Error creating shipment vendor', { error: error.message, stack: error.stack });
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// PUT update vendor
+router.put('/:id', requirePermission('shipmentVendors.update'), async (req, res) => {
+  try {
+    const vendor = await ShipmentVendor.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!vendor) {
+      return res.status(404).json({ error: 'Shipment vendor not found' });
+    }
+    res.json(vendor);
+  } catch (error) {
+    logger.backend.error('Error updating shipment vendor', { error: error.message, stack: error.stack });
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// DELETE vendor (soft delete)
+router.delete('/:id', requirePermission('shipmentVendors.delete'), async (req, res) => {
+  try {
+    const vendor = await ShipmentVendor.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false },
+      { new: true }
+    );
+    if (!vendor) {
+      return res.status(404).json({ error: 'Shipment vendor not found' });
+    }
+    res.json({ message: 'Shipment vendor deactivated successfully' });
+  } catch (error) {
+    logger.backend.error('Error deleting shipment vendor', { error: error.message, stack: error.stack });
     res.status(500).json({ error: error.message });
   }
 });

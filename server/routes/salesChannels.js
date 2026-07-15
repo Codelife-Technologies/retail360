@@ -50,6 +50,101 @@ router.get('/', requirePermission('salesChannels.view'), async (req, res) => {
   }
 });
 
+// GET Excel template (must be before /:id)
+router.get('/template', requirePermission('salesChannels.view'), (req, res) => {
+  try {
+    const headers = [
+      { key: 'code', label: 'Code *' },
+      { key: 'name', label: 'Name *' },
+      { key: 'description', label: 'Description' },
+      { key: 'type', label: 'Type' },
+      { key: 'commissionRate', label: 'Commission Rate (%)' },
+      { key: 'paymentTerms', label: 'Payment Terms' },
+      { key: 'isActive', label: 'Is Active' }
+    ];
+    
+    const buffer = generateTemplate(headers);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=sales_channels_template.xlsx');
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST import sales channels from Excel (must be before /:id)
+router.post('/import', requirePermission('salesChannels.create'), upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const { mode = 'both' } = req.body;
+    const fileBuffer = req.file.buffer;
+    const excelData = parseExcel(fileBuffer);
+    
+    if (excelData.length === 0) {
+      return res.status(400).json({ error: 'Excel file is empty' });
+    }
+
+    let imported = 0;
+    let updated = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (let i = 0; i < excelData.length; i++) {
+      const row = excelData[i];
+      const rowNum = i + 2;
+
+      try {
+        const channelData = {
+          code: (row['Code *'] || '').toString().toUpperCase().trim(),
+          name: row['Name *'] || '',
+          description: row['Description'] || '',
+          type: row['Type'] || '',
+          commissionRate: row['Commission Rate (%)'] ? parseFloat(row['Commission Rate (%)']) : undefined,
+          paymentTerms: row['Payment Terms'] || '',
+          isActive: row['Is Active'] === 'true' || row['Is Active'] === true || row['Is Active'] === 'TRUE' || row['Is Active'] === undefined
+        };
+
+        if (!channelData.code || !channelData.name) {
+          errors.push({ row: rowNum, field: 'code/name', message: 'Code and Name are required', data: row });
+          failed++;
+          continue;
+        }
+
+        const existingChannel = await SalesChannel.findOne({ code: channelData.code });
+
+        if (existingChannel) {
+          if (mode === 'create') {
+            errors.push({ row: rowNum, field: 'code', message: 'Sales channel code already exists', data: row });
+            failed++;
+            continue;
+          }
+          await SalesChannel.findByIdAndUpdate(existingChannel._id, channelData, { runValidators: true });
+          updated++;
+        } else {
+          if (mode === 'update') {
+            errors.push({ row: rowNum, field: 'code', message: 'Sales channel not found for update', data: row });
+            failed++;
+            continue;
+          }
+          const channel = new SalesChannel(channelData);
+          await channel.save();
+          imported++;
+        }
+      } catch (error) {
+        errors.push({ row: rowNum, field: 'general', message: error.message, data: row });
+        failed++;
+      }
+    }
+
+    res.json({ success: true, imported, updated, failed, errors: errors.slice(0, 100) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET single sales channel
 router.get('/:id', requirePermission('salesChannels.view'), async (req, res) => {
   try {
@@ -131,101 +226,6 @@ router.delete('/:id', requirePermission('salesChannels.delete'), async (req, res
       stack: error.stack,
       salesChannelId: req.params.id
     });
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET Excel template
-router.get('/template', requirePermission('salesChannels.view'), (req, res) => {
-  try {
-    const headers = [
-      { key: 'code', label: 'Code *' },
-      { key: 'name', label: 'Name *' },
-      { key: 'description', label: 'Description' },
-      { key: 'type', label: 'Type' },
-      { key: 'commissionRate', label: 'Commission Rate (%)' },
-      { key: 'paymentTerms', label: 'Payment Terms' },
-      { key: 'isActive', label: 'Is Active' }
-    ];
-    
-    const buffer = generateTemplate(headers);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=sales_channels_template.xlsx');
-    res.send(buffer);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// POST import sales channels from Excel
-router.post('/import', requirePermission('salesChannels.create'), upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    const { mode = 'both' } = req.body;
-    const fileBuffer = req.file.buffer;
-    const excelData = parseExcel(fileBuffer);
-    
-    if (excelData.length === 0) {
-      return res.status(400).json({ error: 'Excel file is empty' });
-    }
-
-    let imported = 0;
-    let updated = 0;
-    let failed = 0;
-    const errors = [];
-
-    for (let i = 0; i < excelData.length; i++) {
-      const row = excelData[i];
-      const rowNum = i + 2;
-
-      try {
-        const channelData = {
-          code: (row['Code *'] || '').toString().toUpperCase().trim(),
-          name: row['Name *'] || '',
-          description: row['Description'] || '',
-          type: row['Type'] || '',
-          commissionRate: row['Commission Rate (%)'] ? parseFloat(row['Commission Rate (%)']) : undefined,
-          paymentTerms: row['Payment Terms'] || '',
-          isActive: row['Is Active'] === 'true' || row['Is Active'] === true || row['Is Active'] === 'TRUE' || row['Is Active'] === undefined
-        };
-
-        if (!channelData.code || !channelData.name) {
-          errors.push({ row: rowNum, field: 'code/name', message: 'Code and Name are required', data: row });
-          failed++;
-          continue;
-        }
-
-        const existingChannel = await SalesChannel.findOne({ code: channelData.code });
-
-        if (existingChannel) {
-          if (mode === 'create') {
-            errors.push({ row: rowNum, field: 'code', message: 'Sales channel code already exists', data: row });
-            failed++;
-            continue;
-          }
-          await SalesChannel.findByIdAndUpdate(existingChannel._id, channelData, { runValidators: true });
-          updated++;
-        } else {
-          if (mode === 'update') {
-            errors.push({ row: rowNum, field: 'code', message: 'Sales channel not found for update', data: row });
-            failed++;
-            continue;
-          }
-          const channel = new SalesChannel(channelData);
-          await channel.save();
-          imported++;
-        }
-      } catch (error) {
-        errors.push({ row: rowNum, field: 'general', message: error.message, data: row });
-        failed++;
-      }
-    }
-
-    res.json({ success: true, imported, updated, failed, errors: errors.slice(0, 100) });
-  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

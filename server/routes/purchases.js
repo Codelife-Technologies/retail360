@@ -55,6 +55,27 @@ router.get('/', requirePermission('purchases.view'), async (req, res) => {
   }
 });
 
+// GET Excel template (must be before /:id)
+router.get('/template', requirePermission('purchases.view'), (req, res) => {
+  try {
+    const headers = [
+      { key: 'supplier', label: 'Supplier Name *' },
+      { key: 'location', label: 'Location Code *' },
+      { key: 'purchaseDate', label: 'Purchase Date' },
+      { key: 'paymentStatus', label: 'Payment Status' },
+      { key: 'notes', label: 'Notes' }
+    ];
+    
+    const { generateTemplate } = require('../utils/excelGenerator');
+    const buffer = generateTemplate(headers);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=purchases_template.xlsx');
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET single purchase
 router.get('/:id', requirePermission('purchases.view'), async (req, res) => {
   try {
@@ -198,27 +219,6 @@ router.delete('/:id', requirePermission('purchases.delete'), async (req, res) =>
     
     await Purchase.findByIdAndDelete(req.params.id);
     res.json({ message: 'Purchase deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET Excel template
-router.get('/template', requirePermission('purchases.view'), (req, res) => {
-  try {
-    const headers = [
-      { key: 'supplier', label: 'Supplier Name *' },
-      { key: 'location', label: 'Location Code *' },
-      { key: 'purchaseDate', label: 'Purchase Date' },
-      { key: 'paymentStatus', label: 'Payment Status' },
-      { key: 'notes', label: 'Notes' }
-    ];
-    
-    const { generateTemplate } = require('../utils/excelGenerator');
-    const buffer = generateTemplate(headers);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=purchases_template.xlsx');
-    res.send(buffer);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
