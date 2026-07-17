@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { reportsAPI, categoriesAPI, subcategoriesAPI, locationsAPI, purchaseRequisitesAPI, productsAPI, pricesAPI } from '../services/api';
+import { reportsAPI, categoriesAPI, subcategoriesAPI, locationsAPI, salesChannelsAPI, purchaseRequisitesAPI, productsAPI, pricesAPI } from '../services/api';
 import { getCurrentUser } from '../utils/currentUser';
 import logger from '../utils/logger';
 import ProductDetailsModal from './ProductDetailsModal';
@@ -47,6 +47,7 @@ function ReplenishReport({ onNavigate }) {
   const [loggedInUser, setLoggedInUser] = useState(() => getCurrentUser());
   const [reportData, setReportData] = useState(null);
   const [locations, setLocations] = useState([]);
+  const [salesChannels, setSalesChannels] = useState([]);
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
 
@@ -54,6 +55,7 @@ function ReplenishReport({ onNavigate }) {
     category: '',
     subCategory: '',
     location: '',
+    salesChannel: '',
     status: 'ALL',
     specificDate: '',
   });
@@ -69,6 +71,7 @@ function ReplenishReport({ onNavigate }) {
   useEffect(() => {
     fetchCategories();
     fetchLocations();
+    fetchSalesChannels();
     fetchReport();
     fetchUnapprovedPRs();
   }, []);
@@ -79,7 +82,7 @@ function ReplenishReport({ onNavigate }) {
 
   useEffect(() => {
     fetchReport();
-  }, [filters.category, filters.subCategory, filters.location, filters.specificDate]);
+  }, [filters.category, filters.subCategory, filters.location, filters.salesChannel, filters.specificDate]);
 
   const formatPrOptionLabel = (pr) => {
     const title = pr.name ? `${pr.name} (${pr.prNumber})` : pr.prNumber;
@@ -103,6 +106,16 @@ function ReplenishReport({ onNavigate }) {
     } catch (error) {
       console.error('Error fetching locations:', error);
       logger.error('Error fetching locations in replenishment report', error);
+    }
+  };
+
+  const fetchSalesChannels = async () => {
+    try {
+      const response = await salesChannelsAPI.getAll({ isActive: 'true' });
+      setSalesChannels(response.data || []);
+    } catch (error) {
+      console.error('Error fetching sales channels:', error);
+      logger.error('Error fetching sales channels in replenishment report', error);
     }
   };
 
@@ -138,6 +151,7 @@ function ReplenishReport({ onNavigate }) {
         category: filters.category,
         subCategory: filters.subCategory,
         location: filters.location,
+        salesChannel: filters.salesChannel,
       };
       if (filters.specificDate) {
         params.specificDate = filters.specificDate;
@@ -164,6 +178,7 @@ function ReplenishReport({ onNavigate }) {
         category: filters.category,
         subCategory: filters.subCategory,
         location: filters.location,
+        salesChannel: filters.salesChannel,
         status: filters.status,
         view: 'locations',
       };
@@ -588,6 +603,22 @@ function ReplenishReport({ onNavigate }) {
 
       <div className="report-actions-row">
         <div className="report-actions-left">
+          <div className="replenish-location-select">
+            <label htmlFor="replenish-sales-channel">Sales Channel</label>
+            <select
+              id="replenish-sales-channel"
+              name="salesChannel"
+              value={filters.salesChannel}
+              onChange={handleFilterChange}
+            >
+              <option value="">All Sales Channels</option>
+              {salesChannels.map((channel) => (
+                <option key={channel._id} value={channel._id}>
+                  {channel.name}{channel.code ? ` (${channel.code})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="replenish-location-select">
             <label htmlFor="replenish-location">Warehouse</label>
             <select

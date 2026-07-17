@@ -351,6 +351,12 @@
   font-size: 1rem;
 }
 
+.hr-worklog-report-period-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .hr-worklog-report-employee {
   display: flex;
   flex-direction: column;
@@ -1124,5 +1130,79 @@
   display: block;
   margin-top: 0.35rem;
   font-size: 0.92rem;
+  color: var(--text-muted, #666);
+}
+
+.hr-muted {
+  color: var(--text-muted, #666);
+  font-size: 0.88rem;
+}
+
+.hr-chip {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.hr-chip-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  max-width: 100%;
+}
+
+.hr-chip-select-scroll {
+  max-height: 180px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.5rem;
+  border: 1px solid var(--border, #dee2e6);
+  border-radius: 8px;
+  background: var(--surface-2, #f8f9fa);
+}
+
+.hr-chip-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.hr-map-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 1.15rem;
+}
+
+.hr-map-link:hover {
+  opacity: 0.85;
+}
+
+.attendance-location-history {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.ed-attendance-geo-error {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  white-space: pre-line;
+  font-size: 0.92rem;
+}
+
+.ed-attendance-office-meta {
+  margin-top: 0.5rem;
+  font-size: 0.88rem;
   color: var(--text-muted, #666);
 }

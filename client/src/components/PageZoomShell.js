@@ -33,7 +33,10 @@ function PageZoomShell({ contentKey, children }) {
   }, [contentKey]);
 
   return (
-    <div className="page-zoom-shell">
+    <div
+      className="page-zoom-shell"
+      style={zoom === 1 ? undefined : { zIndex: 150 }}
+    >
       <div className="page-zoom-toolbar" aria-label="Page zoom controls">
         <div className="page-zoom-controls">
           <button
@@ -68,7 +71,12 @@ function PageZoomShell({ contentKey, children }) {
       </div>
 
       <div className="page-zoom-viewport">
-        <div className="page-zoom-scaler" style={{ zoom }}>
+        {/* Avoid applying `zoom` at 100% — it creates a containing block that
+            traps position:fixed modals under the app header. */}
+        <div
+          className="page-zoom-scaler"
+          style={zoom === 1 ? undefined : { zoom }}
+        >
           {children}
         </div>
       </div>

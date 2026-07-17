@@ -110,6 +110,8 @@ try {
   logger.backend.info('Sales routes loaded');
   const logsRoutes = require('./routes/logs');
   logger.backend.info('Logs routes loaded');
+  const activityLogsRoutes = require('./routes/activityLogs');
+  logger.backend.info('Activity logs routes loaded');
   const shipmentVendorsRoutes = require('./routes/shipmentVendors');
   logger.backend.info('Shipment vendors routes loaded');
   const shippingChargesRoutes = require('./routes/shippingCharges');
@@ -127,6 +129,8 @@ try {
   const geminiRoutes = require('./routes/gemini');
   logger.backend.info('Gemini routes loaded');
   const hrRoutes = require('./hr/routes');
+  const complianceRoutes = require('./compliance/routes');
+  const financeRoutes = require('./finance/routes');
   logger.backend.info('HR routes loaded');
   const priceMastersRoutes = require('./routes/priceMasters');
   logger.backend.info('Price masters routes loaded');
@@ -164,6 +168,7 @@ try {
   app.use('/api/sales-locations', salesLocationsRoutes);
   app.use('/api/sales', salesRoutes);
   app.use('/api/logs', logsRoutes);
+  app.use('/api/activity-logs', activityLogsRoutes);
   app.use('/api/shipment-vendors', shipmentVendorsRoutes);
   app.use('/api/shipping-charges', shippingChargesRoutes);
   app.use('/api/shipments', shipmentsRoutes);
@@ -172,6 +177,8 @@ try {
   app.use('/api/subcategories', subcategoriesRoutes);
   app.use('/api/company-profile', companyProfileRoutes);
   app.use('/api/hr', hrRoutes);
+  app.use('/api/compliance', complianceRoutes);
+  app.use('/api/finance', financeRoutes);
   app.use('/api/gemini', geminiRoutes);
   app.use('/api/units', unitsRoutes);
   app.use('/api/permissions', permissionsRoutes);
@@ -223,5 +230,12 @@ app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`API endpoints available at http://localhost:${PORT}/api`);
   console.log(`Log files location: ${require('path').join(__dirname, 'logs')}`);
+  try {
+    const { startAutoAbsentScheduler } = require('./hr/utils/attendanceCutoff');
+    startAutoAbsentScheduler();
+    console.log('Attendance: auto-absent scheduler started (cutoff 12:30)');
+  } catch (schedulerError) {
+    console.warn('Attendance auto-absent scheduler failed to start:', schedulerError.message);
+  }
 });
 

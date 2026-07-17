@@ -1992,7 +1992,7 @@ router.get('/purchases/export', async (req, res) => {
 
 // GET replenishment report
 async function buildReplenishReportData(query = {}) {
-  const { category, subCategory, location, specificDate } = query;
+  const { category, subCategory, location, salesChannel, specificDate } = query;
     
     const productMatch = {};
     if (category) productMatch.category = category;
@@ -2040,8 +2040,12 @@ async function buildReplenishReportData(query = {}) {
     if (location) {
       salesLocationFilter.location = new mongoose.Types.ObjectId(location);
     }
+    if (salesChannel) {
+      salesLocationFilter.salesChannel = new mongoose.Types.ObjectId(salesChannel);
+    }
     const salesLocations = await SalesLocation.find(salesLocationFilter)
       .populate('location', 'name code city country isActive')
+      .populate('salesChannel', 'name code')
       .sort({ name: 1 })
       .lean();
 
@@ -2049,6 +2053,18 @@ async function buildReplenishReportData(query = {}) {
     const stockMatch = { product: { $in: productIds } };
     if (location) {
       stockMatch.location = new mongoose.Types.ObjectId(location);
+    } else if (salesLocations.length) {
+      const warehouseIds = [
+        ...new Set(
+          salesLocations
+            .map((sl) => sl.location?._id || sl.location)
+            .filter(Boolean)
+            .map((id) => id.toString())
+        ),
+      ].map((id) => new mongoose.Types.ObjectId(id));
+      if (warehouseIds.length) {
+        stockMatch.location = { $in: warehouseIds };
+      }
     }
     const stockRecords = await Stock.find(stockMatch).lean();
     const stockMap = new Map(
@@ -2076,6 +2092,7 @@ async function buildReplenishReportData(query = {}) {
       monthBuckets,
       timeZone: SALES_REPORT_TIMEZONE,
       locationId: location || null,
+      salesChannelId: salesChannel || null,
     });
 
     let salesDailyMap = null;
@@ -2085,6 +2102,7 @@ async function buildReplenishReportData(query = {}) {
         dayStart: specificDay.start,
         dayEnd: specificDay.end,
         locationId: location || null,
+        salesChannelId: salesChannel || null,
       });
     }
 
@@ -2102,6 +2120,13 @@ async function buildReplenishReportData(query = {}) {
         _id: salesLoc._id,
         name: salesLoc.name,
         code: salesLoc.code,
+        salesChannel: salesLoc.salesChannel
+          ? {
+              _id: salesLoc.salesChannel._id,
+              name: salesLoc.salesChannel.name,
+              code: salesLoc.salesChannel.code,
+            }
+          : null,
         warehouse: {
           _id: warehouseLoc._id,
           name: warehouseLoc.name,

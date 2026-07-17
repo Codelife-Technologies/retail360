@@ -115,7 +115,22 @@
 }
 
 .btn-primary:hover {
-  background: #6B3894;
+  background: #5a2d7a;
+}
+
+.btn-import {
+  padding: 0.5rem 1.5rem;
+  border: 1px solid #6B3894;
+  background: white;
+  color: #6B3894;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.2s;
+}
+
+.btn-import:hover {
+  background: #f3e8ff;
 }
 
 .loading {

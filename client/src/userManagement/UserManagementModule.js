@@ -3,6 +3,7 @@ import Users from '../components/Users';
 import Roles from '../components/Roles';
 import Permissions from '../components/Permissions';
 import Groups from '../components/Groups';
+import ActivityLogs from '../components/ActivityLogs';
 import './UserManagementModule.css';
 
 function UserManagementModule({ subTab = 'users' }) {
@@ -16,6 +17,8 @@ function UserManagementModule({ subTab = 'users' }) {
         return <Permissions />;
       case 'groups':
         return <Groups />;
+      case 'logs':
+        return <ActivityLogs />;
       default:
         return <Users />;
     }

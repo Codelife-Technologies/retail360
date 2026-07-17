@@ -4,8 +4,13 @@ const multer = require('multer');
 const Purchase = require('../models/Purchase');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const Price = require('../models/Price');
+const Supplier = require('../models/Supplier');
+const Location = require('../models/Location');
+const Product = require('../models/Product');
 const { paginate } = require('../utils/pagination');
 const { requirePermission } = require('../middleware/auth');
+const { generateTemplate } = require('../utils/excelGenerator');
+const { parseExcel, buildImportErrorSummary } = require('../utils/excelParser');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -55,22 +60,196 @@ router.get('/', requirePermission('purchases.view'), async (req, res) => {
   }
 });
 
+const PURCHASE_TEMPLATE_HEADERS = [
+  { key: 'purchaseRef', label: 'Purchase Reference *' },
+  { key: 'supplier', label: 'Supplier Name *' },
+  { key: 'locationCode', label: 'Location Code *' },
+  { key: 'purchaseDate', label: 'Purchase Date (YYYY-MM-DD)' },
+  { key: 'paymentStatus', label: 'Payment Status (pending/paid/partial)' },
+  { key: 'sku', label: 'Product SKU *' },
+  { key: 'quantity', label: 'Quantity *' },
+  { key: 'unitPrice', label: 'Unit Price *' },
+  { key: 'tax', label: 'Tax' },
+  { key: 'notes', label: 'Notes' },
+];
+
+function parsePurchaseImportNumber(value) {
+  if (value === null || value === undefined || value === '') return NaN;
+  const cleaned = String(value).replace(/,/g, '').trim();
+  return parseFloat(cleaned);
+}
+
+function isEmptyPurchaseImportRow(row) {
+  return !Object.values(row || {}).some((value) => String(value ?? '').trim() !== '');
+}
+
 // GET Excel template (must be before /:id)
 router.get('/template', requirePermission('purchases.view'), (req, res) => {
   try {
-    const headers = [
-      { key: 'supplier', label: 'Supplier Name *' },
-      { key: 'location', label: 'Location Code *' },
-      { key: 'purchaseDate', label: 'Purchase Date' },
-      { key: 'paymentStatus', label: 'Payment Status' },
-      { key: 'notes', label: 'Notes' }
+    const sampleData = [
+      {
+        purchaseRef: 'PUR-1',
+        supplier: 'Acme Supplies',
+        locationCode: 'WH-01',
+        purchaseDate: '2026-07-16',
+        paymentStatus: 'pending',
+        sku: 'SKU-001',
+        quantity: 10,
+        unitPrice: 250,
+        tax: 0,
+        notes: 'Add one row per SKU. Rows with the same Purchase Reference become one purchase.',
+      },
+      {
+        purchaseRef: 'PUR-1',
+        supplier: 'Acme Supplies',
+        locationCode: 'WH-01',
+        purchaseDate: '2026-07-16',
+        paymentStatus: 'pending',
+        sku: 'SKU-002',
+        quantity: 5,
+        unitPrice: 800,
+        tax: 0,
+        notes: '',
+      },
     ];
-    
-    const { generateTemplate } = require('../utils/excelGenerator');
-    const buffer = generateTemplate(headers);
+
+    const buffer = generateTemplate(PURCHASE_TEMPLATE_HEADERS, sampleData, {
+      instructions: [
+        'Use one row per SKU line in a purchase.',
+        'Rows with the same Purchase Reference are grouped into one purchase record.',
+        'Required columns: Purchase Reference, Supplier Name, Location Code, Product SKU, Quantity, Unit Price.',
+        'Payment Status: pending, paid, or partial.',
+        'Supplier, location code, and SKU must already exist in the system.',
+      ],
+    });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=purchases_template.xlsx');
     res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST import purchases from Excel (must be before /:id)
+router.post('/import', requirePermission('purchases.create'), upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const rows = parseExcel(req.file.buffer);
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'Excel file is empty' });
+    }
+
+    const groups = new Map();
+    let skipped = 0;
+    let imported = 0;
+    let failed = 0;
+    const errors = [];
+
+    rows.forEach((row, idx) => {
+      if (isEmptyPurchaseImportRow(row)) {
+        skipped += 1;
+        return;
+      }
+      const ref = (row['Purchase Reference *'] || '').toString().trim();
+      if (!ref) {
+        errors.push({
+          row: idx + 2,
+          field: 'Purchase Reference *',
+          message: 'Purchase Reference is required',
+        });
+        failed += 1;
+        return;
+      }
+      if (!groups.has(ref)) {
+        groups.set(ref, []);
+      }
+      groups.get(ref).push({ row, rowNum: idx + 2 });
+    });
+
+    for (const [ref, entries] of groups) {
+      const first = entries[0].row;
+      try {
+        const supplierName = (first['Supplier Name *'] || '').toString().trim();
+        if (!supplierName) throw new Error('Supplier Name is required');
+
+        const locationCode = (first['Location Code *'] || '').toString().trim();
+        if (!locationCode) throw new Error('Location Code is required');
+
+        const supplier = await Supplier.findOne({ name: supplierName });
+        if (!supplier) throw new Error(`Supplier '${supplierName}' not found`);
+
+        const location = await Location.findOne({ code: locationCode });
+        if (!location) throw new Error(`Location code '${locationCode}' not found`);
+
+        const items = [];
+        for (const { row, rowNum } of entries) {
+          const sku = (row['Product SKU *'] || '').toString().trim();
+          const quantity = parsePurchaseImportNumber(row['Quantity *']);
+          const unitPrice = parsePurchaseImportNumber(row['Unit Price *']);
+
+          if (!sku) throw new Error(`Row ${rowNum}: Product SKU is required`);
+          if (!quantity || quantity <= 0) throw new Error(`Row ${rowNum}: Quantity must be greater than 0`);
+          if (isNaN(unitPrice) || unitPrice < 0) throw new Error(`Row ${rowNum}: Unit Price must be a valid number`);
+
+          const product = await Product.findOne({ sku });
+          if (!product) throw new Error(`Row ${rowNum}: Product SKU '${sku}' not found`);
+
+          items.push({
+            product: product._id,
+            quantity,
+            unitPrice,
+            total: quantity * unitPrice,
+          });
+        }
+
+        const paymentStatusRaw = (first['Payment Status (pending/paid/partial)'] || 'pending')
+          .toString()
+          .trim()
+          .toLowerCase();
+        const paymentStatus = ['pending', 'paid', 'partial'].includes(paymentStatusRaw)
+          ? paymentStatusRaw
+          : 'pending';
+
+        const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+        const tax = parsePurchaseImportNumber(first.Tax) || 0;
+
+        const purchase = new Purchase({
+          purchaseNumber: await generatePurchaseNumber(),
+          supplier: supplier._id,
+          location: location._id,
+          purchaseDate: first['Purchase Date (YYYY-MM-DD)']
+            ? new Date(first['Purchase Date (YYYY-MM-DD)'])
+            : new Date(),
+          items,
+          subtotal,
+          tax,
+          total: subtotal + tax,
+          paymentStatus,
+          notes: (first.Notes || '').toString().trim(),
+        });
+
+        await purchase.save();
+        imported += 1;
+      } catch (error) {
+        errors.push({ row: entries[0].rowNum, field: 'general', message: `${ref}: ${error.message}` });
+        failed += 1;
+      }
+    }
+
+    res.json({
+      success: true,
+      imported,
+      updated: 0,
+      failed,
+      skipped,
+      totalRows: rows.length - skipped,
+      processed: imported + failed,
+      errors: errors.slice(0, 100),
+      errorSummary: buildImportErrorSummary(errors),
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

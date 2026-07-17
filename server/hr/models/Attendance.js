@@ -14,6 +14,16 @@ const attendanceSchema = new mongoose.Schema(
       default: 'Present',
     },
     notes: { type: String, default: '' },
+    location: {
+      latitude: { type: Number },
+      longitude: { type: Number },
+      distanceMeters: { type: Number, min: 0 },
+      officeName: { type: String, default: '' },
+      officeLocation: { type: mongoose.Schema.Types.ObjectId, ref: 'HrOfficeLocation' },
+      capturedAt: { type: Date },
+      deviceInfo: { type: String, default: '' },
+      browserInfo: { type: String, default: '' },
+    },
   },
   { timestamps: true }
 );

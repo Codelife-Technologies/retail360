@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { employeeWorkLogsAPI } from '../services/employeeDashboardApi';
 import EmployeeContextGate, { EmployeeWelcome } from '../components/EmployeeContextGate';
 import HrStatusBadge from '../../hr/components/HrStatusBadge';
@@ -8,6 +8,7 @@ import {
   formatDuration,
   minutesFromHoursAndMinutes,
   toInputDate,
+  todayInputDate,
 } from '../../hr/utils/hrUtils';
 
 const emptyEntry = () => ({ description: '', hours: '', minutes: '' });
@@ -42,7 +43,7 @@ function isValidEntry(entry) {
 }
 
 function EmployeeWorkLogContent({ employeeId }) {
-  const [selectedDate, setSelectedDate] = useState(toInputDate(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => todayInputDate());
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState(emptyEntry());
   const [notes, setNotes] = useState('');
@@ -52,6 +53,8 @@ function EmployeeWorkLogContent({ employeeId }) {
   const [saving, setSaving] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
   const [recentLogs, setRecentLogs] = useState([]);
+  const loadRequestIdRef = useRef(0);
+  const logIdRef = useRef(null);
 
   const totalMinutes = useMemo(
     () => tasks.reduce((sum, entry) => sum + minutesFromHoursAndMinutes(entry.hours, entry.minutes), 0),
@@ -59,10 +62,17 @@ function EmployeeWorkLogContent({ employeeId }) {
   );
 
   const isSubmitted = status === 'Submitted';
-  const isToday = selectedDate === toInputDate(new Date());
+  const isToday = selectedDate === todayInputDate();
+
+  useEffect(() => {
+    logIdRef.current = logId;
+  }, [logId]);
 
   const loadLogForDate = useCallback(async (date) => {
+    const requestId = ++loadRequestIdRef.current;
+
     if (!employeeId) {
+      if (requestId !== loadRequestIdRef.current) return;
       setLogId(null);
       setTasks([]);
       setNewTask(emptyEntry());
@@ -75,6 +85,9 @@ function EmployeeWorkLogContent({ employeeId }) {
     try {
       setLoading(true);
       const response = await employeeWorkLogsAPI.getByDate(date, employeeId);
+      // Ignore stale responses so a slow getByDate cannot wipe a just-saved logId/tasks.
+      if (requestId !== loadRequestIdRef.current) return;
+
       const log = response.data;
       if (log) {
         setLogId(log._id);
@@ -89,6 +102,7 @@ function EmployeeWorkLogContent({ employeeId }) {
       }
       setNewTask(emptyEntry());
     } catch (error) {
+      if (requestId !== loadRequestIdRef.current) return;
       console.error('Error loading work log:', error);
       setLogId(null);
       setTasks([]);
@@ -96,7 +110,9 @@ function EmployeeWorkLogContent({ employeeId }) {
       setNotes('');
       setStatus('Draft');
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [employeeId]);
 
@@ -114,6 +130,11 @@ function EmployeeWorkLogContent({ employeeId }) {
     }
   }, [employeeId]);
 
+  // Default to current calendar day when the employee context becomes available.
+  useEffect(() => {
+    setSelectedDate(todayInputDate());
+  }, [employeeId]);
+
   useEffect(() => {
     loadLogForDate(selectedDate);
   }, [selectedDate, loadLogForDate]);
@@ -123,12 +144,29 @@ function EmployeeWorkLogContent({ employeeId }) {
   }, [loadRecentLogs]);
 
   const persistLog = async (nextTasks, nextNotes, nextStatus) => {
+    // Bump request id so any in-flight getByDate cannot overwrite this save.
+    loadRequestIdRef.current += 1;
+
     const payload = {
       ...buildPayload(selectedDate, nextTasks, nextNotes, nextStatus),
       employee: employeeId,
     };
 
-    const response = await employeeWorkLogsAPI.save(payload);
+    const existingId = logIdRef.current;
+    let response;
+    try {
+      response = existingId
+        ? await employeeWorkLogsAPI.update(existingId, payload)
+        : await employeeWorkLogsAPI.save(payload);
+    } catch (error) {
+      // Stale id after refresh/race — create/upsert via POST instead.
+      if (existingId && error.response?.status === 404) {
+        response = await employeeWorkLogsAPI.save(payload);
+      } else {
+        throw error;
+      }
+    }
+
     setLogId(response.data._id);
     setStatus(response.data.status);
     setTasks(entriesFromLog(response.data));
@@ -267,8 +305,8 @@ function EmployeeWorkLogContent({ employeeId }) {
           <input
             type="date"
             value={selectedDate}
-            max={toInputDate(new Date())}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            max={todayInputDate()}
+            onChange={(e) => setSelectedDate(e.target.value || todayInputDate())}
           />
         </label>
         <div className="ed-worklog-summary">

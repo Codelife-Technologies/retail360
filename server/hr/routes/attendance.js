@@ -15,6 +15,66 @@ const {
 } = require('../utils/attendanceAccess');
 const { calcWorkingHoursFromTimes, getDateKey, pickEarlierTime, pickLaterTime } = require('../../utils/attendanceSession');
 const { zonedDateTimeToUtc, APP_TIMEZONE } = require('../../utils/appTimezone');
+const {
+  HALF_DAY_CUTOFF,
+  isPastHalfDayCutoff,
+  getNowHHMM,
+  resolveSelfMarkStatus,
+} = require('../utils/attendanceCutoff');
+const { validateAttendanceLocation } = require('../utils/attendanceLocation');
+
+function statusesRequireOfficeLocation(status) {
+  return status === 'Present' || status === 'Half Day' || !status;
+}
+
+function parseClientLocation(body = {}) {
+  return {
+    latitude: body.latitude ?? body.location?.latitude,
+    longitude: body.longitude ?? body.location?.longitude,
+    deviceInfo: body.deviceInfo || body.location?.deviceInfo || '',
+    browserInfo: body.browserInfo || body.location?.browserInfo || '',
+  };
+}
+
+async function applyLocationValidation({
+  employeeId,
+  status,
+  body,
+  employeeMarking,
+  canManageAll,
+}) {
+  const needsGps = employeeMarking && statusesRequireOfficeLocation(status)
+    && status !== 'Work From Home'
+    && status !== 'Absent'
+    && status !== 'On Leave'
+    && status !== 'Holiday';
+
+  if (!needsGps) {
+    // Still allow optional location capture if client sends it
+    const loc = parseClientLocation(body);
+    if (loc.latitude != null && loc.longitude != null) {
+      const result = await validateAttendanceLocation({
+        employeeId,
+        ...loc,
+        requireLocation: false,
+      });
+      return result.ok ? result : { ok: true, locationPayload: null };
+    }
+    return { ok: true, locationPayload: null };
+  }
+
+  const loc = parseClientLocation(body);
+  const result = await validateAttendanceLocation({
+    employeeId,
+    ...loc,
+    requireLocation: true,
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+  return result;
+}
 
 function enrichAttendanceRecord(record) {
   if (!record) return record;
@@ -216,6 +276,7 @@ router.get('/mark-defaults', async (req, res) => {
     const effectiveCheckOut = times.checkOut
       || (isToday && times.checkIn ? formatTimeHHMM(new Date()) : '');
 
+    const pastCutoff = isPastHalfDayCutoff();
     res.json({
       date: today.toISOString().slice(0, 10),
       checkIn: times.checkIn,
@@ -224,6 +285,11 @@ router.get('/mark-defaults', async (req, res) => {
       hoursInProgress: isToday && Boolean(times.checkIn) && !times.checkOut,
       alreadyMarked: Boolean(existing),
       existingRecord: existing ? withComputedWorkingHours(existing) : null,
+      halfDayCutoff: HALF_DAY_CUTOFF,
+      pastHalfDayCutoff: pastCutoff,
+      predictedStatus:
+        existing?.status
+        || (pastCutoff ? 'Half Day' : 'Present'),
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -250,20 +316,12 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-const EMPLOYEE_SELF_STATUSES = new Set(['Present', 'Work From Home']);
-
-function resolveEmployeeSelfStatus(status, fallback = 'Present') {
-  if (EMPLOYEE_SELF_STATUSES.has(status)) {
-    return status;
-  }
-  return fallback;
-}
-
 router.post('/', async (req, res) => {
   try {
     const scope = await resolveAttendanceScope(req);
     const today = startOfDay(new Date());
     const todayEnd = endOfDay(today);
+    const nowTime = getNowHHMM(new Date());
 
     let employeeId = req.body.employee;
     if (!scope.canManageAll) {
@@ -279,9 +337,10 @@ router.post('/', async (req, res) => {
     }
 
     const selfRequest = isSelfAttendanceRequest(scope, employeeId);
+    const employeeMarking = selfRequest || !scope.canManageAll;
 
     let sessionTimes = { checkIn: '', checkOut: '' };
-    if (selfRequest || !scope.canManageAll) {
+    if (employeeMarking) {
       await ensureUserAttendanceSession(req.user.id, { allowCurrentTime: true });
       sessionTimes = await getAttendanceTimesForUser(req.user.id, today);
     } else {
@@ -296,11 +355,10 @@ router.post('/', async (req, res) => {
       scope.canManageAll && req.body.checkOut != null && req.body.checkOut !== ''
         ? req.body.checkOut
         : (req.body.checkOut || sessionTimes.checkOut);
-    const nowTime = formatTimeHHMM(new Date());
     const resolvedCheckOut = checkOut
-      || ((selfRequest || !scope.canManageAll) ? nowTime : '');
+      || (employeeMarking ? nowTime : '');
 
-    if ((selfRequest || !scope.canManageAll) && !checkIn) {
+    if (employeeMarking && !checkIn) {
       return res.status(400).json({
         error: 'No login recorded today. Log in to the app first, then mark attendance.',
       });
@@ -312,7 +370,30 @@ router.post('/', async (req, res) => {
     });
 
     if (existing) {
-      if (selfRequest || !scope.canManageAll) {
+      if (employeeMarking) {
+        const nextStatus = resolveSelfMarkStatus({
+          requestedStatus: req.body.status,
+          existing,
+          nowHHMM: nowTime,
+        });
+
+        const locationCheck = await applyLocationValidation({
+          employeeId,
+          status: nextStatus,
+          body: req.body,
+          employeeMarking,
+          canManageAll: scope.canManageAll,
+        });
+        if (!locationCheck.ok) {
+          return res.status(400).json({
+            error: locationCheck.error,
+            code: locationCheck.code,
+            currentDistanceMeters: locationCheck.currentDistanceMeters,
+            allowedRadiusMeters: locationCheck.allowedRadiusMeters,
+            officeName: locationCheck.office?.name,
+          });
+        }
+
         if (checkIn) {
           existing.checkIn = existing.checkIn
             ? pickEarlierTime(existing.checkIn, checkIn)
@@ -324,8 +405,17 @@ router.post('/', async (req, res) => {
             : resolvedCheckOut;
         }
         if (req.body.notes != null) existing.notes = req.body.notes;
-        if (req.body.status != null) {
-          existing.status = resolveEmployeeSelfStatus(req.body.status, existing.status);
+        existing.status = nextStatus;
+        if (
+          existing.status === 'Half Day'
+          && (!existing.notes || existing.notes.includes('Auto-marked absent'))
+        ) {
+          existing.notes = existing.notes?.includes('Auto-marked absent')
+            ? 'Marked after 12:30 — counted as half day'
+            : (existing.notes || 'Marked after 12:30 — counted as half day');
+        }
+        if (locationCheck.locationPayload) {
+          existing.location = locationCheck.locationPayload;
         }
         await existing.save();
         await existing.populate('employee', 'employeeId firstName lastName department photo');
@@ -334,9 +424,33 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Attendance already marked for this employee today' });
     }
 
-    const defaultStatus = selfRequest || !scope.canManageAll
-      ? resolveEmployeeSelfStatus(req.body.status, 'Present')
-      : (req.body.status || 'Present');
+    let defaultStatus;
+    if (employeeMarking) {
+      defaultStatus = resolveSelfMarkStatus({
+        requestedStatus: req.body.status,
+        existing: null,
+        nowHHMM: nowTime,
+      });
+    } else {
+      defaultStatus = req.body.status || 'Present';
+    }
+
+    const locationCheck = await applyLocationValidation({
+      employeeId,
+      status: defaultStatus,
+      body: req.body,
+      employeeMarking,
+      canManageAll: scope.canManageAll,
+    });
+    if (!locationCheck.ok) {
+      return res.status(400).json({
+        error: locationCheck.error,
+        code: locationCheck.code,
+        currentDistanceMeters: locationCheck.currentDistanceMeters,
+        allowedRadiusMeters: locationCheck.allowedRadiusMeters,
+        officeName: locationCheck.office?.name,
+      });
+    }
 
     const payload = {
       employee: employeeId,
@@ -344,8 +458,14 @@ router.post('/', async (req, res) => {
       checkIn,
       checkOut: resolvedCheckOut,
       status: defaultStatus,
-      notes: req.body.notes || '',
+      notes: req.body.notes
+        || (employeeMarking && defaultStatus === 'Half Day'
+          ? 'Marked after 12:30 — counted as half day'
+          : ''),
     };
+    if (locationCheck.locationPayload) {
+      payload.location = locationCheck.locationPayload;
+    }
 
     const record = new Attendance(payload);
     await record.save();

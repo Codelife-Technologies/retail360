@@ -105,22 +105,29 @@ router.post('/', async (req, res) => {
     const scope = await resolveAttendanceScope(req);
     const startDate = parseInputDate(req.body.startDate, req.body.dueDate || new Date());
     const dueDate = parseInputDate(req.body.dueDate || req.body.startDate || new Date());
+    const requestedEmployee = req.body.employee || null;
+    const wantsPersonal =
+      req.body.source === 'Personal' ||
+      req.body.assignedBy === 'Self' ||
+      !requestedEmployee;
 
-    if (scope.canManageAll) {
-      const employee = await Employee.findById(req.body.employee);
-      if (!employee) {
-        return res.status(400).json({ error: 'Employee not found' });
+    // Personal / self task — including admins with a linked employee profile
+    if (wantsPersonal || (requestedEmployee && scope.employeeId && String(requestedEmployee) === String(scope.employeeId))) {
+      if (!scope.employeeId) {
+        return res.status(403).json({
+          error: 'Employee profile not linked. Link your user account to an employee record to add personal tasks.',
+        });
       }
 
       const task = new EmployeeTask({
-        employee: req.body.employee,
+        employee: scope.employeeId,
         title: req.body.title,
         description: req.body.description || '',
         startDate,
         dueDate,
         priority: req.body.priority || 'Medium',
-        source: 'HR',
-        assignedBy: req.body.assignedBy || 'HR',
+        source: 'Personal',
+        assignedBy: 'Self',
         status: 'Pending',
       });
       await task.save();
@@ -128,23 +135,30 @@ router.post('/', async (req, res) => {
       return res.status(201).json(task);
     }
 
-    if (!scope.employeeId) {
-      return res.status(403).json({ error: 'Employee profile not linked' });
+    // HR-assigned task for another employee
+    if (!scope.canManageAll) {
+      return res.status(403).json({ error: 'You can only create personal tasks for yourself' });
+    }
+
+    const employee = await Employee.findById(requestedEmployee);
+    if (!employee) {
+      return res.status(400).json({ error: 'Employee not found' });
     }
 
     const task = new EmployeeTask({
-      employee: scope.employeeId,
+      employee: requestedEmployee,
       title: req.body.title,
       description: req.body.description || '',
       startDate,
       dueDate,
       priority: req.body.priority || 'Medium',
-      source: 'Personal',
-      assignedBy: 'Self',
+      source: 'HR',
+      assignedBy: req.body.assignedBy || 'HR',
       status: 'Pending',
     });
     await task.save();
-    res.status(201).json(task);
+    await task.populate(EMPLOYEE_POPULATE);
+    return res.status(201).json(task);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

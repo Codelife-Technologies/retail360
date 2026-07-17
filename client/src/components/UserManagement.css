@@ -1483,3 +1483,202 @@
     grid-column: 1 / -1;
   }
 }
+
+/* ===== Activity Logs (User Management) ===== */
+.um-log-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  max-width: 100%;
+}
+
+.um-log-select,
+.um-log-date {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border, #d5d9d9);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.9rem;
+  color: #0f1111;
+}
+
+.um-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.um-log-row {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.um-log-row.open {
+  border-color: #c7d2fe;
+  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.12);
+}
+
+.um-log-row-main {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.um-log-row-main:hover {
+  background: #f8fafc;
+}
+
+.um-log-row-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.um-log-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.um-log-text strong {
+  color: #111827;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.um-log-text span {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.um-log-row-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  color: #6b7280;
+  font-size: 0.82rem;
+}
+
+.um-log-module {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  font-size: 0.7rem;
+  color: #6366f1;
+}
+
+.um-log-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #eef2ff;
+  color: #4338ca;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.um-log-badge-success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.um-log-badge-warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.um-log-badge-danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.um-log-badge-info {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.um-log-badge-muted {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.um-log-details {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid #f3f4f6;
+}
+
+.um-log-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  padding-top: 0.85rem;
+}
+
+.um-log-detail-grid span {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-bottom: 0.15rem;
+}
+
+.um-log-detail-grid strong {
+  font-size: 0.9rem;
+  color: #111827;
+  font-weight: 600;
+}
+
+.um-log-changes {
+  margin: 0.75rem 0 0;
+  padding: 0.75rem;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  overflow-x: auto;
+  max-height: 240px;
+}
+
+.um-mgmt-error {
+  color: #b91c1c;
+  margin: 0.5rem 0;
+}
+
+@media (max-width: 768px) {
+  .um-log-row-main {
+    flex-direction: column;
+  }
+
+  .um-log-row-right {
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .um-log-toolbar {
+    justify-content: stretch;
+  }
+
+  .um-log-toolbar > * {
+    flex: 1 1 140px;
+  }
+}

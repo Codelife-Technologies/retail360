@@ -11,7 +11,8 @@
 .app-header-shell {
   flex: 0 0 auto;
   position: relative;
-  z-index: 200;
+  /* Keep below modal overlays (5000). Nav menus use their own z-index. */
+  z-index: 100;
   overflow: visible;
   /* Dark purple → light blue flow */
   --brand-purple-deep: #1e0847;
@@ -356,7 +357,8 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  z-index: 1;
+  /* Do not set z-index here — it traps page modals under .app-header-shell. */
+  z-index: auto;
 }
 
 .main-content > * {
@@ -457,7 +459,20 @@
   color: var(--text-muted);
 }
 
-/* Modals portaled to document.body must sit above the app header (z-index 200). */
+/*
+ * App-wide modal layer — must sit above .app-header-shell (z-index 100)
+ * and .nav-dropdown-menu (z-index 300). Applies to in-page and body-portaled overlays.
+ */
+.modal-overlay,
+.hr-modal-overlay,
+.fin-modal-backdrop,
+.cmp-modal-backdrop,
+.replenish-pr-modal-overlay,
+.um-users-modal-overlay,
+.um-mgmt-modal-overlay,
+.um-container .modal-overlay,
+.payslip-overlay,
+.excel-upload-modal,
 body > .modal-overlay {
-  z-index: 5000;
+  z-index: 5000 !important;
 }

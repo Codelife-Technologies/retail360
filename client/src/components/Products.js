@@ -1262,6 +1262,7 @@ function Products() {
             'Parent SKU * — always required',
             'Child SKU * — required only when Variation = YES',
             'Title * or Name * — at least one required',
+            'Supplier Code — optional; use Master → Suppliers codes (comma-separated for multiple)',
             'All other columns are optional (see Instructions sheet in template)',
           ]}
           onUploadComplete={handleExcelUploadComplete}

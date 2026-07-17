@@ -4,6 +4,7 @@ const DailyWorkLog = require('../models/DailyWorkLog');
 const Employee = require('../models/Employee');
 const { paginate } = require('../../utils/pagination');
 const { startOfDay, endOfDay } = require('../utils/employeeId');
+const { getDateKeyInAppTz, zonedDateTimeToUtc } = require('../../utils/appTimezone');
 const {
   resolveAttendanceScope,
   applyEmployeeScope,
@@ -17,10 +18,7 @@ function parseCalendarDate(value, fallback = new Date()) {
 
   const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (match) {
-    const year = Number(match[1]);
-    const month = Number(match[2]) - 1;
-    const day = Number(match[3]);
-    return startOfDay(new Date(year, month, day));
+    return zonedDateTimeToUtc(`${match[1]}-${match[2]}-${match[3]}`, '00:00:00');
   }
 
   const date = startOfDay(value);
@@ -30,6 +28,52 @@ function parseCalendarDate(value, fallback = new Date()) {
 function buildDayRangeQuery(dateValue) {
   const dayStart = parseCalendarDate(dateValue);
   return { $gte: dayStart, $lte: endOfDay(dayStart) };
+}
+
+/** Find day's log, including legacy docs saved as UTC midnight (buggy setHours on UTC hosts). */
+async function findLogForEmployeeDay(employeeId, dateValue) {
+  const dateKey =
+    typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(String(dateValue).trim())
+      ? String(dateValue).trim()
+      : getDateKeyInAppTz(parseCalendarDate(dateValue));
+  const logDate = parseCalendarDate(dateKey);
+  const dayEnd = endOfDay(logDate);
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const legacyUtcMidnight = new Date(Date.UTC(year, month - 1, day - 1));
+
+  let log = await DailyWorkLog.findOne({
+    employee: employeeId,
+    $or: [
+      { date: logDate },
+      { date: { $gte: logDate, $lte: dayEnd } },
+      { date: legacyUtcMidnight },
+    ],
+  }).sort({ updatedAt: -1 });
+
+  if (log && log.date.getTime() !== logDate.getTime()) {
+    log.date = logDate;
+    try {
+      await log.save();
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) throw error;
+      // Another doc already owns the normalized date — use that one instead.
+      const canonical = await DailyWorkLog.findOne({ employee: employeeId, date: logDate });
+      if (canonical) {
+        await DailyWorkLog.deleteOne({ _id: log._id });
+        log = canonical;
+      }
+    }
+  }
+
+  return log;
+}
+
+function isDuplicateKeyError(error) {
+  if (!error) return false;
+  if (error.code === 11000 || error.code === 'E11000' || error.codeName === 'DuplicateKey') {
+    return true;
+  }
+  return /duplicate key/i.test(String(error.message || ''));
 }
 
 function normalizeEntries(entries) {
@@ -66,11 +110,21 @@ router.get('/today', async (req, res) => {
       return res.json(null);
     }
 
-    const query = { date: buildDayRangeQuery(new Date()) };
-    applyEmployeeScope(query, scope, req.query.employee);
+    const todayKey = getDateKeyInAppTz(new Date());
+    const employeeId = scope.canManageAll
+      ? req.query.employee || null
+      : scope.employeeId;
 
-    const log = await DailyWorkLog.findOne(query).populate(EMPLOYEE_POPULATE).lean();
-    res.json(log);
+    let log = null;
+    if (employeeId) {
+      log = await findLogForEmployeeDay(employeeId, todayKey);
+      if (log) await log.populate(EMPLOYEE_POPULATE);
+    } else {
+      const query = { date: buildDayRangeQuery(todayKey) };
+      applyEmployeeScope(query, scope, req.query.employee);
+      log = await DailyWorkLog.findOne(query).populate(EMPLOYEE_POPULATE);
+    }
+    res.json(log ? (log.toObject ? log.toObject() : log) : null);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -83,11 +137,21 @@ router.get('/by-date', async (req, res) => {
       return res.json(null);
     }
 
-    const query = { date: buildDayRangeQuery(req.query.date) };
-    applyEmployeeScope(query, scope, req.query.employee);
+    const requestedEmployeeId = req.query.employee;
+    const employeeId = scope.canManageAll
+      ? requestedEmployeeId || null
+      : scope.employeeId;
 
-    const log = await DailyWorkLog.findOne(query).populate(EMPLOYEE_POPULATE).lean();
-    res.json(log);
+    let log = null;
+    if (employeeId) {
+      log = await findLogForEmployeeDay(employeeId, req.query.date);
+      if (log) await log.populate(EMPLOYEE_POPULATE);
+    } else {
+      const query = { date: buildDayRangeQuery(req.query.date) };
+      applyEmployeeScope(query, scope, requestedEmployeeId);
+      log = await DailyWorkLog.findOne(query).populate(EMPLOYEE_POPULATE);
+    }
+    res.json(log ? (log.toObject ? log.toObject() : log) : null);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -324,22 +388,20 @@ router.post('/', async (req, res) => {
       return res.status(403).json({ error: 'Employee profile not linked' });
     }
 
-    let log = await DailyWorkLog.findOne({
-      employee: employeeId,
-      date: dayRange,
-    }).sort({ updatedAt: -1 });
-    let created = false;
-
-    if (log) {
+    const applyEntriesToLog = async (log, { created = false } = {}) => {
       const previousEntryCount = log.entries?.length || 0;
       const isAddingTasks = entries.length > previousEntryCount;
 
       if (!scope.canManageAll && log.status === 'Submitted') {
         if (entries.length < previousEntryCount) {
-          return res.status(403).json({ error: 'Submitted tasks cannot be removed or edited' });
+          const err = new Error('Submitted tasks cannot be removed or edited');
+          err.statusCode = 403;
+          throw err;
         }
         if (!isAddingTasks && targetStatus === 'Submitted') {
-          return res.status(403).json({ error: 'This day\'s work log is already submitted' });
+          const err = new Error('This day\'s work log is already submitted');
+          err.statusCode = 403;
+          throw err;
         }
       }
 
@@ -355,22 +417,41 @@ router.post('/', async (req, res) => {
         date: dayRange,
         _id: { $ne: log._id },
       });
+      return { log, created };
+    };
+
+    let log = await findLogForEmployeeDay(employeeId, req.body.date || logDate);
+    let created = false;
+
+    if (log) {
+      ({ log, created } = await applyEntriesToLog(log, { created: false }));
     } else {
       created = true;
-      log = new DailyWorkLog({
-        employee: employeeId,
-        date: logDate,
-        entries,
-        notes: req.body.notes || '',
-        status: targetStatus,
-      });
-      await log.save();
+      try {
+        log = new DailyWorkLog({
+          employee: employeeId,
+          date: logDate,
+          entries,
+          notes: req.body.notes || '',
+          status: targetStatus,
+        });
+        await log.save();
+      } catch (error) {
+        if (!isDuplicateKeyError(error)) throw error;
+        // Concurrent create or leftover row: always fall back to update.
+        log = await findLogForEmployeeDay(employeeId, req.body.date || logDate);
+        if (!log) {
+          log = await DailyWorkLog.findOne({ employee: employeeId, date: logDate });
+        }
+        if (!log) throw error;
+        ({ log, created } = await applyEntriesToLog(log, { created: false }));
+      }
     }
 
     await log.populate(EMPLOYEE_POPULATE);
     res.status(created ? 201 : 200).json(log);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(error.statusCode || 400).json({ error: error.message });
   }
 });
 
@@ -386,21 +467,40 @@ router.put('/:id', async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    if (!scope.canManageAll && log.status === 'Submitted') {
-      return res.status(403).json({ error: 'Submitted work logs cannot be edited' });
-    }
-
     if (req.body.entries != null) {
       const entries = normalizeEntries(req.body.entries);
       if (entries.length === 0) {
         return res.status(400).json({ error: 'Add at least one work entry with description and time' });
       }
+
+      const previousEntryCount = log.entries?.length || 0;
+      const isAddingTasks = entries.length > previousEntryCount;
+      const targetStatus = req.body.status === 'Submitted'
+        ? 'Submitted'
+        : (req.body.status === 'Draft' ? 'Draft' : log.status);
+
+      if (!scope.canManageAll && log.status === 'Submitted') {
+        if (entries.length < previousEntryCount) {
+          return res.status(403).json({ error: 'Submitted tasks cannot be removed or edited' });
+        }
+        if (!isAddingTasks && targetStatus === 'Submitted') {
+          return res.status(403).json({ error: 'Submitted work logs cannot be edited' });
+        }
+      }
+
       log.entries = entries;
-    }
-    if (req.body.notes != null) log.notes = req.body.notes;
-    if (req.body.status != null && ['Draft', 'Submitted'].includes(req.body.status)) {
+      if (!scope.canManageAll && log.status === 'Submitted' && isAddingTasks && targetStatus === 'Draft') {
+        log.status = 'Draft';
+      } else if (req.body.status != null && ['Draft', 'Submitted'].includes(req.body.status)) {
+        log.status = req.body.status;
+      }
+    } else if (!scope.canManageAll && log.status === 'Submitted') {
+      return res.status(403).json({ error: 'Submitted work logs cannot be edited' });
+    } else if (req.body.status != null && ['Draft', 'Submitted'].includes(req.body.status)) {
       log.status = req.body.status;
     }
+
+    if (req.body.notes != null) log.notes = req.body.notes;
 
     await log.save();
     await log.populate(EMPLOYEE_POPULATE);

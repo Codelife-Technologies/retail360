@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { shipmentsAPI, shipmentVendorsAPI, shippingChargesAPI, locationsAPI, productsAPI, stockAPI } from '../services/api';
 import logger from '../utils/logger';
 import DetailModal from './DetailModal';
+import ExcelUpload from './ExcelUpload';
 import './Shipments.css';
 
 function Shipments() {
@@ -12,8 +13,12 @@ function Shipments() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editingShipment, setEditingShipment] = useState(null);
   const [viewingShipment, setViewingShipment] = useState(null);
+  const [statusTab, setStatusTab] = useState('all');
+  const [searchDraft, setSearchDraft] = useState('');
+  const [searchApplied, setSearchApplied] = useState('');
   const [formData, setFormData] = useState({
     shipmentVendor: '',
     shippingCharge: '',
@@ -35,11 +40,15 @@ function Shipments() {
   const [availableStock, setAvailableStock] = useState({});
 
   useEffect(() => {
-    fetchShipments();
     fetchVendors();
     fetchLocations();
     fetchProducts();
   }, []);
+
+  useEffect(() => {
+    fetchShipments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusTab, searchApplied]);
 
   useEffect(() => {
     if (formData.shipmentVendor) {
@@ -62,7 +71,11 @@ function Shipments() {
   const fetchShipments = async () => {
     try {
       setLoading(true);
-      const response = await shipmentsAPI.getAll();
+      const query = {};
+      if (statusTab && statusTab !== 'all') query.status = statusTab;
+      if (searchApplied) query.search = searchApplied;
+
+      const response = await shipmentsAPI.getAll(query);
       setShipments(response.data);
     } catch (error) {
       console.error('Error fetching shipments:', error);
@@ -78,6 +91,29 @@ function Shipments() {
       setLoading(false);
     }
   };
+
+  const STATUS_TABS = useMemo(
+    () => [
+      { key: 'all', label: 'All' },
+      { key: 'pending', label: 'Pending' },
+      { key: 'preparing', label: 'Preparing' },
+      { key: 'shipped', label: 'Shipped' },
+      { key: 'in-transit', label: 'In Transit' },
+      { key: 'delivered', label: 'Delivered' },
+      { key: 'cancelled', label: 'Cancelled' },
+    ],
+    []
+  );
+
+  const statusCounts = useMemo(() => {
+    const map = {};
+    shipments.forEach((s) => {
+      const key = s.status || 'pending';
+      map[key] = (map[key] || 0) + 1;
+    });
+    map.all = shipments.length;
+    return map;
+  }, [shipments]);
 
   const fetchVendors = async () => {
     try {
@@ -334,13 +370,67 @@ function Shipments() {
     return product ? product.name : productId;
   };
 
+  const getSkuCount = (shipment) => new Set((shipment.items || []).map((item) => String(item.product?._id || item.product))).size;
+  const getTotalQuantity = (shipment) => (shipment.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+
   return (
     <div className="shipments-container">
       <div className="shipments-header">
-        <h1>Shipments</h1>
-        <button className="btn-primary" onClick={openAddModal}>
-          + Create Shipment
-        </button>
+        <div>
+          <h1>Shipments</h1>
+          <div className="shipments-subtitle">
+            Track shipment progress with status, tracking number and delivery estimates.
+          </div>
+        </div>
+        <div className="shipments-header-actions">
+          <button className="btn-secondary" onClick={() => setShowImport(true)}>
+            Import Excel
+          </button>
+          <button className="btn-primary" onClick={openAddModal}>
+            + Create Shipment
+          </button>
+        </div>
+      </div>
+
+      <div className="shipments-toolbar">
+        <div className="shipments-tabs">
+          {STATUS_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className={`shipments-tab${statusTab === t.key ? ' active' : ''}`}
+              onClick={() => setStatusTab(t.key)}
+            >
+              {t.label} <span className="shipments-tab-count">{statusCounts[t.key] || 0}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="shipments-search">
+          <input
+            className="shipments-search-input"
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            placeholder="Search shipment # or tracking…"
+          />
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setSearchApplied(searchDraft.trim())}
+          >
+            Search
+          </button>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => {
+              setSearchDraft('');
+              setSearchApplied('');
+            }}
+          >
+            Clear
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -350,23 +440,24 @@ function Shipments() {
           <table className="shipments-table">
             <thead>
               <tr>
-                <th>Shipment Number</th>
+                <th>Shipment ID</th>
                 <th>Vendor</th>
-                <th>Direction</th>
-                <th>From Location</th>
-                <th>To Location</th>
-                <th>Items</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Ship Date</th>
+                <th>Expected Delivery</th>
+                <th>Tracking #</th>
+                <th>Status</th>
+                <th>SKUs / Qty</th>
                 <th>Total Weight</th>
                 <th>Shipping Charges</th>
-                <th>Status</th>
-                <th>Date</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {shipments.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="no-data">
+                  <td colSpan="12" className="no-data">
                     No shipments found
                   </td>
                 </tr>
@@ -379,22 +470,27 @@ function Shipments() {
                   >
                     <td>{shipment.shipmentNumber}</td>
                     <td>{shipment.shipmentVendor?.name || '-'}</td>
-                    <td>
-                      <span className={`type-badge type-${shipment.shippingCharge?.type || 'outward'}`}>
-                        {shipment.shippingCharge?.type === 'inward' ? 'Inward' : 'Outward'}
-                      </span>
-                    </td>
                     <td>{shipment.fromLocation?.name || '-'}</td>
                     <td>{shipment.toLocation?.name || '-'}</td>
-                    <td>{shipment.items?.length || 0} items</td>
-                    <td>{shipment.totalWeight?.toFixed(2) || 0} kg</td>
-                    <td>₹{shipment.shippingCharges?.toFixed(2) || 0}</td>
+                    <td>
+                      {shipment.shipmentDate
+                        ? new Date(shipment.shipmentDate).toLocaleDateString()
+                        : '-'}
+                    </td>
+                    <td>
+                      {shipment.expectedDeliveryDate
+                        ? new Date(shipment.expectedDeliveryDate).toLocaleDateString()
+                        : '-'}
+                    </td>
+                    <td>{shipment.trackingNumber || '-'}</td>
                     <td>
                       <span className={`status-badge status-${shipment.status}`}>
                         {shipment.status}
                       </span>
                     </td>
-                    <td>{new Date(shipment.shipmentDate).toLocaleDateString()}</td>
+                    <td>{getSkuCount(shipment)} SKU / {getTotalQuantity(shipment)} Qty</td>
+                    <td>{Number(shipment.totalWeight || 0).toFixed(2)} kg</td>
+                    <td>₹{Number(shipment.shippingCharges || 0).toFixed(2)}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <button
                         className="btn-edit"
@@ -477,6 +573,27 @@ function Shipments() {
             </div>
           )}
         </DetailModal>
+      )}
+
+      {showImport && (
+        <ExcelUpload
+          moduleName="shipments"
+          templateEndpoint="/shipments/template"
+          mandatoryFieldsHelp={[
+            'Vendor Name *',
+            'Shipping Charge *',
+            'From Location *',
+            'To Location *',
+            'Shipment Date *',
+            'SKU *',
+            'Quantity *',
+          ]}
+          onUploadComplete={() => {
+            setShowImport(false);
+            fetchShipments();
+          }}
+          onClose={() => setShowImport(false)}
+        />
       )}
 
       {showModal && (

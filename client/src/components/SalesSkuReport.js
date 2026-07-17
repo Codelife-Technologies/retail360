@@ -509,6 +509,9 @@ function SalesSkuReport({ onClose }) {
 
   const handleExcelUploadComplete = (result) => {
     fetchReport();
+    if (businessReportRef.current?.refresh) {
+      businessReportRef.current.refresh();
+    }
 
     const imported = result?.imported || 0;
     const updated = result?.updated || 0;
@@ -721,6 +724,14 @@ function SalesSkuReport({ onClose }) {
               Download CSV
             </button>
           )}
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setShowExcelUpload(true)}
+            title="Import sales from Excel template"
+          >
+            ⬆ Import Excel
+          </button>
           {!isBusinessView && (
             <>
           <button
@@ -732,14 +743,6 @@ function SalesSkuReport({ onClose }) {
             {activeFilterCount > 0 && (
               <span className="filter-count-badge">{activeFilterCount}</span>
             )}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => setShowExcelUpload(true)}
-            title="Import sales from Excel template"
-          >
-            ⬆ Import Excel
           </button>
           {isAdmin && (
             <button
@@ -1032,6 +1035,14 @@ function SalesSkuReport({ onClose }) {
           templateEndpoint="/sales/template"
           onUploadComplete={handleExcelUploadComplete}
           onClose={() => setShowExcelUpload(false)}
+          mandatoryFieldsHelp={[
+            'Sale Reference * (or Amazon Order ID) — same value groups rows into one sale',
+            'Channel Code *',
+            'Location Code *',
+            'SKU *',
+            'Quantity *',
+            'Unit Price *',
+          ]}
         />
       )}
     </div>

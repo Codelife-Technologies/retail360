@@ -186,6 +186,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
     let imported = 0;
     let failed = 0;
+    let skipped = 0;
 
     for (const [ref, entries] of groups) {
       const first = entries[0].row;
@@ -202,19 +203,63 @@ router.post('/import', upload.single('file'), async (req, res) => {
           const quantity = parseFloat(row['Quantity *']);
           const unitPrice = parseFloat(row['Unit Price (Amount) *']);
 
-          if (!sku) throw new Error(`Row ${rowNum}: Product SKU is required`);
-          if (!quantity || quantity <= 0) throw new Error(`Row ${rowNum}: Quantity must be greater than 0`);
-          if (isNaN(unitPrice) || unitPrice < 0) throw new Error(`Row ${rowNum}: Unit Price must be a valid number`);
+          if (!sku) {
+            skipped++;
+            errors.push({
+              row: rowNum,
+              field: 'Product SKU *',
+              message: `PO '${ref}': Product SKU is required — line not added`,
+            });
+            continue;
+          }
+
+          if (!quantity || quantity <= 0) {
+            skipped++;
+            errors.push({
+              row: rowNum,
+              field: 'Quantity *',
+              message: `PO '${ref}': SKU '${sku}' — quantity must be greater than 0 — line not added`,
+            });
+            continue;
+          }
+
+          if (isNaN(unitPrice) || unitPrice < 0) {
+            skipped++;
+            errors.push({
+              row: rowNum,
+              field: 'Unit Price (Amount) *',
+              message: `PO '${ref}': SKU '${sku}' — unit price must be a valid number — line not added`,
+            });
+            continue;
+          }
 
           const product = await Product.findOne({ sku });
-          if (!product) throw new Error(`Row ${rowNum}: Product SKU '${sku}' not found`);
+          if (!product) {
+            skipped++;
+            errors.push({
+              row: rowNum,
+              field: 'Product SKU *',
+              message: `Product not available — SKU '${sku}' was not added to PO '${ref}'`,
+            });
+            continue;
+          }
 
           items.push({
             product: product._id,
             quantity,
             unitPrice,
-            total: quantity * unitPrice
+            total: quantity * unitPrice,
           });
+        }
+
+        if (items.length === 0) {
+          failed++;
+          errors.push({
+            row: entries[0].rowNum,
+            field: `PO '${ref}'`,
+            message: `PO '${ref}' was not created — no valid products found (all SKUs missing or invalid)`,
+          });
+          continue;
         }
 
         const statusRaw = (first['Status (pending/approved/received/cancelled)'] || 'pending')
@@ -232,7 +277,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
           status: statusRaw || 'pending',
           items,
           tax: parseFloat(first['Tax']) || 0,
-          notes: first['Notes'] || ''
+          notes: first['Notes'] || '',
         };
 
         await new PurchaseOrder(poData).save();
@@ -243,7 +288,14 @@ router.post('/import', upload.single('file'), async (req, res) => {
       }
     }
 
-    res.json({ imported, updated: 0, failed, errors });
+    res.json({
+      imported,
+      updated: 0,
+      failed,
+      skipped,
+      totalRows: rows.length,
+      errors,
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

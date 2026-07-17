@@ -7,7 +7,6 @@ export const MASTER_GROUPS = [
       { id: 'categories', label: 'Categories', icon: '📁' },
       { id: 'subcategories', label: 'Subcategories', icon: '📂' },
       { id: 'prices', label: 'Vendor Prices', icon: '💵' },
-      { id: 'gemini-image-generator', label: 'Image Generator', icon: '🎨' },
     ],
   },
   {

@@ -218,7 +218,8 @@ const SalesBusinessReport = forwardRef(function SalesBusinessReport({ onViewSkuP
     getExportParams: () => buildReportParams(appliedFilters),
     hasData: () => sortedRows.length > 0,
     downloadCsv: () => downloadBusinessReportCsv(sortedRows),
-  }), [appliedFilters, sortedRows]);
+    refresh: () => loadReport(),
+  }), [appliedFilters, sortedRows, loadReport]);
 
   const allSelected = sortedRows.length > 0 && sortedRows.every((row) => selectedRows[row.periodKey]);
   const showDataNotice = isToday(appliedFilters.customEnd);

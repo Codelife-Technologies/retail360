@@ -3,6 +3,7 @@ const router = express.Router();
 const Group = require('../models/Group');
 const { paginate } = require('../utils/pagination');
 const { requirePermission } = require('../middleware/auth');
+const { logFromRequest } = require('../utils/activityLogService');
 
 // GET all groups
 router.get('/', requirePermission('groups.view'), async (req, res) => {
@@ -55,6 +56,14 @@ router.post('/', requirePermission('groups.create'), async (req, res) => {
     const group = new Group(req.body);
     await group.save();
     const populated = await Group.findById(group._id).populate('roles', 'name code');
+    await logFromRequest(req, {
+      action: 'group.create',
+      module: 'groups',
+      targetType: 'group',
+      targetId: group._id,
+      targetLabel: group.name || group.code,
+      summary: `Created group "${group.name || group.code}"`,
+    });
     res.status(201).json(populated);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -72,6 +81,19 @@ router.put('/:id', requirePermission('groups.update'), async (req, res) => {
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
     }
+    await logFromRequest(req, {
+      action: 'group.update',
+      module: 'groups',
+      targetType: 'group',
+      targetId: group._id,
+      targetLabel: group.name || group.code,
+      summary: `Updated group "${group.name || group.code}"`,
+      changes: {
+        name: group.name,
+        code: group.code,
+        roles: (group.roles || []).map((r) => r.code || r._id),
+      },
+    });
     res.json(group);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -85,6 +107,14 @@ router.delete('/:id', requirePermission('groups.delete'), async (req, res) => {
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
     }
+    await logFromRequest(req, {
+      action: 'group.delete',
+      module: 'groups',
+      targetType: 'group',
+      targetId: group._id,
+      targetLabel: group.name || group.code,
+      summary: `Deleted group "${group.name || group.code}"`,
+    });
     res.json({ message: 'Group deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

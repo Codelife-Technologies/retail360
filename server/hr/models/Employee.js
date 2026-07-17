@@ -8,6 +8,7 @@ const employeeSchema = new mongoose.Schema(
     lastName: { type: String, default: '', trim: true },
     department: { type: String, required: true, trim: true },
     designation: { type: String, required: true, trim: true },
+    officeLocation: { type: mongoose.Schema.Types.ObjectId, ref: 'HrOfficeLocation', default: null },
     email: { type: String, required: true, trim: true, lowercase: true },
     phone: { type: String, required: true, trim: true },
     joiningDate: { type: Date, required: true },

@@ -10,7 +10,6 @@ import SalesLocations from '../components/SalesLocations';
 import ShipmentVendors from '../components/ShipmentVendors';
 import Categories from '../components/Categories';
 import Subcategories from '../components/Subcategories';
-import GeminiImageGenerator from '../components/GeminiImageGenerator';
 import './MasterModule.css';
 
 function MasterModule({ subTab = 'products' }) {
@@ -38,8 +37,6 @@ function MasterModule({ subTab = 'products' }) {
         return <Categories />;
       case 'subcategories':
         return <Subcategories />;
-      case 'gemini-image-generator':
-        return <GeminiImageGenerator />;
       default:
         return <Products />;
     }

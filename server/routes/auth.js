@@ -14,6 +14,7 @@ const {
 } = require('../utils/attendanceSession');
 const { syncAttendanceRecordOnLogout } = require('../hr/utils/attendanceAccess');
 const { getBirthdayGreetingForUser } = require('../utils/birthdayGreeting');
+const { logActivity, logFromRequest } = require('../utils/activityLogService');
 
 // POST /login - no auth required
 router.post('/login', async (req, res) => {
@@ -40,6 +41,17 @@ router.post('/login', async (req, res) => {
     const permissions = await getEffectivePermissions(user._id);
     const { password: _, ...safeUser } = user.toObject();
     const birthdayGreeting = await getBirthdayGreetingForUser(user);
+    await logActivity({
+      action: 'login',
+      module: 'auth',
+      actor: user._id,
+      actorUsername: user.username,
+      targetType: 'user',
+      targetId: user._id,
+      targetLabel: user.username,
+      summary: `${user.username} logged in`,
+      req,
+    });
     res.json({
       token,
       user: { ...safeUser, permissions: Array.from(permissions) },
@@ -84,6 +96,14 @@ router.post('/logout', authenticate, async (req, res) => {
     applyLogoutToAttendanceSession(user);
     await user.save();
     await syncAttendanceRecordOnLogout(req.user.id);
+    await logFromRequest(req, {
+      action: 'logout',
+      module: 'auth',
+      targetType: 'user',
+      targetId: user._id,
+      targetLabel: user.username,
+      summary: `${user.username} logged out`,
+    });
     res.json({ message: 'Logged out' });
   } catch (error) {
     res.status(500).json({ error: error.message });

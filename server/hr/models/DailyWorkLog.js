@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { startOfDayInAppTz } = require('../../utils/appTimezone');
 
 const workLogEntrySchema = new mongoose.Schema(
   {
@@ -26,7 +27,11 @@ const dailyWorkLogSchema = new mongoose.Schema(
 );
 
 dailyWorkLogSchema.pre('save', function normalizeWorkLog(next) {
-  this.date.setHours(0, 0, 0, 0);
+  // Always normalize to app-timezone midnight (Asia/Kolkata), never server-local setHours —
+  // setHours on a UTC host shifts the calendar day and breaks the unique employee+date index.
+  if (this.date) {
+    this.date = startOfDayInAppTz(this.date);
+  }
   this.totalMinutes = (this.entries || []).reduce(
     (sum, entry) => sum + (Number(entry.timeSpentMinutes) || 0),
     0

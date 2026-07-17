@@ -1,9 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { reportsAPI, suppliersAPI, locationsAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import ExcelUpload from './ExcelUpload';
+import PurchaseFormModal from './PurchaseFormModal';
 import logger from '../utils/logger';
 import './PurchaseReport.css';
+import './ExcelUpload.css';
+import './Purchases.css';
 
 function PurchaseReport() {
+  const { hasPermission } = useAuth();
+  const canWrite =
+    hasPermission('admin.all') ||
+    hasPermission('finance.full') ||
+    hasPermission('purchases.create');
+
   const [view, setView] = useState('summary'); // 'summary' or 'detailed'
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -11,6 +22,8 @@ function PurchaseReport() {
   const [detailedData, setDetailedData] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   
   const [filters, setFilters] = useState({
     startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0],
@@ -223,7 +236,18 @@ function PurchaseReport() {
           </button>
         </div>
         <div className="export-buttons">
+          {canWrite ? (
+            <>
+              <button type="button" className="btn-primary" onClick={() => setShowAddModal(true)}>
+                + Add Purchase
+              </button>
+              <button type="button" className="btn-import" onClick={() => setShowImport(true)}>
+                Import Excel
+              </button>
+            </>
+          ) : null}
           <button
+            type="button"
             className="btn-export"
             onClick={handleExport}
             disabled={loading || exporting}
@@ -358,6 +382,32 @@ function PurchaseReport() {
       ) : (
         <div className="no-data">No data available</div>
       )}
+
+      {showAddModal ? (
+        <PurchaseFormModal
+          onClose={() => setShowAddModal(false)}
+          onSaved={fetchData}
+        />
+      ) : null}
+
+      {showImport ? (
+        <ExcelUpload
+          moduleName="purchases"
+          templateEndpoint="/purchases/template"
+          hideImportMode
+          mandatoryFieldsHelp={(
+            <ul>
+              <li>Purchase Reference, Supplier Name, Location Code, Product SKU, Quantity, Unit Price</li>
+              <li>One row per SKU; same Purchase Reference groups rows into one purchase</li>
+            </ul>
+          )}
+          onUploadComplete={() => {
+            setShowImport(false);
+            fetchData();
+          }}
+          onClose={() => setShowImport(false)}
+        />
+      ) : null}
     </div>
   );
 }

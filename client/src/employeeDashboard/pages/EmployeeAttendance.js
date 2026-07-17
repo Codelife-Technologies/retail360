@@ -175,6 +175,7 @@ function EmployeeAttendanceContent({ employeeId }) {
             <h3>Today — {formatTodayLabel()}</h3>
             <p className="ed-attendance-today-subtitle">
               Check-in and check-out are taken from when you log in and out of the app.
+              Mark by 12:30 for a full day; after 12:30 it counts as a half day. Unmarked staff are auto-marked absent after 12:30.
             </p>
             <p className="ed-attendance-live-clock">Current time: {formatNow12Hour()}</p>
           </div>
@@ -244,7 +245,25 @@ function EmployeeAttendanceContent({ employeeId }) {
               </p>
             )}
 
-            {alreadyMarked && (
+            {!alreadyMarked && todayDefaults?.pastHalfDayCutoff && (
+              <p className="ed-attendance-hint">
+                It is past 12:30. Marking now will be counted as a half day.
+              </p>
+            )}
+
+            {alreadyMarked && todayRecord?.status === 'Half Day' && (
+              <p className="ed-attendance-hint">
+                Today is recorded as a half day because attendance was marked after 12:30.
+              </p>
+            )}
+
+            {alreadyMarked && todayRecord?.status === 'Absent' && (
+              <p className="ed-attendance-hint">
+                Auto-marked absent (not marked by 12:30). Mark now to convert this to a half day.
+              </p>
+            )}
+
+            {alreadyMarked && todayRecord?.status !== 'Absent' && todayRecord?.status !== 'Half Day' && (
               <p className="ed-attendance-hint success">
                 Attendance marked for today. You can change office/home or log out and click &quot;Update Attendance&quot; to refresh checkout.
               </p>

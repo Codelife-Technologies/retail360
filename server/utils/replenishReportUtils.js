@@ -114,6 +114,7 @@ async function aggregateReplenishSalesMonthly({
   monthBuckets,
   timeZone,
   locationId = null,
+  salesChannelId = null,
 }) {
   if (!productIds.length || !monthBuckets.length) {
     return new Map();
@@ -121,6 +122,9 @@ async function aggregateReplenishSalesMonthly({
 
   const locationObjectId = locationId
     ? new mongoose.Types.ObjectId(locationId)
+    : null;
+  const salesChannelObjectId = salesChannelId
+    ? new mongoose.Types.ObjectId(salesChannelId)
     : null;
 
   const pipeline = [
@@ -132,6 +136,7 @@ async function aggregateReplenishSalesMonthly({
           $lte: monthBuckets[0].end,
         },
         salesLocation: { $exists: true, $ne: null },
+        ...(salesChannelObjectId ? { salesChannel: salesChannelObjectId } : {}),
       },
     },
     { $unwind: '$items' },
@@ -149,6 +154,7 @@ async function aggregateReplenishSalesMonthly({
       $match: {
         'salesLocDoc.location': { $exists: true, $ne: null },
         ...(locationObjectId ? { 'salesLocDoc.location': locationObjectId } : {}),
+        ...(salesChannelObjectId ? { 'salesLocDoc.salesChannel': salesChannelObjectId } : {}),
       },
     },
     {
@@ -190,6 +196,7 @@ async function aggregateReplenishSalesDaily({
   dayStart,
   dayEnd,
   locationId = null,
+  salesChannelId = null,
 }) {
   if (!productIds.length) {
     return new Map();
@@ -198,6 +205,9 @@ async function aggregateReplenishSalesDaily({
   const locationObjectId = locationId
     ? new mongoose.Types.ObjectId(locationId)
     : null;
+  const salesChannelObjectId = salesChannelId
+    ? new mongoose.Types.ObjectId(salesChannelId)
+    : null;
 
   const pipeline = [
     {
@@ -205,6 +215,7 @@ async function aggregateReplenishSalesDaily({
         'items.product': { $in: productIds },
         salesDate: { $gte: dayStart, $lte: dayEnd },
         salesLocation: { $exists: true, $ne: null },
+        ...(salesChannelObjectId ? { salesChannel: salesChannelObjectId } : {}),
       },
     },
     { $unwind: '$items' },
@@ -222,6 +233,7 @@ async function aggregateReplenishSalesDaily({
       $match: {
         'salesLocDoc.location': { $exists: true, $ne: null },
         ...(locationObjectId ? { 'salesLocDoc.location': locationObjectId } : {}),
+        ...(salesChannelObjectId ? { 'salesLocDoc.salesChannel': salesChannelObjectId } : {}),
       },
     },
     {

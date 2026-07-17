@@ -3,6 +3,7 @@ export const USER_MANAGEMENT_TABS = [
   { id: 'roles', label: 'Role', icon: '🔐', permission: 'roles.view' },
   { id: 'permissions', label: 'Permission', icon: '✅', permission: 'permissions.view' },
   { id: 'groups', label: 'Group', icon: '👥', permission: 'groups.view' },
+  { id: 'logs', label: 'Logs', icon: '📋', permission: 'logs.view' },
 ];
 
 export const USER_MANAGEMENT_TAB_IDS = USER_MANAGEMENT_TABS.map((tab) => tab.id);

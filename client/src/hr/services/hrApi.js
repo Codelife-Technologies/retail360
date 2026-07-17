@@ -29,6 +29,18 @@ export const hrAttendanceAPI = {
   delete: (id) => api.delete(`/hr/attendance/${id}`),
 };
 
+export const hrOfficeLocationsAPI = {
+  getMyOffice: (employeeId) =>
+    api.get('/hr/office-locations/my-office', {
+      params: employeeId ? { employee: employeeId } : undefined,
+    }),
+  getAll: (params) => api.get('/hr/office-locations', { params }),
+  getById: (id) => api.get(`/hr/office-locations/${id}`),
+  create: (data) => api.post('/hr/office-locations', data),
+  update: (id, data) => api.put(`/hr/office-locations/${id}`, data),
+  delete: (id) => api.delete(`/hr/office-locations/${id}`),
+};
+
 export const hrLeavesAPI = {
   getPolicies: () => api.get('/hr/leaves/policies'),
   getBalances: (params) => api.get('/hr/leaves/balances', { params }),

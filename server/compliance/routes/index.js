@@ -1,0 +1,40 @@
+const express = require('express');
+const router = express.Router();
+
+const dashboardRoutes = require('./dashboard');
+const companyRoutes = require('./company');
+const gstRoutes = require('./gst');
+const tdsRoutes = require('./tds');
+const payrollRoutes = require('./payroll');
+const epfRoutes = require('./epf');
+const esicRoutes = require('./esic');
+const labourRoutes = require('./labour');
+const employeesRoutes = require('./employees');
+const licensesRoutes = require('./licenses');
+const auditsRoutes = require('./audits');
+const calendarRoutes = require('./calendar');
+const documentsRoutes = require('./documents');
+const reportsRoutes = require('./reports');
+const filingsRoutes = require('./filings');
+const filingMastersRoutes = require('./filingMasters');
+const tasksRoutes = require('./tasks');
+
+router.use('/dashboard', dashboardRoutes);
+router.use('/company', companyRoutes);
+router.use('/filing-masters', filingMastersRoutes);
+router.use('/filings', filingsRoutes);
+router.use('/gst', gstRoutes);
+router.use('/tds', tdsRoutes);
+router.use('/payroll', payrollRoutes);
+router.use('/epf', epfRoutes);
+router.use('/esic', esicRoutes);
+router.use('/labour', labourRoutes);
+router.use('/employees', employeesRoutes);
+router.use('/licenses', licensesRoutes);
+router.use('/audits', auditsRoutes);
+router.use('/calendar', calendarRoutes);
+router.use('/documents', documentsRoutes);
+router.use('/reports', reportsRoutes);
+router.use('/tasks', tasksRoutes);
+
+module.exports = router;

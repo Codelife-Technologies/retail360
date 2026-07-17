@@ -9,46 +9,52 @@ const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'];
 const emptyPersonalTask = () => ({
   title: '',
   description: '',
-  startDate: toInputDate(new Date()),
   dueDate: toInputDate(new Date()),
   priority: 'Medium',
 });
 
-function getTimelineRange() {
-  const from = new Date();
-  from.setDate(from.getDate() - 7);
-  const to = new Date();
-  to.setDate(to.getDate() + 28);
-  return { fromDate: toInputDate(from), toDate: toInputDate(to) };
+function getDeadlineMeta(task) {
+  if (!task?.dueDate) {
+    return { label: 'No deadline', overdue: false, dueSoon: false };
+  }
+
+  const due = new Date(task.dueDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueDay = new Date(due);
+  dueDay.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.round((dueDay - today) / (1000 * 60 * 60 * 24));
+  const overdue = task.status !== 'Completed' && diffDays < 0;
+  const dueSoon = task.status !== 'Completed' && diffDays >= 0 && diffDays <= 2;
+
+  let label = formatDate(task.dueDate);
+  if (task.status === 'Completed') {
+    label = `Completed · ${formatDate(task.dueDate)}`;
+  } else if (diffDays === 0) {
+    label = 'Due today';
+  } else if (diffDays === 1) {
+    label = 'Due tomorrow';
+  } else if (diffDays > 1) {
+    label = `Due in ${diffDays} days · ${formatDate(task.dueDate)}`;
+  } else {
+    label = `Overdue by ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? '' : 's'} · ${formatDate(task.dueDate)}`;
+  }
+
+  return { label, overdue, dueSoon, dateLabel: formatDate(task.dueDate) };
 }
 
-function getTimelineProgress(task) {
-  const start = new Date(task.startDate || task.dueDate).getTime();
-  const end = new Date(task.dueDate).getTime();
-  const today = Date.now();
-  if (end <= start) return task.status === 'Completed' ? 100 : 0;
-  if (today <= start) return 0;
-  if (today >= end) return 100;
-  return Math.round(((today - start) / (end - start)) * 100);
-}
-
-function TaskTimelineBar({ task }) {
-  const progress = getTimelineProgress(task);
-  const overdue = task.status !== 'Completed' && new Date(task.dueDate) < new Date();
+function TaskDeadline({ task }) {
+  const meta = getDeadlineMeta(task);
 
   return (
-    <div className="ed-task-timeline">
-      <div className="ed-task-timeline-labels">
-        <span>{formatDate(task.startDate || task.dueDate)}</span>
-        <span>{formatDate(task.dueDate)}</span>
-      </div>
-      <div className="ed-task-timeline-track">
-        <div
-          className={`ed-task-timeline-fill${overdue ? ' overdue' : ''}${task.status === 'Completed' ? ' completed' : ''}`}
-          style={{ width: `${task.status === 'Completed' ? 100 : progress}%` }}
-        />
-      </div>
-      {overdue && <span className="ed-task-overdue">Overdue</span>}
+    <div
+      className={`ed-task-deadline${meta.overdue ? ' overdue' : ''}${meta.dueSoon ? ' due-soon' : ''}${
+        task.status === 'Completed' ? ' completed' : ''
+      }`}
+    >
+      <span className="ed-task-deadline-label">Deadline</span>
+      <strong>{meta.label}</strong>
     </div>
   );
 }
@@ -64,7 +70,7 @@ function TaskCard({ task, updatingId, onStatusChange, onDelete, showDelete }) {
         <span className="ed-task-priority">{task.priority}</span>
       </div>
       {task.description && <p className="ed-task-desc">{task.description}</p>}
-      <TaskTimelineBar task={task} />
+      <TaskDeadline task={task} />
       <p className="ed-task-meta">
         {task.source === 'Personal' ? 'Personal task' : `Assigned by ${task.assignedBy || 'HR'}`}
       </p>
@@ -100,7 +106,6 @@ function EmployeeTasksContent() {
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState(emptyPersonalTask());
   const [saving, setSaving] = useState(false);
-  const timelineRange = useMemo(() => getTimelineRange(), []);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -111,12 +116,7 @@ function EmployeeTasksContent() {
         return;
       }
 
-      const params =
-        viewMode === 'timeline'
-          ? { ...timelineRange }
-          : {};
-
-      const response = await employeeTasksAPI.getAll(params);
+      const response = await employeeTasksAPI.getAll();
       const list = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
@@ -127,7 +127,7 @@ function EmployeeTasksContent() {
     } finally {
       setLoading(false);
     }
-  }, [viewMode, timelineRange]);
+  }, [viewMode]);
 
   useEffect(() => {
     fetchTasks();
@@ -151,13 +151,23 @@ function EmployeeTasksContent() {
       alert('Task title is required');
       return;
     }
+    if (!formData.dueDate) {
+      alert('Deadline is required');
+      return;
+    }
     try {
       setSaving(true);
-      await employeeTasksAPI.create(formData);
+      await employeeTasksAPI.create({
+        ...formData,
+        startDate: formData.dueDate,
+        dueDate: formData.dueDate,
+        source: 'Personal',
+        assignedBy: 'Self',
+      });
       setFormData(emptyPersonalTask());
       setShowForm(false);
       if (viewMode === 'today') {
-        setViewMode('timeline');
+        setViewMode('upcoming');
       } else {
         fetchTasks();
       }
@@ -178,21 +188,23 @@ function EmployeeTasksContent() {
     }
   };
 
-  const sortedTimelineTasks = useMemo(
-    () =>
-      [...tasks].sort(
-        (a, b) =>
-          new Date(a.startDate || a.dueDate) - new Date(b.startDate || b.dueDate)
-      ),
-    [tasks]
-  );
+  const sortedTasks = useMemo(() => {
+    const list = [...tasks].sort(
+      (a, b) => new Date(a.dueDate || 0) - new Date(b.dueDate || 0)
+    );
+    if (viewMode !== 'upcoming') return list;
+
+    return list.filter(
+      (task) => task.status !== 'Completed' || new Date(task.dueDate) >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    );
+  }, [tasks, viewMode]);
 
   return (
     <>
       <header className="ed-section-header">
         <div>
           <h2>My Tasks</h2>
-          <p>HR-assigned tasks and your personal tasks with a timeline.</p>
+          <p>HR-assigned tasks and your personal tasks with deadlines.</p>
         </div>
         <button type="button" className="ed-btn ed-btn-primary" onClick={() => setShowForm((v) => !v)}>
           {showForm ? 'Cancel' : '+ Personal Task'}
@@ -209,10 +221,10 @@ function EmployeeTasksContent() {
         </button>
         <button
           type="button"
-          className={`ed-view-tab${viewMode === 'timeline' ? ' active' : ''}`}
-          onClick={() => setViewMode('timeline')}
+          className={`ed-view-tab${viewMode === 'upcoming' ? ' active' : ''}`}
+          onClick={() => setViewMode('upcoming')}
         >
-          Timeline
+          By Deadline
         </button>
         <button
           type="button"
@@ -247,20 +259,10 @@ function EmployeeTasksContent() {
           </div>
           <div className="ed-form-row">
             <div className="ed-form-group">
-              <label>Start Date</label>
-              <input
-                type="date"
-                value={formData.startDate}
-                onChange={(e) => setFormData((f) => ({ ...f, startDate: e.target.value }))}
-                required
-              />
-            </div>
-            <div className="ed-form-group">
-              <label>Due Date</label>
+              <label>Deadline</label>
               <input
                 type="date"
                 value={formData.dueDate}
-                min={formData.startDate}
                 onChange={(e) => setFormData((f) => ({ ...f, dueDate: e.target.value }))}
                 required
               />
@@ -285,28 +287,15 @@ function EmployeeTasksContent() {
 
       {loading ? (
         <div className="ed-loading">Loading tasks...</div>
-      ) : sortedTimelineTasks.length === 0 ? (
+      ) : sortedTasks.length === 0 ? (
         <div className="ed-empty-panel">
           {viewMode === 'today'
-            ? 'No tasks due today. Add a personal task or check the timeline.'
+            ? 'No tasks due today. Add a personal task or check By Deadline.'
             : 'No tasks in this view yet.'}
-        </div>
-      ) : viewMode === 'timeline' ? (
-        <div className="ed-timeline-list">
-          {sortedTimelineTasks.map((task) => (
-            <TaskCard
-              key={task._id}
-              task={task}
-              updatingId={updatingId}
-              onStatusChange={handleStatusChange}
-              onDelete={handleDelete}
-              showDelete={task.source === 'Personal'}
-            />
-          ))}
         </div>
       ) : (
         <div className="ed-task-cards">
-          {sortedTimelineTasks.map((task) => (
+          {sortedTasks.map((task) => (
             <TaskCard
               key={task._id}
               task={task}

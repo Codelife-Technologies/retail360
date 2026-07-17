@@ -3,6 +3,7 @@ const router = express.Router();
 const Role = require('../models/Role');
 const { paginate } = require('../utils/pagination');
 const { requirePermission } = require('../middleware/auth');
+const { logFromRequest } = require('../utils/activityLogService');
 
 // GET all roles
 router.get('/', requirePermission('roles.view'), async (req, res) => {
@@ -55,6 +56,14 @@ router.post('/', requirePermission('roles.create'), async (req, res) => {
     const role = new Role(req.body);
     await role.save();
     const populated = await Role.findById(role._id).populate('permissions', 'name code module');
+    await logFromRequest(req, {
+      action: 'role.create',
+      module: 'roles',
+      targetType: 'role',
+      targetId: role._id,
+      targetLabel: role.name || role.code,
+      summary: `Created role "${role.name || role.code}"`,
+    });
     res.status(201).json(populated);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -72,6 +81,19 @@ router.put('/:id', requirePermission('roles.update'), async (req, res) => {
     if (!role) {
       return res.status(404).json({ error: 'Role not found' });
     }
+    await logFromRequest(req, {
+      action: 'role.update',
+      module: 'roles',
+      targetType: 'role',
+      targetId: role._id,
+      targetLabel: role.name || role.code,
+      summary: `Updated role "${role.name || role.code}"`,
+      changes: {
+        name: role.name,
+        code: role.code,
+        permissions: (role.permissions || []).map((p) => p.code || p._id),
+      },
+    });
     res.json(role);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -85,6 +107,14 @@ router.delete('/:id', requirePermission('roles.delete'), async (req, res) => {
     if (!role) {
       return res.status(404).json({ error: 'Role not found' });
     }
+    await logFromRequest(req, {
+      action: 'role.delete',
+      module: 'roles',
+      targetType: 'role',
+      targetId: role._id,
+      targetLabel: role.name || role.code,
+      summary: `Deleted role "${role.name || role.code}"`,
+    });
     res.json({ message: 'Role deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

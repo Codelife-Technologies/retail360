@@ -3,6 +3,7 @@ const router = express.Router();
 const Permission = require('../models/Permission');
 const { paginate } = require('../utils/pagination');
 const { requirePermission } = require('../middleware/auth');
+const { logFromRequest } = require('../utils/activityLogService');
 
 // GET all permissions
 router.get('/', requirePermission('permissions.view'), async (req, res) => {
@@ -50,6 +51,14 @@ router.post('/', requirePermission('permissions.create'), async (req, res) => {
   try {
     const permission = new Permission(req.body);
     await permission.save();
+    await logFromRequest(req, {
+      action: 'permission.create',
+      module: 'permissions',
+      targetType: 'permission',
+      targetId: permission._id,
+      targetLabel: permission.code || permission.name,
+      summary: `Created permission "${permission.code || permission.name}"`,
+    });
     res.status(201).json(permission);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -67,6 +76,14 @@ router.put('/:id', requirePermission('permissions.update'), async (req, res) => 
     if (!permission) {
       return res.status(404).json({ error: 'Permission not found' });
     }
+    await logFromRequest(req, {
+      action: 'permission.update',
+      module: 'permissions',
+      targetType: 'permission',
+      targetId: permission._id,
+      targetLabel: permission.code || permission.name,
+      summary: `Updated permission "${permission.code || permission.name}"`,
+    });
     res.json(permission);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -80,6 +97,14 @@ router.delete('/:id', requirePermission('permissions.delete'), async (req, res) 
     if (!permission) {
       return res.status(404).json({ error: 'Permission not found' });
     }
+    await logFromRequest(req, {
+      action: 'permission.delete',
+      module: 'permissions',
+      targetType: 'permission',
+      targetId: permission._id,
+      targetLabel: permission.code || permission.name,
+      summary: `Deleted permission "${permission.code || permission.name}"`,
+    });
     res.json({ message: 'Permission deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

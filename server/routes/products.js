@@ -6,11 +6,12 @@ const path = require('path');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
 const Subcategory = require('../models/Subcategory');
+const Supplier = require('../models/Supplier');
 const logger = require('../utils/logger');
 const { paginate } = require('../utils/pagination');
 const { parseExcel, buildImportErrorSummary } = require('../utils/excelParser');
 const { generateTemplate, exportToExcel } = require('../utils/excelGenerator');
-const { parseSupplierLinksPayload } = require('../utils/productSuppliers');
+const { parseSupplierLinksPayload, dedupeSupplierLinks } = require('../utils/productSuppliers');
 const { requireAdminOrRole } = require('../middleware/auth');
 
 const productEditAccess = requireAdminOrRole('admin', 'warehouse');
@@ -56,6 +57,7 @@ const PRODUCT_EXPORT_HEADERS = [
   { key: 'images', label: 'Images (comma-separated URLs)' },
   { key: 'keywords', label: 'Keywords (comma-separated)' },
   { key: 'unit', label: 'Unit' },
+  { key: 'supplierCode', label: 'Supplier Code' },
   { key: 'suppliers', label: 'Suppliers' },
   { key: 'createdAt', label: 'Created At' },
   { key: 'updatedAt', label: 'Updated At' },
@@ -80,6 +82,11 @@ const PRODUCT_TEMPLATE_HEADERS = [
   { key: 'category', label: 'Category' },
   { key: 'subCategory', label: 'Sub Category' },
   { key: 'brandName', label: 'Brand Name' },
+  {
+    key: 'supplierCode',
+    label: 'Supplier Code',
+    aliases: ['Supplier Codes', 'Vendor Code', 'Vendor Codes'],
+  },
   { key: 'title', label: 'Title *', requiredOr: 'name' },
   { key: 'name', label: 'Name *', requiredOr: 'title', aliases: ['Name'] },
   { key: 'colour', label: 'Colour' },
@@ -120,6 +127,12 @@ const PRODUCT_TEMPLATE_INSTRUCTIONS = [
   'Variation column:',
   '  • Leave blank or set NO for a single-SKU product (SKU = Parent SKU)',
   '  • Set YES for a variant product (SKU = Child SKU; Parent SKU links variants)',
+  '',
+  'Supplier Code (optional):',
+  '  • Enter the supplier code from Master → Suppliers (Supplier Code field)',
+  '  • Multiple suppliers: comma-separated codes (e.g. SSPL-01, VND-02)',
+  '  • Codes must already exist; unknown codes will fail that row',
+  '  • Leave blank to keep existing suppliers on update (or assign none on create)',
   '',
   'All other columns are optional for import pre-checks.',
   'Note: empty optional fields may still cause row save errors (category, dimensions, images, etc.).',
@@ -316,17 +329,75 @@ function buildProductQuery(queryParams = {}) {
   return query;
 }
 
+function formatSupplierCodesForExport(suppliers) {
+  if (!suppliers || !suppliers.length) return '';
+  return suppliers
+    .map((link) => link.supplier?.supplierCode || link.supplier?.supplierId || '')
+    .filter(Boolean)
+    .join(', ');
+}
+
 function formatSuppliersForExport(suppliers) {
   if (!suppliers || !suppliers.length) return '';
   return suppliers
     .map((link) => {
       const name = link.supplier?.name || 'Unknown';
-      const parts = [name];
+      const code = link.supplier?.supplierCode || link.supplier?.supplierId;
+      const parts = code ? [`${name} (${code})`] : [name];
       if (link.sku) parts.push(`SKU: ${link.sku}`);
       if (link.unit) parts.push(`Unit: ${link.unit}`);
       return parts.join(' — ');
     })
     .join('; ');
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Resolve comma/semicolon-separated supplier codes to product supplier links.
+ * Returns null when no codes were provided (caller should leave existing suppliers untouched).
+ */
+async function resolveSupplierLinksFromCodes(codesRaw, productSku, productUnit = 'pcs') {
+  if (codesRaw === undefined || codesRaw === null || String(codesRaw).trim() === '') {
+    return null;
+  }
+
+  const codes = String(codesRaw)
+    .split(/[,;]/)
+    .map((code) => code.trim())
+    .filter(Boolean);
+
+  if (codes.length === 0) {
+    return { links: [], missing: [] };
+  }
+
+  const links = [];
+  const missing = [];
+
+  for (const code of codes) {
+    const pattern = new RegExp(`^${escapeRegex(code)}$`, 'i');
+    const supplier = await Supplier.findOne({
+      $or: [{ supplierCode: pattern }, { supplierId: pattern }],
+    }).select('_id supplierCode supplierId name');
+
+    if (!supplier) {
+      missing.push(code);
+      continue;
+    }
+
+    links.push({
+      supplier: supplier._id,
+      sku: productSku || '',
+      unit: productUnit || 'pcs',
+    });
+  }
+
+  return {
+    links: dedupeSupplierLinks(links),
+    missing,
+  };
 }
 
 function mapProductToExportRow(product) {
@@ -370,6 +441,7 @@ function mapProductToExportRow(product) {
     images: (product.images || []).filter(Boolean).join(', '),
     keywords: (product.keywords || []).filter(Boolean).join(', '),
     unit: product.unit || '',
+    supplierCode: formatSupplierCodesForExport(product.suppliers),
     suppliers: formatSuppliersForExport(product.suppliers),
     createdAt: product.createdAt ? new Date(product.createdAt).toISOString() : '',
     updatedAt: product.updatedAt ? new Date(product.updatedAt).toISOString() : '',
@@ -758,6 +830,7 @@ router.get('/template', (req, res) => {
         category: 'Brass',
         subCategory: 'Statues',
         brandName: 'Sample Brand',
+        supplierCode: 'SSPL-01',
         title: 'Sample Variant Product',
         name: 'Sample Variant Product',
         colour: 'Gold',
@@ -783,6 +856,7 @@ router.get('/template', (req, res) => {
         category: 'Brass',
         subCategory: '',
         brandName: 'Sample Brand',
+        supplierCode: 'SSPL-01',
         title: 'Sample Single SKU Product',
         name: 'Sample Single SKU Product',
         colour: 'Gold',
@@ -1203,6 +1277,26 @@ router.post('/import', productEditAccess, upload.single('file'), async (req, res
         }
 
         const productData = buildProductDataFromImportRow(row, parsed, categoryRefs);
+
+        const supplierCodesRaw = getImportRowValue(row, 'supplierCode');
+        if (supplierCodesRaw) {
+          const resolved = await resolveSupplierLinksFromCodes(
+            supplierCodesRaw,
+            productData.sku,
+            productData.unit || 'pcs'
+          );
+          if (resolved.missing.length) {
+            errors.push({
+              row: rowNum,
+              field: 'supplierCode',
+              message: `Supplier code(s) not found: ${resolved.missing.join(', ')}`,
+              data: row,
+            });
+            failed++;
+            continue;
+          }
+          productData.suppliers = resolved.links;
+        }
 
         if (!productData.slno) {
           productData.slno = await generateNextSerialNumber();

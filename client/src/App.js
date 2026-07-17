@@ -1,14 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, lazy, Suspense } from 'react';
 import { useAuth } from './context/AuthContext';
 import Dashboard from './components/Dashboard';
 import MIS from './components/MIS';
 import MasterModule from './master/MasterModule';
 import ProcurementModule from './procurement/ProcurementModule';
 import SalesModule from './sales/SalesModule';
-import HrModule from './hr/HrModule';
 import UserManagementModule from './userManagement/UserManagementModule';
-import EmployeeDashboardModule from './employeeDashboard/EmployeeDashboardModule';
-import EmployeeChatNotifications from './employeeDashboard/components/EmployeeChatNotifications';
 import InventoryModule from './inventory/InventoryModule';
 import Login from './components/Login';
 import { MASTER_GROUPS, isMasterTab, resolveMasterSubTab } from './master/masterTabs';
@@ -30,6 +27,24 @@ import {
 import { SALES_TABS, isSalesModuleTab, resolveSalesSubTab } from './sales/salesTabs';
 import { HR_TABS, isHrTab, resolveHrSubTab } from './hr/hrTabs';
 import {
+  COMPLIANCE_TABS,
+  isComplianceTab,
+  resolveComplianceSubTab,
+  filterComplianceTabs,
+} from './compliance/complianceTabs';
+import {
+  FINANCE_TABS,
+  isFinanceTab,
+  resolveFinanceSubTab,
+  filterFinanceTabs,
+} from './finance/financeTabs';
+import {
+  UTILITIES_TABS,
+  isUtilitiesTab,
+  resolveUtilitiesSubTab,
+  filterUtilitiesTabs,
+} from './utilities/utilitiesTabs';
+import {
   USER_MANAGEMENT_TABS,
   isUserManagementTab,
   resolveUserManagementSubTab,
@@ -42,6 +57,17 @@ import {
 import PageZoomShell from './components/PageZoomShell';
 import BirthdayCelebration from './components/BirthdayCelebration';
 import './App.css';
+
+const HrModule = lazy(() => import('./hr/HrModule'));
+const ComplianceModule = lazy(() => import('./compliance/ComplianceModule'));
+const FinanceModule = lazy(() => import('./finance/FinanceModule'));
+const UtilitiesModule = lazy(() => import('./utilities/UtilitiesModule'));
+const EmployeeDashboardModule = lazy(() => import('./employeeDashboard/EmployeeDashboardModule'));
+const EmployeeChatNotifications = lazy(() => import('./employeeDashboard/components/EmployeeChatNotifications'));
+
+function ModuleLoadingFallback() {
+  return <div className="app-loading">Loading module…</div>;
+}
 
 function App() {
   const {
@@ -62,6 +88,9 @@ function App() {
   const visibleProcurementTabs = filterTabs(hasPermission, user, PROCUREMENT_TABS);
   const visibleSalesTabs = filterTabs(hasPermission, user, SALES_TABS);
   const visibleHrTabs = filterTabs(hasPermission, user, HR_TABS);
+  const visibleComplianceTabs = filterComplianceTabs(hasPermission, COMPLIANCE_TABS);
+  const visibleFinanceTabs = filterFinanceTabs(hasPermission, FINANCE_TABS);
+  const visibleUtilitiesTabs = filterUtilitiesTabs(hasPermission, UTILITIES_TABS);
   const canViewReports = hasPermission('admin.all') || hasPermission('reports.view');
 
   const visibleUserManagementTabs = USER_MANAGEMENT_TABS.filter(
@@ -75,6 +104,9 @@ function App() {
   const isSalesActive =
     activeTab === 'sales-module' || activeTab.startsWith('sales-module:');
   const isHrActive = activeTab === 'hr' || activeTab.startsWith('hr:');
+  const isComplianceActive = activeTab === 'compliance' || activeTab.startsWith('compliance:');
+  const isFinanceActive = activeTab === 'finance' || activeTab.startsWith('finance:');
+  const isUtilitiesActive = activeTab === 'utilities' || activeTab.startsWith('utilities:');
   const isUserManagementActive =
     activeTab === 'user-management' || activeTab.startsWith('user-management:');
   const isEmployeeDashboardActive =
@@ -83,6 +115,9 @@ function App() {
   const activeProcurementSubTab = resolveProcurementSubTab(activeTab);
   const activeSalesSubTab = resolveSalesSubTab(activeTab);
   const activeHrSubTab = resolveHrSubTab(activeTab);
+  const activeComplianceSubTab = resolveComplianceSubTab(activeTab);
+  const activeFinanceSubTab = resolveFinanceSubTab(activeTab);
+  const activeUtilitiesSubTab = resolveUtilitiesSubTab(activeTab);
   const activeUserManagementSubTab = resolveUserManagementSubTab(activeTab);
   const activeEmployeeDashboardSubTab = resolveEmployeeDashboardSubTab(activeTab);
   const activeInventorySubTab = resolveInventorySubTab(activeTab);
@@ -134,6 +169,27 @@ function App() {
       activeId: activeHrSubTab,
       prefix: 'hr',
     };
+  } else if (isComplianceActive && visibleComplianceTabs.length > 1) {
+    moduleSubNav = {
+      label: 'Compliance',
+      items: visibleComplianceTabs,
+      activeId: activeComplianceSubTab,
+      prefix: 'compliance',
+    };
+  } else if (isFinanceActive && visibleFinanceTabs.length > 1) {
+    moduleSubNav = {
+      label: 'Finance',
+      items: visibleFinanceTabs,
+      activeId: activeFinanceSubTab,
+      prefix: 'finance',
+    };
+  } else if (isUtilitiesActive && visibleUtilitiesTabs.length > 1) {
+    moduleSubNav = {
+      label: 'Utilities',
+      items: visibleUtilitiesTabs,
+      activeId: activeUtilitiesSubTab,
+      prefix: 'utilities',
+    };
   } else if (isEmployeeDashboardActive && showEmployeeDashboardNav && EMPLOYEE_DASHBOARD_TABS.length > 1) {
     moduleSubNav = {
       label: 'Employee Dashboard',
@@ -172,6 +228,18 @@ function App() {
         setActiveTab(tab);
         return;
       }
+      if (tab.startsWith('compliance:')) {
+        setActiveTab(tab);
+        return;
+      }
+      if (tab.startsWith('finance:')) {
+        setActiveTab(tab);
+        return;
+      }
+      if (tab.startsWith('utilities:')) {
+        setActiveTab(tab);
+        return;
+      }
       if (tab.startsWith('user-management:')) {
         setActiveTab(tab);
         return;
@@ -198,6 +266,18 @@ function App() {
       }
       if (isHrTab(tab)) {
         setActiveTab(`hr:${tab}`);
+        return;
+      }
+      if (isComplianceTab(tab)) {
+        setActiveTab(`compliance:${tab}`);
+        return;
+      }
+      if (isFinanceTab(tab)) {
+        setActiveTab(`finance:${tab}`);
+        return;
+      }
+      if (isUtilitiesTab(tab)) {
+        setActiveTab(`utilities:${tab}`);
         return;
       }
       if (isUserManagementTab(tab)) {
@@ -236,6 +316,21 @@ function App() {
         setActiveTab(`hr:${firstTab}`);
         return;
       }
+      if (tab === 'compliance') {
+        const firstTab = visibleComplianceTabs[0]?.id || 'compliance-dashboard';
+        setActiveTab(`compliance:${firstTab}`);
+        return;
+      }
+      if (tab === 'finance') {
+        const firstTab = visibleFinanceTabs[0]?.id || 'finance-dashboard';
+        setActiveTab(`finance:${firstTab}`);
+        return;
+      }
+      if (tab === 'utilities') {
+        const firstTab = visibleUtilitiesTabs[0]?.id || 'image-generator';
+        setActiveTab(`utilities:${firstTab}`);
+        return;
+      }
       if (tab === 'user-management') {
         const firstTab = visibleUserManagementTabs[0]?.id || 'users';
         setActiveTab(`user-management:${firstTab}`);
@@ -247,7 +342,7 @@ function App() {
       }
       setActiveTab(tab);
     },
-    [visibleUserManagementTabs, visibleInventoryGroups, visibleProcurementTabs, visibleSalesTabs, visibleHrTabs]
+    [visibleUserManagementTabs, visibleInventoryGroups, visibleProcurementTabs, visibleSalesTabs, visibleHrTabs, visibleComplianceTabs, visibleFinanceTabs, visibleUtilitiesTabs]
   );
 
   if (loading) {
@@ -274,13 +369,42 @@ function App() {
       return <SalesModule subTab={activeSalesSubTab} />;
     }
     if (isHrActive) {
-      return <HrModule subTab={activeHrSubTab} />;
+      return (
+        <Suspense fallback={<ModuleLoadingFallback />}>
+          <HrModule subTab={activeHrSubTab} />
+        </Suspense>
+      );
+    }
+    if (isComplianceActive) {
+      return (
+        <Suspense fallback={<ModuleLoadingFallback />}>
+          <ComplianceModule subTab={activeComplianceSubTab} />
+        </Suspense>
+      );
+    }
+    if (isFinanceActive) {
+      return (
+        <Suspense fallback={<ModuleLoadingFallback />}>
+          <FinanceModule subTab={activeFinanceSubTab} />
+        </Suspense>
+      );
+    }
+    if (isUtilitiesActive) {
+      return (
+        <Suspense fallback={<ModuleLoadingFallback />}>
+          <UtilitiesModule subTab={activeUtilitiesSubTab} />
+        </Suspense>
+      );
     }
     if (isUserManagementActive) {
       return <UserManagementModule subTab={activeUserManagementSubTab} />;
     }
     if (isEmployeeDashboardActive) {
-      return <EmployeeDashboardModule subTab={activeEmployeeDashboardSubTab} />;
+      return (
+        <Suspense fallback={<ModuleLoadingFallback />}>
+          <EmployeeDashboardModule subTab={activeEmployeeDashboardSubTab} />
+        </Suspense>
+      );
     }
 
     switch (activeTab) {
@@ -379,6 +503,33 @@ function App() {
               👔 HR
             </button>
           )}
+          {visibleComplianceTabs.length > 0 && (
+            <button
+              type="button"
+              className={`nav-item${isComplianceActive ? ' active' : ''}`}
+              onClick={() => handleNavigate('compliance')}
+            >
+              ✅ Compliance
+            </button>
+          )}
+          {visibleFinanceTabs.length > 0 && (
+            <button
+              type="button"
+              className={`nav-item${isFinanceActive ? ' active' : ''}`}
+              onClick={() => handleNavigate('finance')}
+            >
+              💼 Finance
+            </button>
+          )}
+          {visibleUtilitiesTabs.length > 0 && (
+            <button
+              type="button"
+              className={`nav-item${isUtilitiesActive ? ' active' : ''}`}
+              onClick={() => handleNavigate('utilities')}
+            >
+              🛠️ Utilities
+            </button>
+          )}
           {showEmployeeDashboardNav && (
             <button
               type="button"
@@ -439,7 +590,9 @@ function App() {
       <main className="main-content">
         <PageZoomShell contentKey={activeTab}>{renderContent()}</PageZoomShell>
       </main>
-      <EmployeeChatNotifications />
+      <Suspense fallback={null}>
+        <EmployeeChatNotifications />
+      </Suspense>
       {birthdayGreeting && (
         <BirthdayCelebration
           greeting={birthdayGreeting}

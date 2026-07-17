@@ -15,6 +15,7 @@ const chatRoutes = require('./chat');
 router.use('/dashboard', dashboardRoutes);
 router.use('/employees', employeesRoutes);
 router.use('/attendance', attendanceRoutes);
+router.use('/office-locations', require('./officeLocations'));
 router.use('/leaves', leavesRoutes);
 router.use('/payroll', payrollRoutes);
 router.use('/holidays', holidaysRoutes);

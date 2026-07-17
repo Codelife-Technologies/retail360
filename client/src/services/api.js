@@ -124,6 +124,10 @@ export const purchasesAPI = {
   create: (data) => api.post('/purchases', data),
   update: (id, data) => api.put(`/purchases/${id}`, data),
   delete: (id) => api.delete(`/purchases/${id}`),
+  downloadTemplate: () => api.get('/purchases/template', { responseType: 'blob' }),
+  import: (formData) => api.post('/purchases/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 };
 
 // Locations API
@@ -205,6 +209,11 @@ export const salesAPI = {
   deleteAll: () => api.delete('/sales/all', { params: { confirm: 'yes' } }),
   removeAmazonOrderDuplicates: () => api.post('/sales/remove-amazon-order-duplicates'),
   getSummary: (params) => api.get('/sales/summary/stats', { params }),
+  downloadTemplate: () => api.get('/sales/template', { responseType: 'blob' }),
+  import: (formData) =>
+    api.post('/sales/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 };
 
 // Logs API
@@ -212,6 +221,11 @@ export const logsAPI = {
   logFrontend: (data) => api.post('/logs/frontend', data),
   getLogs: (params) => api.get('/logs', { params }),
   clearLogs: (type) => api.delete('/logs', { params: { type } }),
+};
+
+// Activity / audit logs API (User Management → Logs)
+export const activityLogsAPI = {
+  getAll: (params) => api.get('/activity-logs', { params }),
 };
 
 // Shipment Vendors API
@@ -244,6 +258,8 @@ export const shipmentsAPI = {
   update: (id, data) => api.put(`/shipments/${id}`, data),
   delete: (id) => api.delete(`/shipments/${id}`),
   calculateCharges: (data) => api.post('/shipments/calculate-charges', data),
+  downloadTemplate: () => api.get('/shipments/template', { responseType: 'blob' }),
+  import: (formData) => api.post('/shipments/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 };
 
 // Categories API

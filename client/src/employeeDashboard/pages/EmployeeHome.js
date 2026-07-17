@@ -1,8 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import {
-  PieChart,
-  Pie,
-  Cell,
   ResponsiveContainer,
   BarChart,
   Bar,
@@ -18,8 +15,6 @@ import HrStatusBadge from '../../hr/components/HrStatusBadge';
 import { formatDate, formatCurrency } from '../../hr/utils/hrUtils';
 import { formatLeaveRemaining } from '../../hr/utils/leavePolicies';
 import { formatTime12Hour } from '../../hr/utils/attendanceUtils';
-
-const PIE_COLORS = ['#10b981', '#ef4444', '#f59e0b', '#3b82f6', '#ff8c00', '#8b5cf6'];
 
 function attendanceKpiVariant(status) {
   if (!status || status === 'Not marked') return 'warning';
@@ -46,12 +41,6 @@ function EmployeeHome() {
   }, []);
 
   const summary = data?.attendanceSummary || { present: 0, absent: 0, late: 0, leave: 0, holidays: 0 };
-  const attendancePie = [
-    { name: 'Present', value: summary.present },
-    { name: 'Absent', value: summary.absent },
-    { name: 'Half Day', value: summary.late },
-    { name: 'On Leave', value: summary.leave },
-  ].filter((row) => row.value > 0);
 
   const leaveBarData = (data?.leaveBalances || []).slice(0, 6).map((bal) => ({
     name: bal.label || bal.leaveType,
@@ -131,30 +120,23 @@ function EmployeeHome() {
 
               <div className="hr-chart-grid hr-chart-grid-2">
                 <div className="hr-chart-card">
-                  <h3>Attendance This Month</h3>
-                  {attendancePie.length === 0 ? (
-                    <p className="ed-empty-chart">No attendance records this month</p>
+                  <h3>Tasks Due Today</h3>
+                  {data?.tasksToday?.length ? (
+                    <ul className="hr-mini-list ed-task-mini-list">
+                      {data.tasksToday.map((task) => (
+                        <li key={task._id} className={`ed-task-mini priority-${task.priority?.toLowerCase()}`}>
+                          <span>
+                            <strong>{task.title}</strong>
+                            {task.description && (
+                              <small>{task.description}</small>
+                            )}
+                          </span>
+                          <span className="ed-task-mini-badge">{task.priority}</span>
+                        </li>
+                      ))}
+                    </ul>
                   ) : (
-                    <ResponsiveContainer width="100%" height={260}>
-                      <PieChart>
-                        <Pie
-                          data={attendancePie}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={90}
-                          label={({ name, percent = 0 }) =>
-                            `${name} (${(percent * 100).toFixed(0)}%)`
-                          }
-                        >
-                          {attendancePie.map((entry, index) => (
-                            <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    <p className="ed-empty-chart">No tasks due today.</p>
                   )}
                 </div>
 
@@ -177,27 +159,6 @@ function EmployeeHome() {
               </div>
 
               <div className="hr-dashboard-bottom">
-                <div className="hr-panel-card">
-                  <h3>Tasks Due Today</h3>
-                  {data?.tasksToday?.length ? (
-                    <ul className="hr-mini-list ed-task-mini-list">
-                      {data.tasksToday.map((task) => (
-                        <li key={task._id} className={`ed-task-mini priority-${task.priority?.toLowerCase()}`}>
-                          <span>
-                            <strong>{task.title}</strong>
-                            {task.description && (
-                              <small>{task.description}</small>
-                            )}
-                          </span>
-                          <span className="ed-task-mini-badge">{task.priority}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="ed-empty-chart">No tasks due today.</p>
-                  )}
-                </div>
-
                 <div className="hr-side-cards">
                   <div className="hr-panel-card">
                     <h3>Leave Balances</h3>
