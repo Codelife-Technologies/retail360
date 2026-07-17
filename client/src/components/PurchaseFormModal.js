@@ -1,48 +1,142 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { purchasesAPI, suppliersAPI, productsAPI, locationsAPI, pricesAPI } from '../services/api';
 import { computeCategoryTax } from '../utils/taxRates';
+import { getCatalogSku, getProductDisplayName } from '../utils/productDisplayUtils';
 import './Purchases.css';
 
 const emptyForm = () => ({
   supplier: '',
   location: '',
   purchaseDate: new Date().toISOString().split('T')[0],
-  items: [],
+  items: [emptyLine()],
   tax: 0,
   defaultTaxRate: 0,
   paymentStatus: 'pending',
   notes: '',
 });
 
+function emptyLine() {
+  return {
+    query: '',
+    productId: '',
+    quantity: 1,
+    unitPrice: 0,
+  };
+}
+
+function extractProducts(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
+function productLabel(product) {
+  const name = getProductDisplayName(product) || 'Untitled';
+  const sku = getCatalogSku(product) || product?.sku || '';
+  return sku ? `${name} (${sku})` : name;
+}
+
+function formatMoney(value) {
+  return `₹${Number(value || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 function PurchaseFormModal({ onClose, onSaved }) {
   const [suppliers, setSuppliers] = useState([]);
-  const [products, setProducts] = useState([]);
+  const [productsById, setProductsById] = useState({});
   const [locations, setLocations] = useState([]);
   const [productPrices, setProductPrices] = useState({});
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState(emptyForm);
-  const [newItem, setNewItem] = useState({ product: '', quantity: 1, unitPrice: 0 });
+  const [activeSuggestRow, setActiveSuggestRow] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const searchTimers = useRef({});
+
+  const products = useMemo(() => Object.values(productsById), [productsById]);
+
+  const mergeProducts = (list) => {
+    if (!list?.length) return;
+    setProductsById((prev) => {
+      const next = { ...prev };
+      list.forEach((p) => {
+        if (p?._id) next[p._id] = p;
+      });
+      return next;
+    });
+  };
+
+  const loadPricesFor = async (list) => {
+    const ids = (list || []).map((p) => p._id).filter(Boolean);
+    if (!ids.length) return;
+    try {
+      const pricesResponse = await pricesAPI.getBulkCurrent(ids);
+      setProductPrices((prev) => {
+        const next = { ...prev };
+        (pricesResponse.data || []).forEach((price) => {
+          const id = price.product?._id || price.product;
+          if (id) next[id] = price;
+        });
+        return next;
+      });
+    } catch (error) {
+      console.error('Error fetching prices:', error);
+    }
+  };
 
   useEffect(() => {
-    suppliersAPI.getAll().then((res) => setSuppliers(res.data || [])).catch(console.error);
-    locationsAPI.getAll({ isActive: 'true' }).then((res) => setLocations(res.data || [])).catch(console.error);
-    productsAPI.getAll().then(async (res) => {
-      const productsData = res.data || [];
-      setProducts(productsData);
-      if (productsData.length > 0) {
-        try {
-          const pricesResponse = await pricesAPI.getBulkCurrent(productsData.map((p) => p._id));
-          const pricesMap = {};
-          (pricesResponse.data || []).forEach((price) => {
-            pricesMap[price.product._id || price.product] = price;
-          });
-          setProductPrices(pricesMap);
-        } catch (error) {
-          console.error('Error fetching prices:', error);
-        }
-      }
+    suppliersAPI.getAll().then((res) => {
+      const list = extractProducts(res.data);
+      setSuppliers(list.length ? list : (Array.isArray(res.data) ? res.data : []));
     }).catch(console.error);
+    locationsAPI.getAll({ isActive: 'true' }).then((res) => {
+      const list = extractProducts(res.data);
+      setLocations(list.length ? list : (Array.isArray(res.data) ? res.data : []));
+    }).catch(console.error);
+
+    // Prefetch a first page so suggestions work immediately on focus
+    productsAPI.getAll({ page: 1, limit: 50 }).then(async (res) => {
+      const list = extractProducts(res.data);
+      mergeProducts(list);
+      await loadPricesFor(list);
+    }).catch(console.error);
+
+    return () => {
+      Object.values(searchTimers.current).forEach((t) => window.clearTimeout(t));
+    };
   }, []);
+
+  const searchProducts = (index, query) => {
+    const q = String(query || '').trim();
+    if (searchTimers.current[index]) {
+      window.clearTimeout(searchTimers.current[index]);
+    }
+
+    if (!q) {
+      setSuggestions([]);
+      setSuggestLoading(false);
+      return;
+    }
+
+    setSuggestLoading(true);
+    searchTimers.current[index] = window.setTimeout(async () => {
+      try {
+        const res = await productsAPI.getAll({ search: q, page: 1, limit: 20 });
+        const list = extractProducts(res.data);
+        mergeProducts(list);
+        await loadPricesFor(list);
+        setSuggestions(list);
+        setActiveSuggestRow(index);
+      } catch (error) {
+        console.error('Product search failed:', error);
+        setSuggestions([]);
+      } finally {
+        setSuggestLoading(false);
+      }
+    }, 250);
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -52,42 +146,108 @@ function PurchaseFormModal({ onClose, onSaved }) {
     }));
   };
 
-  const handleAddItem = () => {
-    if (!newItem.product || newItem.quantity <= 0 || newItem.unitPrice < 0) {
-      alert('Please fill in all item fields');
-      return;
-    }
-    const item = {
-      product: newItem.product,
-      quantity: parseFloat(newItem.quantity),
-      unitPrice: parseFloat(newItem.unitPrice),
-      total: parseFloat(newItem.quantity) * parseFloat(newItem.unitPrice),
-    };
-    setFormData((prev) => ({ ...prev, items: [...prev.items, item] }));
-    setNewItem({ product: '', quantity: 1, unitPrice: 0 });
-  };
-
-  const handleRemoveItem = (index) => {
+  const updateLine = (index, patch) => {
     setFormData((prev) => ({
       ...prev,
-      items: prev.items.filter((_, i) => i !== index),
+      items: prev.items.map((line, i) => (i === index ? { ...line, ...patch } : line)),
     }));
   };
 
-  const calculateSubtotal = () => formData.items.reduce((sum, item) => sum + item.total, 0);
-  const calculateTax = () => computeCategoryTax(formData.items, products, formData.defaultTaxRate);
+  const applyProductToLine = (index, product) => {
+    if (!product) return;
+    const price = productPrices[product._id];
+    mergeProducts([product]);
+    updateLine(index, {
+      query: productLabel(product),
+      productId: product._id,
+      unitPrice: price ? Number(price.purchasePrice) || 0 : 0,
+    });
+    setSuggestions([]);
+    setActiveSuggestRow(null);
+  };
+
+  const handleProductQueryChange = (index, value) => {
+    updateLine(index, { query: value, productId: '' });
+    setActiveSuggestRow(index);
+    searchProducts(index, value);
+  };
+
+  const handleProductFocus = (index) => {
+    setActiveSuggestRow(index);
+    const query = formData.items[index]?.query || '';
+    if (String(query).trim()) {
+      searchProducts(index, query);
+      return;
+    }
+    productsAPI.getAll({ page: 1, limit: 20 }).then(async (res) => {
+      const list = extractProducts(res.data);
+      mergeProducts(list);
+      await loadPricesFor(list);
+      setSuggestions(list);
+      setActiveSuggestRow(index);
+    }).catch(console.error);
+  };
+
+  const handleProductBlur = (index) => {
+    window.setTimeout(() => {
+      setActiveSuggestRow((current) => (current === index ? null : current));
+      setSuggestions((prev) => (activeSuggestRow === index ? [] : prev));
+    }, 180);
+  };
+
+  const addLine = () => {
+    setFormData((prev) => ({ ...prev, items: [...prev.items, emptyLine()] }));
+  };
+
+  const removeLine = (index) => {
+    setFormData((prev) => {
+      const next = prev.items.filter((_, i) => i !== index);
+      return { ...prev, items: next.length ? next : [emptyLine()] };
+    });
+  };
+
+  const resolvedItems = useMemo(
+    () =>
+      formData.items
+        .map((line) => {
+          const product = productsById[line.productId];
+          if (!product) return null;
+          const quantity = Number(line.quantity) || 0;
+          const unitPrice = Number(line.unitPrice) || 0;
+          if (quantity <= 0 || unitPrice < 0) return null;
+          return {
+            product: product._id,
+            quantity,
+            unitPrice,
+            total: quantity * unitPrice,
+          };
+        })
+        .filter(Boolean),
+    [formData.items, productsById]
+  );
+
+  const calculateSubtotal = () => resolvedItems.reduce((sum, item) => sum + item.total, 0);
+  const calculateTax = () => computeCategoryTax(resolvedItems, products, formData.defaultTaxRate);
   const calculateTotal = () => calculateSubtotal() + calculateTax();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (formData.items.length === 0) {
-      alert('Please add at least one item');
+    if (resolvedItems.length === 0) {
+      alert('Add at least one item: pick a product from suggestions, then set quantity and price.');
       return;
     }
+
+    const missing = formData.items.find((line) => String(line.query || '').trim() && !line.productId);
+    if (missing) {
+      alert(`Select a product from the suggestions for "${missing.query}".`);
+      return;
+    }
+
     try {
       setSaving(true);
       await purchasesAPI.create({
         ...formData,
+        items: resolvedItems,
         subtotal: calculateSubtotal(),
         tax: calculateTax(),
         total: calculateTotal(),
@@ -101,9 +261,11 @@ function PurchaseFormModal({ onClose, onSaved }) {
     }
   };
 
+  const showSuggestionsFor = (index) => activeSuggestRow === index;
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content large purchase-form-modal" onClick={(e) => e.stopPropagation()}>
         <h2>Add Purchase</h2>
         <form onSubmit={handleSubmit}>
           <div className="form-row">
@@ -148,62 +310,110 @@ function PurchaseFormModal({ onClose, onSaved }) {
           </div>
 
           <div className="items-section">
-            <h3>Items</h3>
-            <div className="add-item-form">
-              <select
-                value={newItem.product}
-                onChange={(e) => {
-                  const productId = e.target.value;
-                  const price = productPrices[productId];
-                  setNewItem({
-                    ...newItem,
-                    product: productId,
-                    unitPrice: price ? price.purchasePrice : 0,
-                  });
-                }}
-              >
-                <option value="">Select Product</option>
-                {products.map((product) => {
-                  const price = productPrices[product._id];
-                  const purchasePrice = price ? price.purchasePrice : 0;
-                  return (
-                    <option key={product._id} value={product._id}>
-                      {product.title || product.name} - ₹{purchasePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </option>
-                  );
-                })}
-              </select>
-              <input
-                type="number"
-                placeholder="Quantity"
-                value={newItem.quantity}
-                onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })}
-                min="1"
-              />
-              <input
-                type="number"
-                step="0.01"
-                placeholder="Unit Price (₹)"
-                value={newItem.unitPrice}
-                onChange={(e) => setNewItem({ ...newItem, unitPrice: parseFloat(e.target.value) || 0 })}
-                min="0"
-              />
-              <button type="button" onClick={handleAddItem} className="btn-add-item">Add Item</button>
+            <div className="items-section-header">
+              <h3>Items</h3>
+              <button type="button" className="btn-add-item" onClick={addLine}>
+                + Add Line
+              </button>
             </div>
+            <p className="form-hint">Type a product name or SKU — pick from the suggestions list.</p>
 
-            <div className="items-list">
-              {formData.items.map((item, index) => {
-                const product = products.find((p) => p._id === item.product);
-                return (
-                  <div key={index} className="item-row">
-                    <span>{product?.title || product?.name || 'Unknown'}</span>
-                    <span>Qty: {item.quantity}</span>
-                    <span>₹{item.unitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    <span>₹{item.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    <button type="button" onClick={() => handleRemoveItem(index)} className="btn-remove-item">Remove</button>
-                  </div>
-                );
-              })}
+            <div className="purchase-items-table-wrap">
+              <table className="purchase-items-table">
+                <thead>
+                  <tr>
+                    <th>Product (Name / SKU)</th>
+                    <th>Quantity</th>
+                    <th>Price</th>
+                    <th>Line Total</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {formData.items.map((line, index) => {
+                    const lineTotal = (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0);
+                    const open = showSuggestionsFor(index);
+                    return (
+                      <tr key={`line-${index}`}>
+                        <td className="purchase-item-product-cell">
+                          <input
+                            type="text"
+                            className="purchase-item-product-input"
+                            value={line.query}
+                            placeholder="Type product name or SKU"
+                            autoComplete="off"
+                            onChange={(e) => handleProductQueryChange(index, e.target.value)}
+                            onFocus={() => handleProductFocus(index)}
+                            onBlur={() => handleProductBlur(index)}
+                          />
+                          {open ? (
+                            <ul className="purchase-item-suggestions">
+                              {suggestLoading ? (
+                                <li className="purchase-item-suggest-status">Searching…</li>
+                              ) : suggestions.length === 0 ? (
+                                <li className="purchase-item-suggest-status">
+                                  {String(line.query || '').trim()
+                                    ? 'No products found'
+                                    : 'Start typing to search'}
+                                </li>
+                              ) : (
+                                suggestions.map((product) => {
+                                  const name = getProductDisplayName(product);
+                                  const sku = getCatalogSku(product) || product.sku || '';
+                                  return (
+                                    <li key={product._id}>
+                                      <button
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => applyProductToLine(index, product)}
+                                      >
+                                        <strong>{name || 'Untitled'}</strong>
+                                        {sku ? <span className="mono">{sku}</span> : null}
+                                      </button>
+                                    </li>
+                                  );
+                                })
+                              )}
+                            </ul>
+                          ) : null}
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={line.quantity}
+                            onChange={(e) =>
+                              updateLine(index, { quantity: parseFloat(e.target.value) || 0 })
+                            }
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={line.unitPrice}
+                            onChange={(e) =>
+                              updateLine(index, { unitPrice: parseFloat(e.target.value) || 0 })
+                            }
+                          />
+                        </td>
+                        <td>{formatMoney(lineTotal)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn-remove-item"
+                            onClick={() => removeLine(index)}
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -221,28 +431,15 @@ function PurchaseFormModal({ onClose, onSaved }) {
             </div>
             <div className="form-group">
               <label>Tax (auto)</label>
-              <input
-                type="text"
-                value={`₹${calculateTax().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                disabled
-              />
+              <input type="text" value={formatMoney(calculateTax())} disabled />
             </div>
             <div className="form-group">
               <label>Subtotal</label>
-              <input
-                type="text"
-                value={`₹${calculateSubtotal().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                disabled
-              />
+              <input type="text" value={formatMoney(calculateSubtotal())} disabled />
             </div>
             <div className="form-group">
               <label>Total</label>
-              <input
-                type="text"
-                value={`₹${calculateTotal().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                disabled
-                className="total-input"
-              />
+              <input type="text" value={formatMoney(calculateTotal())} disabled className="total-input" />
             </div>
           </div>
 

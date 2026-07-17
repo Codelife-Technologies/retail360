@@ -4,6 +4,7 @@ const { startOfDayInAppTz } = require('../../utils/appTimezone');
 const workLogEntrySchema = new mongoose.Schema(
   {
     description: { type: String, required: true, trim: true },
+    details: { type: String, default: '', trim: true },
     timeSpentMinutes: { type: Number, required: true, min: 1 },
   },
   { _id: true }

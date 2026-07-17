@@ -212,12 +212,20 @@
 
 .po-items-header-extended,
 .po-item-row-extended {
-  grid-template-columns: 2fr 0.8fr 0.6fr 0.5fr 0.8fr 0.5fr 0.5fr 0.9fr auto;
+  grid-template-columns: minmax(120px, 1.05fr) 0.75fr 0.55fr 0.5fr 0.75fr 0.5fr 0.5fr 0.85fr auto;
+  gap: 0.65rem;
 }
 
 .po-items-header-extended.has-vendor-col,
 .items-list.has-vendor-col .po-item-row-extended {
-  grid-template-columns: 1.6fr 0.7fr 1.2fr 0.5fr 0.45fr 0.7fr 0.45fr 0.45fr 0.8fr auto;
+  grid-template-columns: minmax(120px, 0.95fr) 0.7fr 1.1fr 0.5fr 0.45fr 0.65fr 0.45fr 0.45fr 0.8fr auto;
+}
+
+.po-items-header-extended > span,
+.po-item-row-extended > span,
+.po-item-row-extended > .po-item-vendor-cell,
+.po-item-row-extended > button {
+  min-width: 0;
 }
 
 .po-item-vendor-cell select {
@@ -267,15 +275,89 @@
   line-height: 1.4;
 }
 
-.po-detail-items-table {
-  display: block;
+.po-detail-items-wrap {
   overflow-x: auto;
-  white-space: nowrap;
+  margin-top: 0.5rem;
+}
+
+.po-detail-items-table {
+  width: 100%;
+  min-width: 980px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.po-detail-items-table col.po-col-image {
+  width: 52px;
+}
+
+.po-detail-items-table col.po-col-sku {
+  width: 100px;
+}
+
+.po-detail-items-table col.po-col-product {
+  width: 170px;
+}
+
+.po-detail-items-table col.po-col-hsn {
+  width: 72px;
+}
+
+.po-detail-items-table col.po-col-qty {
+  width: 56px;
+}
+
+.po-detail-items-table col.po-col-uom {
+  width: 56px;
+}
+
+.po-detail-items-table col.po-col-price,
+.po-detail-items-table col.po-col-disc,
+.po-detail-items-table col.po-col-tax,
+.po-detail-items-table col.po-col-tax-amt,
+.po-detail-items-table col.po-col-line,
+.po-detail-items-table col.po-col-rcvd,
+.po-detail-items-table col.po-col-pending {
+  width: 88px;
 }
 
 .po-detail-items-table th,
 .po-detail-items-table td {
   white-space: nowrap;
+  padding: 0.5rem 0.65rem;
+  vertical-align: middle;
+}
+
+.po-detail-items-table th:nth-child(3),
+.po-detail-items-table td.po-product-name {
+  white-space: normal;
+}
+
+.po-product-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.po-item-row-extended > .po-product-name {
+  display: block;
+  max-width: 100%;
+}
+
+.po-detail-items-table td.po-product-name {
+  max-width: 170px;
+}
+
+.po-detail-items-table td.po-product-name a {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
 }
 
 .approval-row {
@@ -406,7 +488,7 @@
 .items-list-header {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1fr 0.8fr auto;
-  gap: 1rem;
+  gap: 0.65rem;
   padding: 0 0.75rem 0.25rem;
   font-size: 0.82rem;
   text-transform: uppercase;
@@ -418,7 +500,7 @@
 .item-row {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1fr 0.8fr auto;
-  gap: 1rem;
+  gap: 0.65rem;
   padding: 0.75rem;
   background: white;
   border-radius: 6px;

@@ -1,6 +1,7 @@
 import React from 'react';
-import { formatMoney } from '../utils/locationCurrency';
+import { formatMoney, resolveSaleDisplayCurrency } from '../utils/locationCurrency';
 import { getCatalogSku, getProductThumbnail, PRODUCT_IMAGE_PLACEHOLDER } from '../utils/productDisplayUtils';
+import { useCurrency } from '../currency/CurrencyContext';
 import './Products.css';
 import './SalesSkuReport.css';
 
@@ -35,10 +36,13 @@ function getProductSku(item) {
 }
 
 function SaleDetailsModal({ sale, loading, onClose }) {
+  const { formatOverall, fromOriginal } = useCurrency();
   if (!sale && !loading) return null;
 
-  const currency = sale?.currency || 'AED';
+  const currency = resolveSaleDisplayCurrency(sale, 'INR');
   const formatSaleMoney = (amount) => formatMoney(amount, currency);
+  const originalTotal = sale?.originalAmount != null ? sale.originalAmount : sale?.total;
+  const totalInr = fromOriginal(originalTotal, currency, 'INR');
   const title = sale?.amazonOrderId
     ? `Sale · ${sale.amazonOrderId}`
     : sale?.salesNumber
@@ -92,7 +96,14 @@ function SaleDetailsModal({ sale, loading, onClose }) {
                   label="Tax Rate"
                   value={sale.defaultTaxRate != null ? `${sale.defaultTaxRate}%` : null}
                 />
-                <SaleDetailField label="Total" value={formatSaleMoney(sale.total)} />
+                <SaleDetailField label="Total (original)" value={formatSaleMoney(sale.total)} />
+                <SaleDetailField label="Total (INR / USD)" value={formatOverall(totalInr)} />
+                {sale.exchangeRateToInr ? (
+                  <SaleDetailField
+                    label="FX rate used"
+                    value={`1 ${currency} = ${Number(sale.exchangeRateToInr).toFixed(4)} INR`}
+                  />
+                ) : null}
               </div>
             </div>
 

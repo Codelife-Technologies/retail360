@@ -1,23 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts';
 import { useAuth } from '../../context/AuthContext';
 import ExcelUpload from '../../components/ExcelUpload';
 import { financeAPI } from '../services/financeApi';
 import {
-  FinanceKpiCard, FinanceFilters, FinanceInsights, FinanceEmpty, FinanceToast,
+  FinanceFilters, FinanceEmpty, FinanceToast, FinancePeriodToggle,
 } from '../components/FinanceShared';
 import {
-  formatCurrency, formatDate, formatMonthKey, toInputDate, financialYearOptions,
+  formatCurrency, formatDate, toInputDate, financialYearOptions,
+  financeBillUrl, buildFinanceFormData, getFinPeriodRange,
 } from '../utils/financeUtils';
+
+const OTHER_VALUE = '__other__';
 
 const emptyForm = () => ({
   date: toInputDate(new Date()),
   voucherNo: '',
-  category: 'Office',
-  subcategory: 'Rent',
+  categorySelect: 'Office',
+  customCategory: '',
+  subcategorySelect: 'Rent',
+  customSubcategory: '',
   vendor: '',
   description: '',
   amount: '',
@@ -26,6 +27,24 @@ const emptyForm = () => ({
   status: 'Paid',
   department: '',
 });
+
+function resolveCategoryFields(category, presets = []) {
+  const value = String(category || '').trim();
+  if (presets.includes(value)) {
+    return { categorySelect: value, customCategory: '' };
+  }
+  if (!value) return { categorySelect: presets[0] || 'Office', customCategory: '' };
+  return { categorySelect: OTHER_VALUE, customCategory: value };
+}
+
+function resolveSubcategoryFields(subcategory, presets = []) {
+  const value = String(subcategory || '').trim();
+  if (!value) return { subcategorySelect: '', customSubcategory: '' };
+  if (presets.includes(value)) {
+    return { subcategorySelect: value, customSubcategory: '' };
+  }
+  return { subcategorySelect: OTHER_VALUE, customSubcategory: value };
+}
 
 function ExpenseReport() {
   const { hasPermission } = useAuth();
@@ -43,7 +62,16 @@ function ExpenseReport() {
     hasPermission('finance.expense.delete');
 
   const fyOptions = useMemo(() => financialYearOptions(), []);
-  const [filters, setFilters] = useState({ fyOptions, status: '', category: '', search: '' });
+  const defaultRange = useMemo(() => getFinPeriodRange('month'), []);
+  const [filters, setFilters] = useState({
+    fyOptions,
+    period: 'month',
+    dateFrom: defaultRange.dateFrom,
+    dateTo: defaultRange.dateTo,
+    status: '',
+    category: '',
+    search: '',
+  });
   const [meta, setMeta] = useState({ expenseCategories: {}, paymentModes: [], expenseStatuses: [] });
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +84,9 @@ function ExpenseReport() {
   const [viewOnly, setViewOnly] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
+  const [billFile, setBillFile] = useState(null);
+  const [existingBill, setExistingBill] = useState(null);
+  const [removeBill, setRemoveBill] = useState(false);
 
   useEffect(() => {
     financeAPI.getMeta().then((res) => setMeta(res.data || {})).catch(() => {});
@@ -87,10 +118,18 @@ function ExpenseReport() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const cards = payload?.cards || {};
   const rows = payload?.data || [];
   const pagination = payload?.pagination;
-  const subcats = meta.expenseCategories?.[form.category] || [];
+
+  const categoryOptions = useMemo(
+    () => Object.keys(meta.expenseCategories || {}).filter((c) => c && c !== 'Other'),
+    [meta.expenseCategories]
+  );
+
+  const subcats = useMemo(() => {
+    if (form.categorySelect === OTHER_VALUE) return [];
+    return meta.expenseCategories?.[form.categorySelect] || [];
+  }, [meta.expenseCategories, form.categorySelect]);
 
   const hasActiveFilters = useMemo(
     () => !!(filters.dateFrom || filters.dateTo || filters.month || filters.financialYear || filters.status || filters.category || filters.search),
@@ -104,33 +143,84 @@ function ExpenseReport() {
 
   const applyFilters = () => {
     setPage(1);
-    setFilters(draftFilters);
+    setFilters({ ...draftFilters, period: 'custom' });
     setShowFilters(false);
   };
 
   const clearFilters = () => {
-    const cleared = { fyOptions, status: '', category: '', search: '' };
+    const range = getFinPeriodRange('month');
+    const cleared = {
+      fyOptions,
+      period: 'month',
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+      status: '',
+      category: '',
+      search: '',
+    };
     setDraftFilters(cleared);
     setPage(1);
     setFilters(cleared);
     setShowFilters(false);
   };
 
+  const handlePeriodChange = (periodId) => {
+    setPage(1);
+    if (periodId === 'custom') {
+      setFilters((f) => ({
+        ...f,
+        period: 'custom',
+        month: '',
+        financialYear: '',
+      }));
+      return;
+    }
+    const range = getFinPeriodRange(periodId);
+    setFilters((f) => ({
+      ...f,
+      period: periodId,
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+      month: '',
+      financialYear: '',
+    }));
+  };
+
+  const handleCustomDateChange = (patch) => {
+    setPage(1);
+    setFilters((f) => ({
+      ...f,
+      period: 'custom',
+      month: '',
+      financialYear: '',
+      ...patch,
+    }));
+  };
+
   const openAdd = () => {
     setEditing(null);
     setViewOnly(false);
     setForm(emptyForm());
+    setBillFile(null);
+    setExistingBill(null);
+    setRemoveBill(false);
     setShowModal(true);
   };
 
   const openEdit = (row, readOnly = false) => {
     setEditing(row);
     setViewOnly(readOnly);
+    const cats = Object.keys(meta.expenseCategories || {}).filter((c) => c && c !== 'Other');
+    const categoryFields = resolveCategoryFields(row.category || 'Office', cats);
+    const subPreset = categoryFields.categorySelect === OTHER_VALUE
+      ? []
+      : (meta.expenseCategories?.[categoryFields.categorySelect] || []);
+    const subcategoryFields = resolveSubcategoryFields(row.subcategory || '', subPreset);
     setForm({
       date: toInputDate(row.date),
       voucherNo: row.voucherNo || '',
-      category: row.category || 'Office',
-      subcategory: row.subcategory || '',
+      ...categoryFields,
+      ...subcategoryFields,
       vendor: row.vendor || '',
       description: row.description || '',
       amount: row.amount ?? '',
@@ -139,20 +229,50 @@ function ExpenseReport() {
       status: row.status || 'Paid',
       department: row.department || '',
     });
+    setBillFile(null);
+    setExistingBill(row.bill?.filePath ? row.bill : null);
+    setRemoveBill(false);
     setShowModal(true);
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     if (viewOnly) return;
+    const category = form.categorySelect === OTHER_VALUE
+      ? String(form.customCategory || '').trim()
+      : form.categorySelect;
+    const subcategory = form.subcategorySelect === OTHER_VALUE
+      ? String(form.customSubcategory || '').trim()
+      : form.subcategorySelect;
+    if (!category) {
+      alert(form.categorySelect === OTHER_VALUE
+        ? 'Please enter a custom category'
+        : 'Please select a category');
+      return;
+    }
+    if (form.subcategorySelect === OTHER_VALUE && !subcategory) {
+      alert('Please enter a custom subcategory');
+      return;
+    }
     try {
       const body = {
-        ...form,
+        date: form.date,
+        voucherNo: form.voucherNo,
+        category,
+        subcategory,
+        vendor: form.vendor,
+        description: form.description,
         amount: Number(form.amount) || 0,
         gst: Number(form.gst) || 0,
+        paymentMode: form.paymentMode,
+        status: form.status,
+        department: form.department,
       };
-      if (editing) await financeAPI.updateExpense(editing._id, body);
-      else await financeAPI.createExpense(body);
+      const payload = (billFile || removeBill)
+        ? buildFinanceFormData(body, { billFile, removeBill })
+        : body;
+      if (editing) await financeAPI.updateExpense(editing._id, payload);
+      else await financeAPI.createExpense(payload);
       setShowModal(false);
       setToast(editing ? 'Expense updated' : 'Expense added');
       window.setTimeout(() => setToast(''), 2000);
@@ -196,8 +316,8 @@ function ExpenseReport() {
     <div className="fin-page">
       <div className="fin-page-header fin-sticky">
         <div>
-          <h1>Expense Report</h1>
-          <p className="fin-subtitle">Track operating expenses across inventory, payroll, marketing and more.</p>
+          <h1>Expense</h1>
+          <p className="fin-subtitle">Add and view expense entries.</p>
         </div>
         <div className="fin-actions">
           {canWrite ? (
@@ -228,47 +348,36 @@ function ExpenseReport() {
 
       <FinanceToast message={toast} />
 
-      <div className="fin-kpi-grid">
-        <FinanceKpiCard loading={loading} label="Total Expense" value={formatCurrency(cards.totalExpense)} tone="danger" />
-        <FinanceKpiCard loading={loading} label="Purchase Cost" value={formatCurrency(cards.purchaseCost)} tone="warning" />
-        <FinanceKpiCard loading={loading} label="Employee Salary" value={formatCurrency(cards.employeeSalary)} tone="info" />
-        <FinanceKpiCard loading={loading} label="Marketing Cost" value={formatCurrency(cards.marketingCost)} tone="warning" />
-        <FinanceKpiCard loading={loading} label="Logistics Cost" value={formatCurrency(cards.logisticsCost)} tone="info" />
-        <FinanceKpiCard loading={loading} label="Other Expenses" value={formatCurrency(cards.otherExpenses)} tone="danger" />
-      </div>
-
-      <FinanceInsights
-        insights={payload?.insights}
-        include={['Highest Expense Category', 'Expense Growth']}
+      <FinancePeriodToggle
+        period={filters.period || 'custom'}
+        dateFrom={filters.dateFrom}
+        dateTo={filters.dateTo}
+        onPeriodChange={handlePeriodChange}
+        onCustomDateChange={handleCustomDateChange}
+        extra={(
+          <label className="fin-channel-filter">
+            <span>Payment Status</span>
+            <select
+              className="fin-input"
+              value={filters.status || ''}
+              onChange={(e) => {
+                setPage(1);
+                setFilters((f) => ({ ...f, status: e.target.value }));
+              }}
+            >
+              <option value="">All Statuses</option>
+              {(meta.expenseStatuses || ['Pending', 'Paid', 'Partial', 'Cancelled']).map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       />
 
-      <div className="fin-charts-grid fin-charts-grid-3">
-        <div className="fin-card">
-          <h3>Monthly Expense Trend</h3>
-          <p className="fin-chart-note">Last 6 months</p>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={payload?.charts?.monthlyExpense || []}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" tickFormatter={formatMonthKey} />
-              <YAxis /><Tooltip labelFormatter={formatMonthKey} />
-              <Line type="monotone" dataKey="expense" stroke="#ef4444" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="fin-card">
-          <h3>Expense by Department</h3>
-          <p className="fin-chart-note">Last 6 months</p>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={payload?.charts?.expenseByDepartment || []}>
-              <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis /><Tooltip />
-              <Bar dataKey="value" fill="#6B3894" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
       <div className="fin-card">
-        <h3>Expense Table</h3>
+        <h3>Expense Records</h3>
         {loading ? <div className="fin-skeleton-list">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="fin-skeleton-row" />)}</div>
           : rows.length === 0 ? (
             <FinanceEmpty
@@ -288,7 +397,7 @@ function ExpenseReport() {
                   <thead>
                     <tr>
                       <th>Date</th><th>Voucher No</th><th>Category</th><th>Vendor</th><th>Description</th>
-                      <th>Amount</th><th>GST</th><th>Payment Mode</th><th>Status</th><th>Actions</th>
+                      <th>Amount</th><th>GST</th><th>Payment Mode</th><th>Status</th><th>Bill</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -303,6 +412,15 @@ function ExpenseReport() {
                         <td data-label="GST">{formatCurrency(r.gst)}</td>
                         <td data-label="Payment Mode">{r.paymentMode}</td>
                         <td data-label="Status">{r.status}</td>
+                        <td data-label="Bill">
+                          {r.bill?.filePath ? (
+                            <a className="fin-link" href={financeBillUrl(r.bill)} target="_blank" rel="noopener noreferrer">
+                              View
+                            </a>
+                          ) : (
+                            <span className="fin-muted">—</span>
+                          )}
+                        </td>
                         <td data-label="Actions">
                           <div className="fin-row-actions">
                             <button type="button" className="fin-link" onClick={() => openEdit(r, true)}>View</button>
@@ -347,16 +465,66 @@ function ExpenseReport() {
                   />
                 </label>
                 <label className="fin-field"><span>Category</span>
-                  <select className="fin-input" disabled={viewOnly} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, subcategory: '' })}>
-                    {Object.keys(meta.expenseCategories || {}).map((c) => <option key={c} value={c}>{c}</option>)}
+                  <select
+                    className="fin-input"
+                    disabled={viewOnly}
+                    value={form.categorySelect}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      const nextSubs = next === OTHER_VALUE ? [] : (meta.expenseCategories?.[next] || []);
+                      setForm({
+                        ...form,
+                        categorySelect: next,
+                        customCategory: next === OTHER_VALUE ? form.customCategory : '',
+                        subcategorySelect: nextSubs[0] || '',
+                        customSubcategory: '',
+                      });
+                    }}
+                  >
+                    {categoryOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                    <option value={OTHER_VALUE}>Other</option>
                   </select>
                 </label>
+                {form.categorySelect === OTHER_VALUE ? (
+                  <label className="fin-field"><span>Custom Category</span>
+                    <input
+                      className="fin-input"
+                      disabled={viewOnly}
+                      required
+                      placeholder="Write new category"
+                      value={form.customCategory}
+                      onChange={(e) => setForm({ ...form, customCategory: e.target.value })}
+                    />
+                  </label>
+                ) : null}
                 <label className="fin-field"><span>Subcategory</span>
-                  <select className="fin-input" disabled={viewOnly} value={form.subcategory} onChange={(e) => setForm({ ...form, subcategory: e.target.value })}>
+                  <select
+                    className="fin-input"
+                    disabled={viewOnly}
+                    value={form.subcategorySelect}
+                    onChange={(e) => setForm({
+                      ...form,
+                      subcategorySelect: e.target.value,
+                      customSubcategory: e.target.value === OTHER_VALUE ? form.customSubcategory : '',
+                    })}
+                  >
                     <option value="">Select</option>
                     {subcats.map((s) => <option key={s} value={s}>{s}</option>)}
+                    <option value={OTHER_VALUE}>Other</option>
                   </select>
                 </label>
+                {form.subcategorySelect === OTHER_VALUE ? (
+                  <label className="fin-field"><span>Custom Subcategory</span>
+                    <input
+                      className="fin-input"
+                      disabled={viewOnly}
+                      required
+                      placeholder="Write new subcategory"
+                      value={form.customSubcategory}
+                      onChange={(e) => setForm({ ...form, customSubcategory: e.target.value })}
+                    />
+                  </label>
+                ) : null}
                 <label className="fin-field"><span>Vendor</span>
                   <input className="fin-input" disabled={viewOnly} value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} />
                 </label>
@@ -381,6 +549,44 @@ function ExpenseReport() {
                 </label>
                 <label className="fin-field full"><span>Description</span>
                   <textarea className="fin-input" rows={3} disabled={viewOnly} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                </label>
+                <label className="fin-field full"><span>Bill / Receipt</span>
+                  {viewOnly ? (
+                    existingBill?.filePath ? (
+                      <a className="fin-link" href={financeBillUrl(existingBill)} target="_blank" rel="noopener noreferrer">
+                        {existingBill.originalName || 'View bill'}
+                      </a>
+                    ) : (
+                      <span className="fin-muted">No bill attached</span>
+                    )
+                  ) : (
+                    <div className="fin-bill-upload">
+                      {existingBill?.filePath && !removeBill && !billFile ? (
+                        <div className="fin-bill-current">
+                          <a className="fin-link" href={financeBillUrl(existingBill)} target="_blank" rel="noopener noreferrer">
+                            {existingBill.originalName || 'Current bill'}
+                          </a>
+                          <button
+                            type="button"
+                            className="fin-link danger"
+                            onClick={() => { setRemoveBill(true); setBillFile(null); }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : null}
+                      <input
+                        className="fin-input"
+                        type="file"
+                        accept=".pdf,image/jpeg,image/png,image/webp,image/gif"
+                        onChange={(e) => {
+                          setBillFile(e.target.files?.[0] || null);
+                          setRemoveBill(false);
+                        }}
+                      />
+                      <span className="fin-muted">PDF or image, max 10 MB</span>
+                    </div>
+                  )}
                 </label>
               </div>
               {!viewOnly ? (
@@ -410,12 +616,15 @@ function ExpenseReport() {
                 showStatus="status"
                 statusOptions={meta.expenseStatuses || ['Pending', 'Paid', 'Partial', 'Cancelled']}
                 extra={(
-                  <input
-                    className="fin-input"
-                    placeholder="Search…"
-                    value={draftFilters.search || ''}
-                    onChange={(e) => setDraftFilters({ ...draftFilters, search: e.target.value })}
-                  />
+                  <label className="fin-field">
+                    <span>Search</span>
+                    <input
+                      className="fin-input"
+                      placeholder="Search…"
+                      value={draftFilters.search || ''}
+                      onChange={(e) => setDraftFilters({ ...draftFilters, search: e.target.value })}
+                    />
+                  </label>
                 )}
               />
             </div>
@@ -433,7 +642,7 @@ function ExpenseReport() {
           templateEndpoint="/finance/expenses/template"
           mandatoryFieldsHelp={[
             'Date * — expense date (YYYY-MM-DD)',
-            'Category * — e.g. Office, Inventory, Marketing',
+            'Category * — e.g. Office, Inventory, Marketing, or any custom category',
             'Amount * — expense amount in INR',
             'Voucher No — optional; auto-generated when blank',
           ]}

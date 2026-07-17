@@ -1,23 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-} from 'recharts';
 import { useAuth } from '../../context/AuthContext';
+import ExcelUpload from '../../components/ExcelUpload';
 import { financeAPI } from '../services/financeApi';
 import {
-  FinanceKpiCard, FinanceFilters, FinanceEmpty, FinanceToast,
+  FinanceFilters, FinanceEmpty, FinanceToast, FinancePeriodToggle,
 } from '../components/FinanceShared';
 import {
   formatCurrency, formatDate, toInputDate, financialYearOptions,
+  financeBillUrl, buildFinanceFormData, getFinPeriodRange,
 } from '../utils/financeUtils';
 
-const PIE_COLORS = ['#6B3894', '#10b981', '#f59e0b', '#3b82f6', '#ef4444'];
+const PRESET_INCOME_TYPES = ['Service Income', 'Other Income', 'Interest Income', 'Commission'];
+const OTHER_TYPE_VALUE = '__other__';
 
 const emptyForm = () => ({
   date: toInputDate(new Date()),
   voucherNo: '',
-  incomeType: 'Other Income',
+  incomeTypeSelect: 'Other Income',
+  customIncomeType: '',
   customer: '',
   description: '',
   amount: '',
@@ -25,6 +25,14 @@ const emptyForm = () => ({
   status: 'Received',
   department: '',
 });
+
+function resolveIncomeTypeFields(incomeType, presets = PRESET_INCOME_TYPES) {
+  const value = String(incomeType || '').trim();
+  if (presets.includes(value)) {
+    return { incomeTypeSelect: value, customIncomeType: '' };
+  }
+  return { incomeTypeSelect: OTHER_TYPE_VALUE, customIncomeType: value };
+}
 
 function IncomeReport() {
   const { hasPermission } = useAuth();
@@ -42,21 +50,44 @@ function IncomeReport() {
     hasPermission('finance.income.delete');
 
   const fyOptions = useMemo(() => financialYearOptions(), []);
-  const [filters, setFilters] = useState({ fyOptions, paymentStatus: '', search: '', customer: '' });
+  const defaultRange = useMemo(() => getFinPeriodRange('month'), []);
+  const [filters, setFilters] = useState({
+    fyOptions,
+    period: 'month',
+    dateFrom: defaultRange.dateFrom,
+    dateTo: defaultRange.dateTo,
+    salesChannel: '',
+    paymentStatus: '',
+    search: '',
+    customer: '',
+  });
+  const [salesChannels, setSalesChannels] = useState([]);
   const [meta, setMeta] = useState({ incomeTypes: [], incomeStatuses: [] });
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [toast, setToast] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [draftFilters, setDraftFilters] = useState(null);
   const [viewOnly, setViewOnly] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm());
+  const [billFile, setBillFile] = useState(null);
+  const [existingBill, setExistingBill] = useState(null);
+  const [removeBill, setRemoveBill] = useState(false);
 
   useEffect(() => {
-    financeAPI.getMeta().then((res) => setMeta(res.data || {})).catch(() => {});
+    financeAPI.getMeta().then((res) => {
+      const data = res.data || {};
+      setMeta(data);
+      const channels = Array.isArray(data.salesChannels) ? data.salesChannels : [];
+      setSalesChannels(channels);
+    }).catch(() => {
+      setMeta({});
+      setSalesChannels([]);
+    });
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -67,6 +98,7 @@ function IncomeReport() {
         dateTo: filters.dateTo,
         month: filters.month,
         financialYear: filters.financialYear,
+        salesChannel: filters.salesChannel,
         paymentStatus: filters.paymentStatus,
         search: filters.search,
         customer: filters.customer,
@@ -85,12 +117,16 @@ function IncomeReport() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const cards = payload?.cards || {};
   const rows = payload?.data || [];
   const pagination = payload?.pagination;
 
+  const incomeTypeOptions = useMemo(() => {
+    const list = meta.incomeTypes?.length ? meta.incomeTypes : PRESET_INCOME_TYPES;
+    return list.filter((t) => t && t !== 'Other');
+  }, [meta.incomeTypes]);
+
   const hasActiveFilters = useMemo(
-    () => !!(filters.dateFrom || filters.dateTo || filters.month || filters.financialYear || filters.paymentStatus || filters.search || filters.customer),
+    () => !!(filters.dateFrom || filters.dateTo || filters.month || filters.financialYear || filters.salesChannel || filters.paymentStatus || filters.search || filters.customer),
     [filters]
   );
 
@@ -101,32 +137,82 @@ function IncomeReport() {
 
   const applyFilters = () => {
     setPage(1);
-    setFilters(draftFilters);
+    setFilters({ ...draftFilters, period: 'custom' });
     setShowFilters(false);
   };
 
   const clearFilters = () => {
-    const cleared = { fyOptions, paymentStatus: '', search: '', customer: '' };
+    const range = getFinPeriodRange('month');
+    const cleared = {
+      fyOptions,
+      period: 'month',
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+      salesChannel: '',
+      paymentStatus: '',
+      search: '',
+      customer: '',
+    };
     setDraftFilters(cleared);
     setPage(1);
     setFilters(cleared);
     setShowFilters(false);
   };
 
+  const handlePeriodChange = (periodId) => {
+    setPage(1);
+    if (periodId === 'custom') {
+      setFilters((f) => ({
+        ...f,
+        period: 'custom',
+        month: '',
+        financialYear: '',
+      }));
+      return;
+    }
+    const range = getFinPeriodRange(periodId);
+    setFilters((f) => ({
+      ...f,
+      period: periodId,
+      dateFrom: range.dateFrom,
+      dateTo: range.dateTo,
+      month: '',
+      financialYear: '',
+    }));
+  };
+
+  const handleCustomDateChange = (patch) => {
+    setPage(1);
+    setFilters((f) => ({
+      ...f,
+      period: 'custom',
+      month: '',
+      financialYear: '',
+      ...patch,
+    }));
+  };
+
   const openAdd = () => {
     setEditing(null);
     setViewOnly(false);
     setForm(emptyForm());
+    setBillFile(null);
+    setExistingBill(null);
+    setRemoveBill(false);
     setShowModal(true);
   };
 
   const openEdit = (row, readOnly = false) => {
     setEditing(row);
     setViewOnly(readOnly);
+    const typeFields = resolveIncomeTypeFields(
+      row.incomeType || row.salesChannel || 'Other Income',
+      incomeTypeOptions
+    );
     setForm({
       date: toInputDate(row.date),
       voucherNo: row.invoiceNo === '—' ? '' : row.invoiceNo || '',
-      incomeType: row.incomeType || row.salesChannel || 'Other Income',
+      ...typeFields,
       customer: row.customer === '—' ? '' : row.customer || '',
       description: row.description || '',
       amount: row.revenue ?? '',
@@ -134,20 +220,41 @@ function IncomeReport() {
       status: row.paymentStatus || 'Received',
       department: row.department || '',
     });
+    setBillFile(null);
+    setExistingBill(row.bill?.filePath ? row.bill : null);
+    setRemoveBill(false);
     setShowModal(true);
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     if (viewOnly) return;
+    const incomeType = form.incomeTypeSelect === OTHER_TYPE_VALUE
+      ? String(form.customIncomeType || '').trim()
+      : form.incomeTypeSelect;
+    if (!incomeType) {
+      alert(form.incomeTypeSelect === OTHER_TYPE_VALUE
+        ? 'Please enter a custom income type'
+        : 'Please select an income type');
+      return;
+    }
     try {
       const body = {
-        ...form,
+        date: form.date,
+        voucherNo: form.voucherNo,
+        incomeType,
+        customer: form.customer,
+        description: form.description,
         amount: Number(form.amount) || 0,
         gst: Number(form.gst) || 0,
+        status: form.status,
+        department: form.department,
       };
-      if (editing) await financeAPI.updateOtherIncome(editing._id, body);
-      else await financeAPI.createOtherIncome(body);
+      const payload = (billFile || removeBill)
+        ? buildFinanceFormData(body, { billFile, removeBill })
+        : body;
+      if (editing) await financeAPI.updateOtherIncome(editing._id, payload);
+      else await financeAPI.createOtherIncome(payload);
       setShowModal(false);
       setToast(editing ? 'Income updated' : 'Income added');
       window.setTimeout(() => setToast(''), 2000);
@@ -176,6 +283,7 @@ function IncomeReport() {
         dateTo: filters.dateTo,
         month: filters.month,
         financialYear: filters.financialYear,
+        salesChannel: filters.salesChannel,
         paymentStatus: filters.paymentStatus,
         format,
       });
@@ -192,12 +300,15 @@ function IncomeReport() {
     <div className="fin-page">
       <div className="fin-page-header fin-sticky">
         <div>
-          <h1>Income Report</h1>
-          <p className="fin-subtitle">Gross and net revenue from sales channels, customers, and manual income entries.</p>
+          <h1>Income</h1>
+          <p className="fin-subtitle">Add and view income entries.</p>
         </div>
         <div className="fin-actions">
           {canWrite ? (
-            <button type="button" className="fin-btn fin-btn-primary" onClick={openAdd}>+ Add Income</button>
+            <>
+              <button type="button" className="fin-btn fin-btn-primary" onClick={openAdd}>+ Add Income</button>
+              <button type="button" className="fin-btn" onClick={() => setShowImport(true)}>Import Excel</button>
+            </>
           ) : null}
           <button
             type="button"
@@ -214,54 +325,46 @@ function IncomeReport() {
 
       <FinanceToast message={toast} />
 
-      <div className="fin-kpi-grid">
-        <FinanceKpiCard loading={loading} label="Gross Revenue" value={formatCurrency(cards.grossRevenue)} tone="success" />
-        <FinanceKpiCard loading={loading} label="Net Revenue" value={formatCurrency(cards.netRevenue)} tone="info" />
-        <FinanceKpiCard loading={loading} label="Product Sales" value={formatCurrency(cards.productSales)} tone="info" />
-        <FinanceKpiCard loading={loading} label="Service Income" value={formatCurrency(cards.serviceIncome)} tone="warning" />
-        <FinanceKpiCard loading={loading} label="GST Collected" value={formatCurrency(cards.gstCollected)} tone="warning" />
-        <FinanceKpiCard loading={loading} label="Other Income" value={formatCurrency(cards.otherIncome)} tone="success" />
-      </div>
-
-      <div className="fin-charts-grid fin-charts-grid-3">
-        <div className="fin-card">
-          <h3>Monthly Revenue</h3>
-          <div className="fin-chart-wrap">
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={payload?.charts?.monthlyRevenue || []}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" /><YAxis /><Tooltip />
-                <Bar dataKey="revenue" fill="#10b981" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className="fin-card">
-          <h3>Revenue by Sales Channel</h3>
-          <div className="fin-chart-wrap">
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={payload?.charts?.revenueByChannel || []} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={85} label>
-                  {(payload?.charts?.revenueByChannel || []).map((e, i) => (
-                    <Cell key={e.name} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip /><Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
+      <FinancePeriodToggle
+        period={filters.period || 'custom'}
+        dateFrom={filters.dateFrom}
+        dateTo={filters.dateTo}
+        onPeriodChange={handlePeriodChange}
+        onCustomDateChange={handleCustomDateChange}
+        extra={(
+          <label className="fin-channel-filter">
+            <span>Sales Channel</span>
+            <select
+              className="fin-input"
+              value={filters.salesChannel || ''}
+              onChange={(e) => {
+                setPage(1);
+                setFilters((f) => ({ ...f, salesChannel: e.target.value }));
+              }}
+            >
+              <option value="">All Channels</option>
+              {salesChannels.map((channel) => (
+                <option key={channel._id} value={channel._id}>
+                  {channel.name}{channel.code ? ` (${channel.code})` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      />
 
       <div className="fin-card">
-        <h3>Income Table</h3>
+        <h3>Income Records</h3>
         {loading ? <div className="fin-skeleton-list">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="fin-skeleton-row" />)}</div>
           : rows.length === 0 ? (
             <FinanceEmpty
               title="No income records"
-              subtitle={canWrite ? 'Sales and manual income entries will appear here.' : 'No income records match your filters.'}
+              subtitle={canWrite ? 'Add income manually or import from Excel. Sales entries also appear here.' : 'No income records match your filters.'}
               action={canWrite ? (
-                <button type="button" className="fin-btn fin-btn-primary" onClick={openAdd}>+ Add Income</button>
+                <div className="fin-empty-actions">
+                  <button type="button" className="fin-btn fin-btn-primary" onClick={openAdd}>+ Add Income</button>
+                  <button type="button" className="fin-btn" onClick={() => setShowImport(true)}>Import Excel</button>
+                </div>
               ) : null}
             />
           )
@@ -271,7 +374,7 @@ function IncomeReport() {
                   <thead>
                     <tr>
                       <th>Source</th><th>Invoice No</th><th>Order No</th><th>Customer</th><th>Type / Channel</th>
-                      <th>Date</th><th>Revenue</th><th>GST</th><th>Discount</th><th>Net Amount</th><th>Status</th><th>Actions</th>
+                      <th>Date</th><th>Revenue</th><th>GST</th><th>Discount</th><th>Net Amount</th><th>Status</th><th>Bill</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -288,6 +391,15 @@ function IncomeReport() {
                         <td data-label="Discount">{formatCurrency(r.discount)}</td>
                         <td data-label="Net Amount">{formatCurrency(r.netAmount)}</td>
                         <td data-label="Status">{r.paymentStatus}</td>
+                        <td data-label="Bill">
+                          {r.bill?.filePath ? (
+                            <a className="fin-link" href={financeBillUrl(r.bill)} target="_blank" rel="noopener noreferrer">
+                              View
+                            </a>
+                          ) : (
+                            <span className="fin-muted">—</span>
+                          )}
+                        </td>
                         <td data-label="Actions">
                           {r.source === 'manual' ? (
                             <div className="fin-row-actions">
@@ -336,12 +448,34 @@ function IncomeReport() {
                   />
                 </label>
                 <label className="fin-field"><span>Income Type</span>
-                  <select className="fin-input" disabled={viewOnly} value={form.incomeType} onChange={(e) => setForm({ ...form, incomeType: e.target.value })}>
-                    {(meta.incomeTypes || ['Service Income', 'Other Income', 'Interest Income', 'Commission']).map((t) => (
+                  <select
+                    className="fin-input"
+                    disabled={viewOnly}
+                    value={form.incomeTypeSelect}
+                    onChange={(e) => setForm({
+                      ...form,
+                      incomeTypeSelect: e.target.value,
+                      customIncomeType: e.target.value === OTHER_TYPE_VALUE ? form.customIncomeType : '',
+                    })}
+                  >
+                    {incomeTypeOptions.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
+                    <option value={OTHER_TYPE_VALUE}>Other</option>
                   </select>
                 </label>
+                {form.incomeTypeSelect === OTHER_TYPE_VALUE ? (
+                  <label className="fin-field"><span>Custom Income Type</span>
+                    <input
+                      className="fin-input"
+                      disabled={viewOnly}
+                      required
+                      placeholder="Write new income type"
+                      value={form.customIncomeType}
+                      onChange={(e) => setForm({ ...form, customIncomeType: e.target.value })}
+                    />
+                  </label>
+                ) : null}
                 <label className="fin-field"><span>Customer</span>
                   <input className="fin-input" disabled={viewOnly} value={form.customer} onChange={(e) => setForm({ ...form, customer: e.target.value })} />
                 </label>
@@ -363,6 +497,44 @@ function IncomeReport() {
                 </label>
                 <label className="fin-field full"><span>Description</span>
                   <textarea className="fin-input" rows={3} disabled={viewOnly} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                </label>
+                <label className="fin-field full"><span>Bill / Receipt</span>
+                  {viewOnly ? (
+                    existingBill?.filePath ? (
+                      <a className="fin-link" href={financeBillUrl(existingBill)} target="_blank" rel="noopener noreferrer">
+                        {existingBill.originalName || 'View bill'}
+                      </a>
+                    ) : (
+                      <span className="fin-muted">No bill attached</span>
+                    )
+                  ) : (
+                    <div className="fin-bill-upload">
+                      {existingBill?.filePath && !removeBill && !billFile ? (
+                        <div className="fin-bill-current">
+                          <a className="fin-link" href={financeBillUrl(existingBill)} target="_blank" rel="noopener noreferrer">
+                            {existingBill.originalName || 'Current bill'}
+                          </a>
+                          <button
+                            type="button"
+                            className="fin-link danger"
+                            onClick={() => { setRemoveBill(true); setBillFile(null); }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : null}
+                      <input
+                        className="fin-input"
+                        type="file"
+                        accept=".pdf,image/jpeg,image/png,image/webp,image/gif"
+                        onChange={(e) => {
+                          setBillFile(e.target.files?.[0] || null);
+                          setRemoveBill(false);
+                        }}
+                      />
+                      <span className="fin-muted">PDF or image, max 10 MB</span>
+                    </div>
+                  )}
                 </label>
               </div>
               {!viewOnly ? (
@@ -391,18 +563,39 @@ function IncomeReport() {
                 statusOptions={['pending', 'paid', 'partial', 'received', 'cancelled']}
                 extra={(
                   <>
-                    <input
-                      className="fin-input"
-                      placeholder="Search…"
-                      value={draftFilters.search || ''}
-                      onChange={(e) => setDraftFilters({ ...draftFilters, search: e.target.value })}
-                    />
-                    <input
-                      className="fin-input"
-                      placeholder="Customer"
-                      value={draftFilters.customer || ''}
-                      onChange={(e) => setDraftFilters({ ...draftFilters, customer: e.target.value })}
-                    />
+                    <label className="fin-field">
+                      <span>Sales Channel</span>
+                      <select
+                        className="fin-input"
+                        value={draftFilters.salesChannel || ''}
+                        onChange={(e) => setDraftFilters({ ...draftFilters, salesChannel: e.target.value })}
+                      >
+                        <option value="">All Channels</option>
+                        {salesChannels.map((channel) => (
+                          <option key={channel._id} value={channel._id}>
+                            {channel.name}{channel.code ? ` (${channel.code})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="fin-field">
+                      <span>Search</span>
+                      <input
+                        className="fin-input"
+                        placeholder="Search…"
+                        value={draftFilters.search || ''}
+                        onChange={(e) => setDraftFilters({ ...draftFilters, search: e.target.value })}
+                      />
+                    </label>
+                    <label className="fin-field">
+                      <span>Customer</span>
+                      <input
+                        className="fin-input"
+                        placeholder="Customer"
+                        value={draftFilters.customer || ''}
+                        onChange={(e) => setDraftFilters({ ...draftFilters, customer: e.target.value })}
+                      />
+                    </label>
                   </>
                 )}
               />
@@ -413,6 +606,26 @@ function IncomeReport() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {showImport ? (
+        <ExcelUpload
+          moduleName="finance/other-income"
+          templateEndpoint="/finance/other-income/template"
+          mandatoryFieldsHelp={[
+            'Date * — income date (YYYY-MM-DD)',
+            'Amount * — income amount in INR',
+            'Income Type — e.g. Service Income, or any custom type',
+            'Voucher No — optional; auto-generated when blank',
+          ]}
+          onUploadComplete={() => {
+            setShowImport(false);
+            setToast('Income import completed');
+            window.setTimeout(() => setToast(''), 2500);
+            fetchData();
+          }}
+          onClose={() => setShowImport(false)}
+        />
       ) : null}
     </div>
   );

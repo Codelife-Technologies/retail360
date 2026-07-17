@@ -158,6 +158,109 @@
   color: #333;
 }
 
+.modal-content.purchase-form-modal {
+  max-height: 90vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.purchase-form-modal form {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0.25rem;
+}
+
+.purchase-items-table-wrap {
+  width: 100%;
+  overflow: visible;
+  margin-top: 0.75rem;
+  padding-bottom: 12rem; /* room for suggestion dropdown */
+}
+
+.purchase-items-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: white;
+  border-radius: 8px;
+}
+
+.purchase-items-table th,
+.purchase-items-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: top;
+}
+
+.purchase-items-table th {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #4b5563;
+  background: #f3f4f6;
+}
+
+.purchase-items-table input[type='number'],
+.purchase-items-table input[type='text'] {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-sizing: border-box;
+  font-size: 0.95rem;
+}
+
+.purchase-item-product-cell {
+  position: relative;
+  min-width: 240px;
+  overflow: visible;
+}
+
+.purchase-item-suggestions {
+  position: absolute;
+  z-index: 50;
+  left: 0.75rem;
+  right: 0.75rem;
+  top: calc(100% - 0.15rem);
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.purchase-item-suggest-status {
+  padding: 0.65rem 0.75rem;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.purchase-item-suggestions button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.purchase-item-suggestions button:hover {
+  background: #f8f5fb;
+}
+
+.purchase-item-suggestions .mono {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 .form-group {
   margin-bottom: 1rem;
 }
@@ -195,11 +298,20 @@
   padding: 1rem;
   background: #f8f9fa;
   border-radius: 8px;
+  overflow: visible;
+}
+
+.items-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.35rem;
 }
 
 .items-section h3 {
   margin-top: 0;
-  margin-bottom: 1rem;
+  margin-bottom: 0;
   color: #333;
 }
 

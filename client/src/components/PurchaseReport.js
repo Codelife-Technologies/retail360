@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { reportsAPI, suppliersAPI, locationsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import ExcelUpload from './ExcelUpload';
 import PurchaseFormModal from './PurchaseFormModal';
 import logger from '../utils/logger';
+import { getFinPeriodRange } from '../finance/utils/financeUtils';
+import { FinancePeriodToggle } from '../finance/components/FinanceShared';
 import './PurchaseReport.css';
 import './ExcelUpload.css';
 import './Purchases.css';
@@ -24,14 +26,16 @@ function PurchaseReport() {
   const [locations, setLocations] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  
+
+  const defaultRange = useMemo(() => getFinPeriodRange('month'), []);
   const [filters, setFilters] = useState({
-    startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
+    period: 'month',
+    startDate: defaultRange.dateFrom,
+    endDate: defaultRange.dateTo,
     supplier: '',
     location: '',
     paymentStatus: '',
-    groupBy: 'date'
+    groupBy: 'date',
   });
 
   useEffect(() => {
@@ -91,9 +95,33 @@ function PurchaseReport() {
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
-    setFilters(prev => ({
+    setFilters((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
+      ...(name === 'startDate' || name === 'endDate' ? { period: 'custom' } : {}),
+    }));
+  };
+
+  const handlePeriodChange = (periodId) => {
+    if (periodId === 'custom') {
+      setFilters((f) => ({ ...f, period: 'custom' }));
+      return;
+    }
+    const range = getFinPeriodRange(periodId);
+    setFilters((f) => ({
+      ...f,
+      period: periodId,
+      startDate: range.dateFrom,
+      endDate: range.dateTo,
+    }));
+  };
+
+  const handleCustomDateChange = (patch) => {
+    setFilters((f) => ({
+      ...f,
+      period: 'custom',
+      ...(patch.dateFrom !== undefined ? { startDate: patch.dateFrom } : {}),
+      ...(patch.dateTo !== undefined ? { endDate: patch.dateTo } : {}),
     }));
   };
 
@@ -131,27 +159,17 @@ function PurchaseReport() {
 
   return (
     <div className="purchase-report">
+      <FinancePeriodToggle
+        period={filters.period || 'custom'}
+        dateFrom={filters.startDate}
+        dateTo={filters.endDate}
+        onPeriodChange={handlePeriodChange}
+        onCustomDateChange={handleCustomDateChange}
+      />
+
       <div className="report-filters">
         <h3>Filters</h3>
         <div className="filters-grid">
-          <div className="filter-group">
-            <label>Start Date</label>
-            <input
-              type="date"
-              name="startDate"
-              value={filters.startDate}
-              onChange={handleFilterChange}
-            />
-          </div>
-          <div className="filter-group">
-            <label>End Date</label>
-            <input
-              type="date"
-              name="endDate"
-              value={filters.endDate}
-              onChange={handleFilterChange}
-            />
-          </div>
           <div className="filter-group">
             <label>Supplier</label>
             <select
@@ -261,25 +279,6 @@ function PurchaseReport() {
         <div className="loading">Loading report data...</div>
       ) : view === 'summary' && summaryData ? (
         <div className="summary-view">
-          <div className="stats-cards">
-            <div className="stat-card">
-              <h3>Total Purchases</h3>
-              <p className="stat-value">{summaryData.totalPurchases}</p>
-            </div>
-            <div className="stat-card">
-              <h3>Total Expenditure</h3>
-              <p className="stat-value">₹{summaryData.totalExpenditure.toFixed(2)}</p>
-            </div>
-            <div className="stat-card">
-              <h3>Average Purchase Value</h3>
-              <p className="stat-value">₹{summaryData.averagePurchaseValue.toFixed(2)}</p>
-            </div>
-            <div className="stat-card">
-              <h3>Total Items Purchased</h3>
-              <p className="stat-value">{summaryData.totalItemsPurchased}</p>
-            </div>
-          </div>
-
           {summaryData.groupedData && summaryData.groupedData.length > 0 && (
             <div className="grouped-data-section">
               <h3>Grouped Data</h3>
@@ -343,7 +342,7 @@ function PurchaseReport() {
         </div>
       ) : view === 'detailed' && detailedData.length > 0 ? (
         <div className="detailed-view">
-          <h3>Detailed Purchase Report</h3>
+          <h3>Detailed Purchase</h3>
           <table className="report-table">
             <thead>
               <tr>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { purchaseOrdersAPI, suppliersAPI } from '../services/api';
+import { truncateProductName } from '../utils/productDisplayUtils';
 import './PoProductVendorAssign.css';
 
 function normalizeItemRow(item) {
@@ -206,7 +207,9 @@ function PoProductVendorAssign({
           <tbody>
             {items.map((row) => (
               <tr key={row.productId}>
-                <td>{row.productTitle}</td>
+                <td className="po-product-name" title={row.productTitle || undefined}>
+                  {truncateProductName(row.productTitle)}
+                </td>
                 <td className="mono">{row.sku}</td>
                 <td className="text-center">{row.quantity}</td>
                 <td>

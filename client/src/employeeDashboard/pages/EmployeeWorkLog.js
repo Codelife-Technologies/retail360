@@ -9,14 +9,16 @@ import {
   minutesFromHoursAndMinutes,
   toInputDate,
   todayInputDate,
+  getCurrentWeekRange,
 } from '../../hr/utils/hrUtils';
 
-const emptyEntry = () => ({ description: '', hours: '', minutes: '' });
+const emptyEntry = () => ({ description: '', details: '', hours: '', minutes: '' });
 
 function entriesFromLog(log) {
   if (!log?.entries?.length) return [];
   return log.entries.map((entry) => ({
     description: entry.description || '',
+    details: entry.details || '',
     hours: String(Math.floor((entry.timeSpentMinutes || 0) / 60) || ''),
     minutes: String((entry.timeSpentMinutes || 0) % 60 || ''),
   }));
@@ -26,6 +28,7 @@ function buildPayload(date, entries, notes, status) {
   const validEntries = entries
     .map((entry) => ({
       description: entry.description.trim(),
+      details: String(entry.details || '').trim(),
       timeSpentMinutes: minutesFromHoursAndMinutes(entry.hours, entry.minutes),
     }))
     .filter((entry) => entry.description && entry.timeSpentMinutes > 0);
@@ -52,6 +55,7 @@ function EmployeeWorkLogContent({ employeeId }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [recentLogs, setRecentLogs] = useState([]);
   const loadRequestIdRef = useRef(0);
   const logIdRef = useRef(null);
@@ -123,7 +127,13 @@ function EmployeeWorkLogContent({ employeeId }) {
     }
 
     try {
-      const response = await employeeWorkLogsAPI.getAll({ employee: employeeId, limit: 10 });
+      const week = getCurrentWeekRange();
+      const response = await employeeWorkLogsAPI.getAll({
+        employee: employeeId,
+        fromDate: week.fromDate,
+        toDate: week.toDate,
+        limit: 20,
+      });
       setRecentLogs(extractList(response));
     } catch (error) {
       setRecentLogs([]);
@@ -182,7 +192,7 @@ function EmployeeWorkLogContent({ employeeId }) {
     }
 
     if (!isValidEntry(newTask)) {
-      alert('Enter the task description and time spent before adding.');
+      alert('Enter the task name and time taken before adding.');
       return;
     }
 
@@ -193,6 +203,7 @@ function EmployeeWorkLogContent({ employeeId }) {
       const wasSubmitted = status === 'Submitted';
       await persistLog(nextTasks, notes, 'Draft');
       setNewTask(emptyEntry());
+      setShowAddModal(false);
       if (wasSubmitted) {
         alert('Task added. Submit again when you are done for the day.');
       }
@@ -201,6 +212,17 @@ function EmployeeWorkLogContent({ employeeId }) {
     } finally {
       setAddingTask(false);
     }
+  };
+
+  const openAddModal = () => {
+    setNewTask(emptyEntry());
+    setShowAddModal(true);
+  };
+
+  const closeAddModal = () => {
+    if (addingTask) return;
+    setShowAddModal(false);
+    setNewTask(emptyEntry());
   };
 
   const handleRemoveTask = async (index) => {
@@ -235,17 +257,14 @@ function EmployeeWorkLogContent({ employeeId }) {
       return;
     }
 
-    if (tasks.length === 0 && !isValidEntry(newTask)) {
-      alert('Add at least one task before saving.');
+    if (tasks.length === 0) {
+      alert('Use + Add Task Done to add at least one task before saving.');
       return;
     }
 
-    const nextTasks = isValidEntry(newTask) ? [...tasks, { ...newTask }] : tasks;
-
     try {
       setSaving(true);
-      await persistLog(nextTasks, notes, 'Draft');
-      setNewTask(emptyEntry());
+      await persistLog(tasks, notes, 'Draft');
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to save work log');
     } finally {
@@ -259,25 +278,14 @@ function EmployeeWorkLogContent({ employeeId }) {
       return;
     }
 
-    const pendingTask = isValidEntry(newTask);
-    const allTasks = pendingTask ? [...tasks, { ...newTask }] : tasks;
-
-    if (allTasks.length === 0) {
-      alert('Add at least one task before submitting for the day.');
+    if (tasks.length === 0) {
+      alert('Use + Add Task Done to add at least one task before submitting.');
       return;
-    }
-
-    if (pendingTask) {
-      const confirmed = window.confirm(
-        'You have an unsaved task in the form. It will be included when you submit.'
-      );
-      if (!confirmed) return;
     }
 
     try {
       setSaving(true);
-      await persistLog(allTasks, notes, 'Submitted');
-      setNewTask(emptyEntry());
+      await persistLog(tasks, notes, 'Submitted');
       alert('Daily work log submitted successfully.');
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to submit work log');
@@ -295,8 +303,16 @@ function EmployeeWorkLogContent({ employeeId }) {
       <header className="ed-section-header">
         <div>
           <h2>Daily Work Log</h2>
-          <p>Add multiple tasks for the same day. You can add more tasks even after submitting.</p>
+          <p>Log the work you completed today — add each task with details and time taken.</p>
         </div>
+        <button
+          type="button"
+          className="ed-btn ed-btn-primary"
+          disabled={loading}
+          onClick={openAddModal}
+        >
+          + Add Task Done
+        </button>
       </header>
 
       <div className="ed-worklog-toolbar">
@@ -326,7 +342,7 @@ function EmployeeWorkLogContent({ employeeId }) {
             <h2>{isToday ? "Today's tasks" : `Tasks for ${formatDate(selectedDate)}`}</h2>
             {isSubmitted && (
               <p className="ed-worklog-locked-note">
-                Submitted tasks are locked. Add more tasks below, then submit again when you are done for the day.
+                Submitted tasks are locked. Use <strong>Add Task Done</strong> to log more work, then submit again.
               </p>
             )}
           </div>
@@ -338,7 +354,11 @@ function EmployeeWorkLogContent({ employeeId }) {
             </div>
 
             {tasks.length === 0 ? (
-              <p className="ed-empty ed-worklog-no-tasks">No tasks added yet for this day.</p>
+              <div className="ed-worklog-empty-cta">
+                <p className="ed-empty ed-worklog-no-tasks">
+                  No tasks yet. Click <strong>+ Add Task Done</strong> above to log work.
+                </p>
+              </div>
             ) : (
               <ul className="ed-worklog-task-list">
                 {tasks.map((task, index) => (
@@ -346,6 +366,9 @@ function EmployeeWorkLogContent({ employeeId }) {
                     <span className="ed-worklog-task-number">#{index + 1}</span>
                     <div className="ed-worklog-task-content">
                       <strong>{task.description}</strong>
+                      {task.details ? (
+                        <small className="ed-worklog-task-details">{task.details}</small>
+                      ) : null}
                       <span>{formatDuration(minutesFromHoursAndMinutes(task.hours, task.minutes))}</span>
                     </div>
                     {!isSubmitted && (
@@ -363,65 +386,6 @@ function EmployeeWorkLogContent({ employeeId }) {
               </ul>
             )}
           </section>
-
-          <section className="ed-worklog-add-section">
-            <h3>{isSubmitted ? 'Add another task for this day' : 'Add another task'}</h3>
-            <div className="ed-worklog-entry-row ed-worklog-new-task-row">
-              <div className="ed-worklog-entry-main">
-                <label>
-                  <span>Task description</span>
-                  <input
-                    type="text"
-                    value={newTask.description}
-                    placeholder="What did you work on?"
-                    onChange={(e) => updateNewTask('description', e.target.value)}
-                  />
-                </label>
-              </div>
-              <div className="ed-worklog-entry-time">
-                <label>
-                  <span>Hours</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={newTask.hours}
-                    onChange={(e) => updateNewTask('hours', e.target.value)}
-                  />
-                </label>
-                <label>
-                  <span>Minutes</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    step="1"
-                    value={newTask.minutes}
-                    onChange={(e) => updateNewTask('minutes', e.target.value)}
-                  />
-                </label>
-              </div>
-              <button
-                type="button"
-                className="ed-btn ed-btn-primary ed-worklog-add-task-btn"
-                disabled={addingTask || saving}
-                onClick={handleAddTask}
-              >
-                {addingTask ? 'Adding…' : '+ Add Task'}
-              </button>
-            </div>
-          </section>
-
-          <label className="ed-worklog-notes">
-            <span>Additional notes (optional)</span>
-            <textarea
-              rows={3}
-              value={notes}
-              disabled={isSubmitted}
-              placeholder="Any extra context for HR"
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </label>
 
           {!isSubmitted && (
             <div className="ed-worklog-actions">
@@ -443,13 +407,110 @@ function EmployeeWorkLogContent({ employeeId }) {
               </button>
             </div>
           )}
+          {isSubmitted && (
+            <div className="ed-worklog-actions">
+              <button
+                type="button"
+                className="ed-btn ed-btn-primary"
+                disabled={saving || addingTask || tasks.length === 0}
+                onClick={handleSubmit}
+              >
+                {saving ? 'Submitting…' : 'Submit again'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showAddModal && (
+        <div className="hr-modal-overlay" onClick={closeAddModal}>
+          <div className="hr-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="hr-modal-header">
+              <h2>Add Task Done</h2>
+              <button type="button" className="hr-modal-close" onClick={closeAddModal}>×</button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleAddTask();
+              }}
+            >
+              <div className="hr-modal-body">
+                <p className="hr-page-subtitle" style={{ marginBottom: '0.85rem' }}>
+                  {isToday ? 'Logging work for today' : `Logging work for ${formatDate(selectedDate)}`}
+                </p>
+                <div className="hr-form-grid">
+                  <div className="hr-form-group hr-form-group-full">
+                    <label>Task <span className="required">*</span></label>
+                    <input
+                      type="text"
+                      value={newTask.description}
+                      onChange={(e) => updateNewTask('description', e.target.value)}
+                      placeholder="What did you complete?"
+                      autoFocus
+                      required
+                    />
+                  </div>
+                  <div className="hr-form-group hr-form-group-full">
+                    <label>Details (optional)</label>
+                    <textarea
+                      rows={3}
+                      value={newTask.details}
+                      onChange={(e) => updateNewTask('details', e.target.value)}
+                      placeholder="Add more context if needed"
+                    />
+                  </div>
+                  <div className="hr-form-group">
+                    <label>Hours</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={newTask.hours}
+                      onChange={(e) => updateNewTask('hours', e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="hr-form-group">
+                    <label>Minutes</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      step="1"
+                      value={newTask.minutes}
+                      onChange={(e) => updateNewTask('minutes', e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="hr-modal-footer">
+                <button
+                  type="button"
+                  className="hr-btn hr-btn-secondary"
+                  disabled={addingTask}
+                  onClick={closeAddModal}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="hr-btn hr-btn-primary"
+                  disabled={addingTask || saving}
+                >
+                  {addingTask ? 'Adding…' : 'Add Task'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
       <section className="ed-worklog-history">
-        <h2>Recent logs</h2>
+        <h2>This week&apos;s logs</h2>
         {recentLogs.length === 0 ? (
-          <p className="ed-empty">No work logs yet.</p>
+          <p className="ed-empty">No work logs for this week yet.</p>
         ) : (
           <div className="ed-worklog-history-list">
             {recentLogs.map((log) => (

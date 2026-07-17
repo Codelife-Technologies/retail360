@@ -58,9 +58,15 @@ async function getEmployeeDashboard(userId) {
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
 
+  // Keep overdue pending work in Backlog before loading today's list
+  await EmployeeTask.updateMany(
+    { employee: employeeId, status: 'Pending', dueDate: { $lt: todayStart } },
+    { $set: { status: 'Backlog' } }
+  );
+
   const [
     todayAttendance,
-    tasksToday,
+    tasksTodayRaw,
     recentLeaves,
     latestPayroll,
     leaveBalances,
@@ -76,13 +82,14 @@ async function getEmployeeDashboard(userId) {
     }).lean(),
     EmployeeTask.find({
       employee: employeeId,
-      status: { $ne: 'Completed' },
+      status: { $nin: ['Completed', 'Cancelled', 'On Hold'] },
       $or: [
+        { status: 'Backlog' },
         { dueDate: { $gte: todayStart, $lte: todayEnd } },
         { startDate: { $lte: todayEnd }, dueDate: { $gte: todayStart } },
       ],
     })
-      .sort({ priority: -1, createdAt: 1 })
+      .sort({ dueDate: 1, priority: -1, createdAt: 1 })
       .lean(),
     Leave.find({ employee: employeeId })
       .sort({ createdAt: -1 })
@@ -114,6 +121,14 @@ async function getEmployeeDashboard(userId) {
     }),
     countActiveHolidaysInRange(monthStart, monthEnd),
   ]);
+
+  const statusOrder = { Backlog: 0, Pending: 1, 'In Progress': 2 };
+  const tasksToday = [...tasksTodayRaw].sort((a, b) => {
+    const aRank = statusOrder[a.status] ?? 50;
+    const bRank = statusOrder[b.status] ?? 50;
+    if (aRank !== bRank) return aRank - bRank;
+    return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
+  });
 
   return {
     linked: true,

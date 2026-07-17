@@ -9,7 +9,7 @@ const employeeTaskSchema = new mongoose.Schema(
     dueDate: { type: Date, required: true },
     status: {
       type: String,
-      enum: ['Pending', 'In Progress', 'Completed'],
+      enum: ['Pending', 'In Progress', 'On Hold', 'Completed', 'Backlog', 'Cancelled'],
       default: 'Pending',
     },
     priority: {
@@ -24,6 +24,8 @@ const employeeTaskSchema = new mongoose.Schema(
     },
     assignedBy: { type: String, default: 'HR' },
     completedAt: { type: Date },
+    delayReason: { type: String, default: '', trim: true },
+    delayReasonUpdatedAt: { type: Date },
   },
   { timestamps: true }
 );
@@ -38,6 +40,18 @@ employeeTaskSchema.pre('save', function prepareDates(next) {
   if (this.startDate && this.dueDate && this.startDate > this.dueDate) {
     this.dueDate = this.startDate;
   }
+
+  // Overdue pending tasks become backlog
+  if (this.status === 'Pending' && this.dueDate) {
+    const due = new Date(this.dueDate);
+    due.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (due < today) {
+      this.status = 'Backlog';
+    }
+  }
+
   next();
 });
 

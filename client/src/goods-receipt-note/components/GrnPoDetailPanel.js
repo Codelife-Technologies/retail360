@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatINR, emptyDeliveryInfo } from '../types/grn.types';
+import { truncateProductName } from '../../utils/productDisplayUtils';
 
 export function buildDraftLinesFromPo(po) {
   if (!po?.items?.length) return [];
@@ -157,7 +158,9 @@ function GrnPoDetailPanel({
               {lineItems.map((line, idx) => (
                 <tr key={line.product || idx}>
                   <td className="mono">{line.sku}</td>
-                  <td>{line.productName}</td>
+                  <td className="grn-product-name" title={line.productName || undefined}>
+                    {truncateProductName(line.productName)}
+                  </td>
                   <td>{line.hsnCode || '—'}</td>
                   <td>{line.poLineQty ?? line.orderedQty}</td>
                   <td>{line.poReceivedQty ?? 0}</td>

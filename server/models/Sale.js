@@ -108,16 +108,34 @@ const saleSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  currency: {
-    type: String,
-    trim: true,
-    uppercase: true,
-    default: 'AED',
-  },
-  amazonOrderId: {
-    type: String,
-    trim: true,
-  },
+    currency: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: 'INR',
+    },
+    /** Snapshot of total in the order currency (same as total; preserved for FX reporting). */
+    originalAmount: {
+      type: Number,
+      min: 0,
+    },
+    /** INR per 1 unit of currency at posting / last FX stamp. */
+    exchangeRateToInr: {
+      type: Number,
+      min: 0,
+    },
+    exchangeRateSource: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    exchangeRateAt: {
+      type: Date,
+    },
+    amazonOrderId: {
+      type: String,
+      trim: true,
+    },
 }, {
   timestamps: true
 });
@@ -127,6 +145,10 @@ saleSchema.pre('save', function(next) {
   if (this.items && this.items.length > 0) {
     this.subtotal = this.items.reduce((sum, item) => sum + item.total, 0);
     this.total = this.subtotal - (this.discount || 0) + (this.tax || 0);
+  }
+  // Preserve original currency amount without altering calculated totals.
+  if (this.originalAmount == null && this.total != null) {
+    this.originalAmount = this.total;
   }
   next();
 });

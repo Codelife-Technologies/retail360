@@ -4,7 +4,7 @@ import DetailModal from './DetailModal';
 import ExcelUpload from './ExcelUpload';
 import './SalesChannels.css';
 
-const MARKETPLACE_PRESETS = [
+const COUNTRY_PRESETS = [
   { country: 'IN', defaultCurrency: 'INR', label: 'India (IN / INR)' },
   { country: 'US', defaultCurrency: 'USD', label: 'United States (US / USD)' },
   { country: 'GB', defaultCurrency: 'GBP', label: 'United Kingdom (GB / GBP)' },
@@ -14,6 +14,8 @@ const MARKETPLACE_PRESETS = [
   { country: 'CA', defaultCurrency: 'CAD', label: 'Canada (CA / CAD)' },
   { country: 'AU', defaultCurrency: 'AUD', label: 'Australia (AU / AUD)' },
   { country: 'JP', defaultCurrency: 'JPY', label: 'Japan (JP / JPY)' },
+  { country: 'SA', defaultCurrency: 'SAR', label: 'Saudi Arabia (SA / SAR)' },
+  { country: 'SG', defaultCurrency: 'SGD', label: 'Singapore (SG / SGD)' },
 ];
 
 function SalesChannels() {
@@ -43,8 +45,10 @@ function SalesChannels() {
   const fetchSalesChannels = async () => {
     try {
       setLoading(true);
-      const response = await salesChannelsAPI.getAll({ search: searchTerm, isActive: 'true' });
-      setSalesChannels(response.data);
+      const params = {};
+      if (searchTerm) params.search = searchTerm;
+      const response = await salesChannelsAPI.getAll(params);
+      setSalesChannels(Array.isArray(response.data) ? response.data : response.data?.data || []);
     } catch (error) {
       console.error('Error fetching sales channels:', error);
       console.error('Error details:', {
@@ -74,6 +78,13 @@ function SalesChannels() {
       nextValue = parseFloat(value) || 0;
     } else if (name === 'country') {
       nextValue = value.toUpperCase().slice(0, 2);
+      const preset = COUNTRY_PRESETS.find((item) => item.country === nextValue);
+      setFormData((prev) => ({
+        ...prev,
+        country: nextValue,
+        defaultCurrency: preset ? preset.defaultCurrency : prev.defaultCurrency,
+      }));
+      return;
     } else if (name === 'defaultCurrency') {
       nextValue = value.toUpperCase().slice(0, 3);
     }
@@ -84,8 +95,8 @@ function SalesChannels() {
     }));
   };
 
-  const handleMarketplacePresetChange = (e) => {
-    const preset = MARKETPLACE_PRESETS.find((item) => item.country === e.target.value);
+  const handleCountryPresetChange = (e) => {
+    const preset = COUNTRY_PRESETS.find((item) => item.country === e.target.value);
     if (!preset) return;
     setFormData((prev) => ({
       ...prev,
@@ -96,10 +107,9 @@ function SalesChannels() {
 
   const buildPayload = () => {
     const payload = { ...formData };
-    if (payload.type === 'marketplace') {
-      payload.country = String(payload.country || '').trim().toUpperCase();
-      payload.defaultCurrency = String(payload.defaultCurrency || '').trim().toUpperCase();
-    } else {
+    payload.country = String(payload.country || '').trim().toUpperCase();
+    payload.defaultCurrency = String(payload.defaultCurrency || '').trim().toUpperCase();
+    if (!payload.country) {
       delete payload.country;
       delete payload.defaultCurrency;
     }
@@ -109,17 +119,15 @@ function SalesChannels() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (formData.type === 'marketplace') {
-      const country = String(formData.country || '').trim().toUpperCase();
-      const defaultCurrency = String(formData.defaultCurrency || '').trim().toUpperCase();
-      if (country.length !== 2) {
-        alert('Country is required for marketplace channels (2-letter code, e.g. IN, US, AE).');
-        return;
-      }
-      if (defaultCurrency.length !== 3) {
-        alert('Default currency is required for marketplace channels (3-letter code, e.g. INR, USD, AED).');
-        return;
-      }
+    const country = String(formData.country || '').trim().toUpperCase();
+    const defaultCurrency = String(formData.defaultCurrency || '').trim().toUpperCase();
+    if (!country || country.length !== 2) {
+      alert('Country is required (2-letter code, e.g. IN, US, AE).');
+      return;
+    }
+    if (!defaultCurrency || defaultCurrency.length !== 3) {
+      alert('Currency is required (3-letter code, e.g. INR, USD, AED). It is set automatically from country.');
+      return;
     }
 
     const payload = buildPayload();
@@ -236,8 +244,9 @@ function SalesChannels() {
                 <th>Code</th>
                 <th>Name</th>
                 <th>Type</th>
+                <th>Country</th>
+                <th>Currency</th>
                 <th>Commission Rate</th>
-                <th>Payment Terms</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -245,7 +254,7 @@ function SalesChannels() {
             <tbody>
               {salesChannels.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="no-data">
+                  <td colSpan="8" className="no-data">
                     No sales channels found
                   </td>
                 </tr>
@@ -263,8 +272,9 @@ function SalesChannels() {
                         {channel.type}
                       </span>
                     </td>
+                    <td>{channel.country || '—'}</td>
+                    <td>{channel.defaultCurrency || '—'}</td>
                     <td>{channel.commissionRate}%</td>
-                    <td>{channel.paymentTerms || '-'}</td>
                     <td>
                       <span className={`status-badge ${channel.isActive ? 'active' : 'inactive'}`}>
                         {channel.isActive ? 'Active' : 'Inactive'}
@@ -310,14 +320,10 @@ function SalesChannels() {
             { label: 'Code', value: viewingChannel.code },
             { label: 'Name', value: viewingChannel.name },
             { label: 'Type', value: viewingChannel.type },
+            { label: 'Country', value: viewingChannel.country || '—' },
+            { label: 'Currency', value: viewingChannel.defaultCurrency || '—' },
             { label: 'Commission Rate', value: `${viewingChannel.commissionRate || 0}%` },
             { label: 'Payment Terms', value: viewingChannel.paymentTerms },
-            ...(viewingChannel.type === 'marketplace'
-              ? [
-                  { label: 'Country', value: viewingChannel.country },
-                  { label: 'Default Currency', value: viewingChannel.defaultCurrency },
-                ]
-              : []),
             { label: 'Status', value: viewingChannel.isActive ? 'Active' : 'Inactive' },
             { label: 'Description', value: viewingChannel.description, full: true },
           ]}
@@ -406,52 +412,49 @@ function SalesChannels() {
                   />
                 </div>
               </div>
-              {formData.type === 'marketplace' && (
-                <>
-                  <div className="form-group">
-                    <label>Marketplace preset</label>
-                    <select
-                      value={formData.country || ''}
-                      onChange={handleMarketplacePresetChange}
-                    >
-                      <option value="">Select a common marketplace</option>
-                      {MARKETPLACE_PRESETS.map((preset) => (
-                        <option key={preset.country} value={preset.country}>
-                          {preset.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Country code *</label>
-                      <input
-                        type="text"
-                        name="country"
-                        value={formData.country}
-                        onChange={handleInputChange}
-                        required
-                        maxLength={2}
-                        placeholder="IN, US, AE"
-                        style={{ textTransform: 'uppercase' }}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Default currency *</label>
-                      <input
-                        type="text"
-                        name="defaultCurrency"
-                        value={formData.defaultCurrency}
-                        onChange={handleInputChange}
-                        required
-                        maxLength={3}
-                        placeholder="INR, USD, AED"
-                        style={{ textTransform: 'uppercase' }}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
+              <div className="form-group">
+                <label>Country *</label>
+                <select
+                  value={formData.country || ''}
+                  onChange={handleCountryPresetChange}
+                  required
+                >
+                  <option value="">Select country</option>
+                  {COUNTRY_PRESETS.map((preset) => (
+                    <option key={preset.country} value={preset.country}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Country code *</label>
+                  <input
+                    type="text"
+                    name="country"
+                    value={formData.country}
+                    onChange={handleInputChange}
+                    required
+                    maxLength={2}
+                    placeholder="IN, US, AE"
+                    style={{ textTransform: 'uppercase' }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Currency *</label>
+                  <input
+                    type="text"
+                    name="defaultCurrency"
+                    value={formData.defaultCurrency}
+                    onChange={handleInputChange}
+                    required
+                    maxLength={3}
+                    placeholder="Auto from country"
+                    style={{ textTransform: 'uppercase' }}
+                  />
+                </div>
+              </div>
               <div className="form-group">
                 <label>Payment Terms</label>
                 <input

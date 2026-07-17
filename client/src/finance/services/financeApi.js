@@ -19,8 +19,22 @@ export const financeAPI = {
   getMeta: () => api.get('/finance/meta'),
   getDashboard: (params) => api.get('/finance/dashboard', { params }),
   getIncome: (params) => api.get('/finance/income', { params }),
-  createOtherIncome: (data) => api.post('/finance/other-income', data),
-  updateOtherIncome: (id, data) => api.put(`/finance/other-income/${id}`, data),
+  createOtherIncome: (data) => {
+    if (data instanceof FormData) {
+      return api.post('/finance/other-income', data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return api.post('/finance/other-income', data);
+  },
+  updateOtherIncome: (id, data) => {
+    if (data instanceof FormData) {
+      return api.put(`/finance/other-income/${id}`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return api.put(`/finance/other-income/${id}`, data);
+  },
   deleteOtherIncome: (id) => api.delete(`/finance/other-income/${id}`),
   exportIncome: async (params) => {
     const response = await api.get('/finance/income', {
@@ -31,8 +45,22 @@ export const financeAPI = {
     return response;
   },
   getExpenses: (params) => api.get('/finance/expenses', { params }),
-  createExpense: (data) => api.post('/finance/expenses', data),
-  updateExpense: (id, data) => api.put(`/finance/expenses/${id}`, data),
+  createExpense: (data) => {
+    if (data instanceof FormData) {
+      return api.post('/finance/expenses', data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return api.post('/finance/expenses', data);
+  },
+  updateExpense: (id, data) => {
+    if (data instanceof FormData) {
+      return api.put(`/finance/expenses/${id}`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return api.put(`/finance/expenses/${id}`, data);
+  },
   deleteExpense: (id) => api.delete(`/finance/expenses/${id}`),
   downloadExpenseTemplate: async () => {
     const response = await api.get('/finance/expenses/template', { responseType: 'blob' });

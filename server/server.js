@@ -69,6 +69,11 @@ mongoose.connect(MONGODB_URI, {
     if (mpResult.created > 0) {
       console.log(`Seed: ${mpResult.created} Amazon marketplace channels created`);
     }
+    const { migrateSalesLocationChannels } = require('./scripts/migrate-sales-location-channels');
+    const locChannelResult = await migrateSalesLocationChannels(mongoose.connection);
+    console.log(
+      `Migrate: sales location channels (${locChannelResult.migrated} migrated, ${locChannelResult.unset} cleaned)`
+    );
   } catch (seedError) {
     logger.backend.warn('Startup seed skipped or failed', { error: seedError.message });
     console.warn('Startup seed skipped or failed:', seedError.message);
@@ -179,6 +184,7 @@ try {
   app.use('/api/hr', hrRoutes);
   app.use('/api/compliance', complianceRoutes);
   app.use('/api/finance', financeRoutes);
+  app.use('/api/currency', require('./currency/routes'));
   app.use('/api/gemini', geminiRoutes);
   app.use('/api/units', unitsRoutes);
   app.use('/api/permissions', permissionsRoutes);
@@ -236,6 +242,13 @@ app.listen(PORT, () => {
     console.log('Attendance: auto-absent scheduler started (cutoff 12:30)');
   } catch (schedulerError) {
     console.warn('Attendance auto-absent scheduler failed to start:', schedulerError.message);
+  }
+  try {
+    const { startRateRefreshScheduler } = require('./currency/services/exchangeRateService');
+    startRateRefreshScheduler();
+    console.log('Currency: exchange-rate refresh scheduler started');
+  } catch (fxError) {
+    console.warn('Exchange-rate scheduler failed to start:', fxError.message);
   }
 });
 

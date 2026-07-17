@@ -199,13 +199,11 @@ function FinanceRecords() {
                 <tr>
                   <th>Type</th>
                   <th>Reference</th>
-                  <th>Party</th>
                   <th>Category</th>
                   <th>Date</th>
                   <th>Amount</th>
                   <th>Tax</th>
                   <th>Status</th>
-                  <th>Description</th>
                 </tr>
               </thead>
               <tbody>
@@ -215,13 +213,11 @@ function FinanceRecords() {
                       <span className={`fin-type-badge ${TYPE_CLASS[r.type] || ''}`}>{r.type}</span>
                     </td>
                     <td data-label="Reference">{r.ref}</td>
-                    <td data-label="Party">{r.party}</td>
                     <td data-label="Category">{r.category}</td>
                     <td data-label="Date">{formatDate(r.date)}</td>
                     <td data-label="Amount">{formatCurrency(r.amount)}</td>
                     <td data-label="Tax">{formatCurrency(r.tax)}</td>
                     <td data-label="Status">{r.status}</td>
-                    <td data-label="Description">{r.description || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -270,27 +266,36 @@ function FinanceRecords() {
                 onChange={setDraftFilters}
                 extra={(
                   <>
-                    <select
-                      className="fin-input"
-                      value={draftFilters.type || ''}
-                      onChange={(e) => setDraftFilters({ ...draftFilters, type: e.target.value })}
-                    >
-                      {RECORD_TYPES.map((opt) => (
-                        <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                    <input
-                      className="fin-input"
-                      placeholder="Status"
-                      value={draftFilters.status || ''}
-                      onChange={(e) => setDraftFilters({ ...draftFilters, status: e.target.value })}
-                    />
-                    <input
-                      className="fin-input"
-                      placeholder="Search ref, party, category…"
-                      value={draftFilters.search || ''}
-                      onChange={(e) => setDraftFilters({ ...draftFilters, search: e.target.value })}
-                    />
+                    <label className="fin-field">
+                      <span>Type</span>
+                      <select
+                        className="fin-input"
+                        value={draftFilters.type || ''}
+                        onChange={(e) => setDraftFilters({ ...draftFilters, type: e.target.value })}
+                      >
+                        {RECORD_TYPES.map((opt) => (
+                          <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="fin-field">
+                      <span>Status</span>
+                      <input
+                        className="fin-input"
+                        placeholder="Status"
+                        value={draftFilters.status || ''}
+                        onChange={(e) => setDraftFilters({ ...draftFilters, status: e.target.value })}
+                      />
+                    </label>
+                    <label className="fin-field">
+                      <span>Search</span>
+                      <input
+                        className="fin-input"
+                        placeholder="Search ref, category…"
+                        value={draftFilters.search || ''}
+                        onChange={(e) => setDraftFilters({ ...draftFilters, search: e.target.value })}
+                      />
+                    </label>
                   </>
                 )}
               />

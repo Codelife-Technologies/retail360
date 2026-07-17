@@ -35,6 +35,7 @@ import { isPoEligibleForGrn } from '../goods-receipt-note/types/grn.types';
 import PoProductVendorAssign from './PoProductVendorAssign';
 import PoShareActions from './PoShareActions';
 import ProductSearchPicker from './ProductSearchPicker';
+import { truncateProductName } from '../utils/productDisplayUtils';
 import './PurchaseOrders.css';
 import './PoShareActions.css';
 
@@ -728,9 +729,12 @@ function PurchaseOrders({ onNavigate }) {
     const product = products.find((p) => p._id === productId);
     const enriched = enrichLineItem(item, product, formData.defaultTaxRate);
     const vendorOptions = getVendorOptionsForProduct(product, suppliers);
+    const productName = product?.title || product?.name || 'Unknown';
     return (
       <div key={`${productId}-${index}`} className="item-row po-item-row-extended">
-        <span>{product?.title || product?.name || 'Unknown'}</span>
+        <span className="po-product-name" title={productName}>
+          {truncateProductName(productName)}
+        </span>
         <span>{enriched.sku || '-'}</span>
         {autoVendorSplit && (
           <span className="po-item-vendor-cell">
@@ -958,7 +962,23 @@ function PurchaseOrders({ onNavigate }) {
           {viewingPO.items?.length > 0 && (
             <div className="detail-view-section">
               <h3>Items</h3>
+              <div className="po-detail-items-wrap">
               <table className="detail-view-items-table po-detail-items-table">
+                <colgroup>
+                  <col className="po-col-image" />
+                  <col className="po-col-sku" />
+                  <col className="po-col-product" />
+                  <col className="po-col-hsn" />
+                  <col className="po-col-qty" />
+                  <col className="po-col-uom" />
+                  <col className="po-col-price" />
+                  <col className="po-col-disc" />
+                  <col className="po-col-tax" />
+                  <col className="po-col-tax-amt" />
+                  <col className="po-col-line" />
+                  <col className="po-col-rcvd" />
+                  <col className="po-col-pending" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>Image</th>
@@ -998,11 +1018,13 @@ function PurchaseOrders({ onNavigate }) {
                           />
                         </td>
                         <td>{enriched.sku || '-'}</td>
-                        <td>
+                        <td className="po-product-name" title={productName}>
                           {productUrl ? (
-                            <a href={productUrl} target="_blank" rel="noopener noreferrer">{productName}</a>
+                            <a href={productUrl} target="_blank" rel="noopener noreferrer">
+                              {truncateProductName(productName)}
+                            </a>
                           ) : (
-                            productName
+                            truncateProductName(productName)
                           )}
                         </td>
                         <td>{enriched.hsnCode || '-'}</td>
@@ -1020,6 +1042,7 @@ function PurchaseOrders({ onNavigate }) {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </DetailModal>

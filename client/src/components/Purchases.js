@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { purchasesAPI, suppliersAPI, productsAPI, purchaseOrdersAPI, locationsAPI, pricesAPI } from '../services/api';
 import DetailModal from './DetailModal';
+import PurchaseFormModal from './PurchaseFormModal';
 import { computeCategoryTax, getCategoryName, getTaxRateForCategory } from '../utils/taxRates';
 import './Purchases.css';
 
@@ -13,6 +14,7 @@ function Purchases() {
   const [productPrices, setProductPrices] = useState({}); // Map of productId -> price
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState(null);
   const [viewingPurchase, setViewingPurchase] = useState(null);
   const [formData, setFormData] = useState({
@@ -51,7 +53,7 @@ function Purchases() {
         message: error.message,
         response: error.response?.data,
         status: error.response?.status,
-        stack: error.stack
+        stack: error.stack  
       });
       alert('Failed to fetch purchases');
     } finally {
@@ -307,7 +309,7 @@ function Purchases() {
   const openAddModal = () => {
     setEditingPurchase(null);
     resetForm();
-    setShowModal(true);
+    setShowAddModal(true);
   };
 
   return (
@@ -448,10 +450,20 @@ function Purchases() {
         </DetailModal>
       )}
 
-      {showModal && (
+      {showAddModal ? (
+        <PurchaseFormModal
+          onClose={() => setShowAddModal(false)}
+          onSaved={() => {
+            setShowAddModal(false);
+            fetchPurchases();
+          }}
+        />
+      ) : null}
+
+      {showModal && editingPurchase && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
-            <h2>{editingPurchase ? 'Edit Purchase' : 'Create Purchase'}</h2>
+            <h2>Edit Purchase</h2>
             <form onSubmit={handleSubmit}>
               <div className="form-row">
                 <div className="form-group">

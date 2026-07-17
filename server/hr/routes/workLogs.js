@@ -88,6 +88,7 @@ function normalizeEntries(entries) {
       }
       return {
         description: String(entry.description || '').trim(),
+        details: String(entry.details || '').trim(),
         timeSpentMinutes: Math.max(0, Math.round(minutes)),
       };
     })

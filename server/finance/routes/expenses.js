@@ -18,6 +18,13 @@ const {
 } = require('../utils/constants');
 const { getFinanceSnapshot } = require('../services/financeAnalytics');
 const { sendWorkbook } = require('../utils/export');
+const {
+  billUpload,
+  removeBillFile,
+  applyBillToBody,
+  coerceFinanceNumbers,
+} = require('../utils/billUpload');
+const { stampFxFields } = require('../../currency/utils/fxFields');
 
 const router = express.Router();
 
@@ -255,7 +262,7 @@ router.get('/template', requireFinance('finance.expense.view'), (req, res) => {
       instructions: [
         'Mandatory columns: Date, Category, Amount.',
         'Voucher No is optional — a unique number is generated automatically when blank.',
-        `Category must be one of: ${CATEGORY_LIST.join(', ')}.`,
+        `Suggested categories: ${CATEGORY_LIST.join(', ')}. Custom categories are also allowed.`,
         `Payment Mode: ${PAYMENT_MODES.join(', ')}.`,
         `Status: ${EXPENSE_STATUSES.join(', ')}.`,
         'Duplicate voucher numbers update the existing record when using Create & Update mode.',
@@ -305,11 +312,11 @@ router.post('/import', requireFinance('finance.expense.create'), upload.single('
           failed++;
           continue;
         }
-        if (!expenseData.category || !CATEGORY_LIST.includes(expenseData.category)) {
+        if (!expenseData.category?.trim()) {
           errors.push({
             row: rowNum,
             field: 'Category',
-            message: `Category must be one of: ${CATEGORY_LIST.join(', ')}`,
+            message: 'Category is required (preset or custom)',
           });
           failed++;
           continue;
@@ -388,36 +395,62 @@ router.get('/:id', requireFinance('finance.expense.view'), async (req, res) => {
   }
 });
 
-router.post('/', requireFinance('finance.expense.create'), async (req, res) => {
-  try {
-    const body = { ...req.body };
-    if (!body.voucherNo?.trim()) {
-      body.voucherNo = await generateNextVoucherNo(body.date || new Date());
+router.post(
+  '/',
+  requireFinance('finance.expense.create'),
+  billUpload.single('bill'),
+  async (req, res) => {
+    try {
+      let body = coerceFinanceNumbers({ ...req.body });
+      body = applyBillToBody(body, req.file, null);
+      if (!body.voucherNo?.trim()) {
+        body.voucherNo = await generateNextVoucherNo(body.date || new Date());
+      }
+      const original =
+        (Number(body.amount) || 0) + (Number(body.gst) || 0);
+      body = await stampFxFields(body, {
+        currency: body.currency || 'INR',
+        originalAmount: body.originalAmount != null ? body.originalAmount : original,
+        amountField: 'amount',
+      });
+      const item = await FinanceExpense.create(body);
+      res.status(201).json(item);
+    } catch (error) {
+      if (req.file) removeBillFile({ fileName: req.file.filename });
+      res.status(400).json({ error: error.message });
     }
-    const item = await FinanceExpense.create(body);
-    res.status(201).json(item);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
   }
-});
+);
 
-router.put('/:id', requireFinance('finance.expense.update'), async (req, res) => {
-  try {
-    const item = await FinanceExpense.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
-    if (!item) return res.status(404).json({ error: 'Expense not found' });
-    res.json(item);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+router.put(
+  '/:id',
+  requireFinance('finance.expense.update'),
+  billUpload.single('bill'),
+  async (req, res) => {
+    try {
+      const existing = await FinanceExpense.findById(req.params.id);
+      if (!existing) return res.status(404).json({ error: 'Expense not found' });
+
+      let body = coerceFinanceNumbers({ ...req.body });
+      body = applyBillToBody(body, req.file, existing.bill);
+
+      const item = await FinanceExpense.findByIdAndUpdate(req.params.id, body, {
+        new: true,
+        runValidators: true,
+      });
+      res.json(item);
+    } catch (error) {
+      if (req.file) removeBillFile({ fileName: req.file.filename });
+      res.status(400).json({ error: error.message });
+    }
   }
-});
+);
 
 router.delete('/:id', requireFinance('finance.expense.delete'), async (req, res) => {
   try {
     const item = await FinanceExpense.findByIdAndDelete(req.params.id);
     if (!item) return res.status(404).json({ error: 'Expense not found' });
+    if (item.bill) removeBillFile(item.bill);
     res.json({ message: 'Expense deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });

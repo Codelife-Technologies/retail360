@@ -1,9 +1,7 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { reportsAPI, salesChannelsAPI } from '../services/api';
-import { formatMoney } from '../utils/locationCurrency';
+import { formatMoney, getCurrencyForSalesChannelId } from '../utils/locationCurrency';
 import './SalesBusinessReport.css';
-
-const formatAed = (amount) => formatMoney(amount, 'AED');
 
 const GROUP_BY_OPTIONS = [
   { id: 'day', label: 'By Day' },
@@ -84,9 +82,9 @@ function formatDisplayDate(isoDate) {
   return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 }
 
-function formatCellValue(value, type) {
+function formatCellValue(value, type, currency = 'INR') {
   if (value == null || value === '') return '—';
-  if (type === 'currency') return formatAed(value);
+  if (type === 'currency') return formatMoney(value, currency);
   if (type === 'percent') return `${Number(value).toFixed(2)}%`;
   if (type === 'number') return Number(value).toLocaleString();
   return value;
@@ -147,6 +145,11 @@ const SalesBusinessReport = forwardRef(function SalesBusinessReport({ onViewSkuP
       setChannels(res.data || []);
     }).catch(() => setChannels([]));
   }, []);
+
+  const reportCurrency = useMemo(
+    () => getCurrencyForSalesChannelId(appliedFilters.salesChannel, channels),
+    [appliedFilters.salesChannel, channels]
+  );
 
   const loadReport = useCallback(async () => {
     if (!appliedFilters.customStart || !appliedFilters.customEnd) return;
@@ -404,7 +407,7 @@ const SalesBusinessReport = forwardRef(function SalesBusinessReport({ onViewSkuP
                           col.type === 'currency' || col.type === 'number' || col.type === 'percent' ? 'num' : '',
                         ].filter(Boolean).join(' ')}
                       >
-                        {formatCellValue(row[col.key], col.type)}
+                        {formatCellValue(row[col.key], col.type, reportCurrency)}
                       </td>
                     ))}
                   </tr>

@@ -1,7 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import { reportsAPI, salesAPI, salesChannelsAPI, productsAPI, pricesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { formatMoney } from '../utils/locationCurrency';
+import {
+  formatMoney,
+  formatSaleMoney,
+  getCurrencyForSalesChannelId,
+} from '../utils/locationCurrency';
 import { getCatalogSku, getProductDisplayName, getProductThumbnail, PRODUCT_IMAGE_PLACEHOLDER } from '../utils/productDisplayUtils';
 import SalesMonthlyTrendCharts from './SalesMonthlyTrendCharts';
 import SaleDetailsModal from './SaleDetailsModal';
@@ -10,8 +14,6 @@ import ExcelUpload from './ExcelUpload';
 import './SalesSkuReport.css';
 
 const SalesBusinessReport = lazy(() => import('./SalesBusinessReport'));
-
-const formatAed = (amount) => formatMoney(amount, 'AED');
 
 const defaultFilters = () => ({
   startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0],
@@ -141,8 +143,9 @@ function ProductSkuSummary({ product, compact = false, onClick, maxNameWords }) 
   );
 }
 
-function ProductExtremeCarousel({ label, products, variant, onOpenProduct }) {
+function ProductExtremeCarousel({ label, products, variant, onOpenProduct, formatCurrency }) {
   const [index, setIndex] = useState(0);
+  const money = formatCurrency || ((amount) => formatMoney(amount, 'INR'));
 
   useEffect(() => {
     setIndex(0);
@@ -207,7 +210,7 @@ function ProductExtremeCarousel({ label, products, variant, onOpenProduct }) {
         >
           <ProductSkuSummary product={product} compact />
           <span className="product-extreme-stats">
-            {product.totalQuantity} units · {formatAed(product.totalRevenue)}
+            {product.totalQuantity} units · {money(product.totalRevenue)}
           </span>
         </div>
 
@@ -270,6 +273,15 @@ function SalesSkuReport({ onClose }) {
   const sortOptions = isSkuView ? SKU_SORT_OPTIONS : ORDER_SORT_OPTIONS;
   const activeFilterCount = countActiveAppliedFilters(appliedFilters);
   const appliedDateRange = resolveDateRange(appliedFilters.startDate, appliedFilters.endDate);
+
+  const reportCurrency = useMemo(
+    () => getCurrencyForSalesChannelId(appliedFilters.salesChannel, salesChannels),
+    [appliedFilters.salesChannel, salesChannels]
+  );
+  const formatReportMoney = useCallback(
+    (amount) => formatMoney(amount, reportCurrency),
+    [reportCurrency]
+  );
 
   useEffect(() => {
     salesChannelsAPI.getAll({ isActive: 'true' }).then((res) => {
@@ -642,14 +654,23 @@ function SalesSkuReport({ onClose }) {
             <h3 className="sales-detail-heading">Sales Detail</h3>
             <div className="sales-sku-table-wrap">
             <table className="sales-sku-table sales-detail-table">
+              <colgroup>
+                <col className="sales-by-sale-col-sku" />
+                <col className="sales-by-sale-col-order" />
+                <col className="sales-by-sale-col-date" />
+                <col className="sales-by-sale-col-channel" />
+                <col className="sales-by-sale-col-num" />
+                <col className="sales-by-sale-col-num" />
+                <col className="sales-by-sale-col-money" />
+              </colgroup>
               <thead>
                 <tr>
                   <th className="sales-by-sale-col-sku">Product SKU</th>
                   <th className="sales-by-sale-col-order">Amazon Order ID</th>
                   <th className="sales-by-sale-col-date">Sale Date</th>
                   <th className="sales-by-sale-col-channel">Channel</th>
-                  <th className="sales-by-sale-col-num">Line Items</th>
-                  <th className="sales-by-sale-col-num">Qty Ordered</th>
+                  <th className="sales-by-sale-col-num">Items</th>
+                  <th className="sales-by-sale-col-num">Qty</th>
                   <th className="sales-by-sale-col-money">Subtotal</th>
                 </tr>
               </thead>
@@ -671,7 +692,9 @@ function SalesSkuReport({ onClose }) {
                       <td className="sales-by-sale-col-channel">{sale.salesChannel?.name || '—'}</td>
                       <td className="num sales-by-sale-col-num">{itemCount}</td>
                       <td className="num sales-by-sale-col-num">{qtyOrdered}</td>
-                      <td className="num sales-by-sale-col-money">{formatAed(sale.subtotal)}</td>
+                      <td className="num sales-by-sale-col-money">
+                        {formatSaleMoney(sale, sale.subtotal, reportCurrency)}
+                      </td>
                     </tr>
                   );
                 })}
@@ -688,7 +711,7 @@ function SalesSkuReport({ onClose }) {
     <div className="sales-sku-report">
       <div className="sales-sku-report-header">
         <div>
-          <h2>Sales Report</h2>
+          <h2>Sales</h2>
           <p className="sales-sku-report-subtitle">
             {isBusinessView
               ? 'Ordered product sales by day, week, or month'
@@ -904,32 +927,6 @@ function SalesSkuReport({ onClose }) {
       )}
 
       <div className="sales-report-overview sales-report-aligned">
-        {summary && (
-          <div className="sales-sku-summary">
-            <div className="summary-card">
-              <span>SKUs Sold</span>
-              <strong>{summary.totalSkus ?? summary.totalSales ?? 0}</strong>
-            </div>
-            <div className="summary-card">
-              <span>Total Qty Sold</span>
-              <strong>{summary.totalQuantitySold}</strong>
-            </div>
-            <div className="summary-card">
-              <span>Total Revenue</span>
-              <strong>{formatAed(summary.totalRevenue)}</strong>
-              {summary.lineItemRevenue != null && summary.lineItemRevenue !== summary.totalRevenue && (
-                <span className="summary-card-note">
-                  Line items: {formatAed(summary.lineItemRevenue)}
-                </span>
-              )}
-            </div>
-            <div className="summary-card">
-              <span>Orders</span>
-              <strong>{summary.totalOrders}</strong>
-            </div>
-          </div>
-        )}
-
         {summary && (summary.topSellingProducts?.length > 0 || summary.leastSellingProducts?.length > 0) && (
           <div className="sales-product-extremes">
             <ProductExtremeCarousel
@@ -937,17 +934,19 @@ function SalesSkuReport({ onClose }) {
               products={summary.topSellingProducts}
               variant="top"
               onOpenProduct={handleOpenProductDetail}
+              formatCurrency={formatReportMoney}
             />
             <ProductExtremeCarousel
               label="Least Selling Product"
               products={summary.leastSellingProducts}
               variant="least"
               onOpenProduct={handleOpenProductDetail}
+              formatCurrency={formatReportMoney}
             />
           </div>
         )}
 
-        <SalesMonthlyTrendCharts groupedData={monthlyTrend} formatCurrency={formatAed} />
+        <SalesMonthlyTrendCharts groupedData={monthlyTrend} formatCurrency={formatReportMoney} />
       </div>
 
       {isSkuView && loading ? (
@@ -957,23 +956,33 @@ function SalesSkuReport({ onClose }) {
           <div className="sales-report-aligned sales-report-detail-block">
             <h3 className="sales-detail-heading">By SKU</h3>
             <div className="sales-sku-table-wrap">
-              <table className="sales-sku-table">
+              <table className="sales-sku-table sales-by-sku-table">
+                <colgroup>
+                  <col className="sku-col-product" />
+                  <col className="sku-col-category" />
+                  <col className="sku-col-subcategory" />
+                  <col className="sku-col-hsn" />
+                  <col className="sku-col-qty" />
+                  <col className="sku-col-price" />
+                  <col className="sku-col-revenue" />
+                  <col className="sku-col-orders" />
+                </colgroup>
                 <thead>
                   <tr>
-                    <th>Product</th>
-                    <th>Category</th>
-                    <th>Sub Category</th>
-                    <th>HSN</th>
-                    <th>Qty Sold</th>
-                    <th>Avg Price</th>
-                    <th>Line Revenue</th>
-                    <th>Orders</th>
+                    <th className="sku-col-product">Product</th>
+                    <th className="sku-col-category">Category</th>
+                    <th className="sku-col-subcategory">Sub Category</th>
+                    <th className="sku-col-hsn">HSN</th>
+                    <th className="sku-col-qty num">Qty Sold</th>
+                    <th className="sku-col-price num">Avg Price</th>
+                    <th className="sku-col-revenue num">Line Revenue</th>
+                    <th className="sku-col-orders num">Orders</th>
                   </tr>
                 </thead>
                 <tbody>
                   {skuRows.map((row) => (
                     <tr key={row.productId || row.sku}>
-                      <td className="product-sku-summary-cell">
+                      <td className="product-sku-summary-cell sku-col-product">
                         <ProductSkuSummary
                           product={row}
                           compact
@@ -981,13 +990,13 @@ function SalesSkuReport({ onClose }) {
                           onClick={handleOpenProductDetail}
                         />
                       </td>
-                      <td>{row.category}</td>
-                      <td>{row.subCategory}</td>
-                      <td>{row.hsnCode}</td>
-                      <td className="num">{row.totalQuantity}</td>
-                      <td className="num">{formatAed(row.averageUnitPrice)}</td>
-                      <td className="num">{formatAed(row.totalRevenue)}</td>
-                      <td className="num">{row.orderCount}</td>
+                      <td className="sku-col-category">{row.category}</td>
+                      <td className="sku-col-subcategory">{row.subCategory}</td>
+                      <td className="sku-col-hsn">{row.hsnCode}</td>
+                      <td className="num sku-col-qty">{row.totalQuantity}</td>
+                      <td className="num sku-col-price">{formatReportMoney(row.averageUnitPrice)}</td>
+                      <td className="num sku-col-revenue">{formatReportMoney(row.totalRevenue)}</td>
+                      <td className="num sku-col-orders">{row.orderCount}</td>
                     </tr>
                   ))}
                 </tbody>

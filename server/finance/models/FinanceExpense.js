@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const {
-  CATEGORY_LIST,
   PAYMENT_MODES,
   EXPENSE_STATUSES,
   EXPENSE_CATEGORIES,
@@ -10,7 +9,7 @@ const expenseSchema = new mongoose.Schema(
   {
     date: { type: Date, required: true, default: Date.now },
     voucherNo: { type: String, trim: true, required: true },
-    category: { type: String, enum: CATEGORY_LIST, required: true },
+    category: { type: String, trim: true, required: true },
     subcategory: { type: String, trim: true, default: '' },
     vendor: { type: String, trim: true, default: '' },
     description: { type: String, trim: true, default: '' },
@@ -20,6 +19,19 @@ const expenseSchema = new mongoose.Schema(
     status: { type: String, enum: EXPENSE_STATUSES, default: 'Paid' },
     department: { type: String, trim: true, default: '' },
     remarks: { type: String, trim: true, default: '' },
+    currency: { type: String, trim: true, uppercase: true, default: 'INR' },
+    originalAmount: { type: Number, min: 0 },
+    exchangeRateToInr: { type: Number, min: 0 },
+    exchangeRateSource: { type: String, trim: true, default: '' },
+    exchangeRateAt: { type: Date },
+    bill: {
+      fileName: { type: String, default: '' },
+      originalName: { type: String, default: '' },
+      filePath: { type: String, default: '' },
+      mimeType: { type: String, default: '' },
+      fileSize: { type: Number, default: 0 },
+      uploadedAt: { type: Date },
+    },
   },
   { timestamps: true }
 );

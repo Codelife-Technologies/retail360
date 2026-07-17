@@ -154,7 +154,7 @@ async function aggregateReplenishSalesMonthly({
       $match: {
         'salesLocDoc.location': { $exists: true, $ne: null },
         ...(locationObjectId ? { 'salesLocDoc.location': locationObjectId } : {}),
-        ...(salesChannelObjectId ? { 'salesLocDoc.salesChannel': salesChannelObjectId } : {}),
+        ...(salesChannelObjectId ? { 'salesLocDoc.salesChannels': salesChannelObjectId } : {}),
       },
     },
     {
@@ -233,7 +233,7 @@ async function aggregateReplenishSalesDaily({
       $match: {
         'salesLocDoc.location': { $exists: true, $ne: null },
         ...(locationObjectId ? { 'salesLocDoc.location': locationObjectId } : {}),
-        ...(salesChannelObjectId ? { 'salesLocDoc.salesChannel': salesChannelObjectId } : {}),
+        ...(salesChannelObjectId ? { 'salesLocDoc.salesChannels': salesChannelObjectId } : {}),
       },
     },
     {

@@ -72,6 +72,28 @@ const purchaseSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  currency: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    default: 'INR',
+  },
+  originalAmount: {
+    type: Number,
+    min: 0,
+  },
+  exchangeRateToInr: {
+    type: Number,
+    min: 0,
+  },
+  exchangeRateSource: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  exchangeRateAt: {
+    type: Date,
+  },
   paymentStatus: {
     type: String,
     enum: ['pending', 'paid', 'partial'],
@@ -90,6 +112,9 @@ purchaseSchema.pre('save', function(next) {
   if (this.items && this.items.length > 0) {
     this.subtotal = this.items.reduce((sum, item) => sum + item.total, 0);
     this.total = this.subtotal + (this.tax || 0);
+  }
+  if (this.originalAmount == null && this.total != null) {
+    this.originalAmount = this.total;
   }
   next();
 });

@@ -32,6 +32,17 @@ export function getProductDisplayName(product) {
   return product?.title || product?.name || '';
 }
 
+export const PRODUCT_NAME_MAX_WORDS = 5;
+
+/** Shorten long product titles for dense tables (full name via title attribute). */
+export function truncateProductName(text, maxWords = PRODUCT_NAME_MAX_WORDS) {
+  if (!text) return '—';
+  const words = String(text).trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '—';
+  if (words.length <= maxWords) return words.join(' ');
+  return `${words.slice(0, maxWords).join(' ')}…`;
+}
+
 export function normalizeProductSupplierLinks(product, allSuppliers = []) {
   const defaultSku = getCatalogSku(product) || '';
   const defaultUnit = product?.unit || 'pcs';

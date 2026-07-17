@@ -1,10 +1,10 @@
 export const FINANCE_TABS = [
   { id: 'finance-dashboard', label: 'Dashboard', icon: '📊', permission: 'finance.dashboard.view' },
-  { id: 'income-report', label: 'Income Report', icon: '💰', permission: 'finance.income.view' },
-  { id: 'expense-report', label: 'Expense Report', icon: '📉', permission: 'finance.expense.view' },
+  { id: 'income-report', label: 'Income', icon: '💰', permission: 'finance.income.view' },
+  { id: 'expense-report', label: 'Expense', icon: '📉', permission: 'finance.expense.view' },
   { id: 'profit-loss', label: 'Profit & Loss', icon: '📈', permission: 'finance.pnl.view' },
-  { id: 'sales-report', label: 'Sales Report', icon: '🛒', permission: 'finance.reports.view' },
-  { id: 'purchase-report', label: 'Purchase Report', icon: '📦', permission: 'finance.reports.view' },
+  { id: 'sales-report', label: 'Sales', icon: '🛒', permission: 'finance.reports.view' },
+  { id: 'purchase-report', label: 'Purchase', icon: '📦', permission: 'finance.reports.view' },
   { id: 'finance-reports', label: 'Records', icon: '🧾', permission: 'finance.reports.view' },
 ];
 

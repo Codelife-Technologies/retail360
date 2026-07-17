@@ -11,6 +11,7 @@ const {
 } = require('../utils/attendanceAccess');
 
 const EMPLOYEE_POPULATE = { path: 'employee', select: 'employeeId firstName lastName department' };
+const TASK_STATUSES = ['Pending', 'In Progress', 'On Hold', 'Completed', 'Backlog', 'Cancelled'];
 
 function parseInputDate(value, fallback = new Date()) {
   if (!value) return startOfDay(fallback);
@@ -18,14 +19,45 @@ function parseInputDate(value, fallback = new Date()) {
   return Number.isNaN(date.getTime()) ? startOfDay(fallback) : date;
 }
 
+/** Move overdue Pending tasks to Backlog (deadline before today). */
+async function promoteOverduePendingToBacklog() {
+  const todayStart = startOfDay(new Date());
+  await EmployeeTask.updateMany(
+    {
+      status: 'Pending',
+      dueDate: { $lt: todayStart },
+    },
+    { $set: { status: 'Backlog' } }
+  );
+}
+
 function buildActiveTodayQuery(todayStart, todayEnd) {
   return {
-    status: { $ne: 'Completed' },
+    status: { $nin: ['Completed', 'Cancelled', 'On Hold'] },
     $or: [
+      // Carry forward overdue work at the top of "today"
+      { status: 'Backlog' },
       { dueDate: { $gte: todayStart, $lte: todayEnd } },
       { startDate: { $lte: todayEnd }, dueDate: { $gte: todayStart } },
     ],
   };
+}
+
+function sortTodayTasks(tasks = []) {
+  const statusOrder = {
+    Backlog: 0,
+    Pending: 1,
+    'In Progress': 2,
+    'On Hold': 3,
+    Completed: 4,
+    Cancelled: 5,
+  };
+  return [...tasks].sort((a, b) => {
+    const aRank = statusOrder[a.status] ?? 50;
+    const bRank = statusOrder[b.status] ?? 50;
+    if (aRank !== bRank) return aRank - bRank;
+    return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
+  });
 }
 
 function buildTimelineOverlapQuery(fromDate, toDate) {
@@ -39,6 +71,7 @@ function buildTimelineOverlapQuery(fromDate, toDate) {
 
 router.get('/today', async (req, res) => {
   try {
+    await promoteOverduePendingToBacklog();
     const scope = await resolveAttendanceScope(req);
     if (!scope.canManageAll && !scope.employeeId) {
       return res.json([]);
@@ -51,9 +84,9 @@ router.get('/today', async (req, res) => {
 
     const tasks = await EmployeeTask.find(query)
       .populate(EMPLOYEE_POPULATE)
-      .sort({ priority: -1, dueDate: 1, createdAt: 1 })
+      .sort({ dueDate: 1, priority: -1, createdAt: 1 })
       .lean();
-    res.json(tasks);
+    res.json(sortTodayTasks(tasks));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -61,6 +94,7 @@ router.get('/today', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
+    await promoteOverduePendingToBacklog();
     const scope = await resolveAttendanceScope(req);
     const { status, source, page, limit, fromDate, toDate } = req.query;
     const query = {};
@@ -81,6 +115,22 @@ router.get('/', async (req, res) => {
     }
 
     const sort = { startDate: 1, dueDate: 1, priority: -1 };
+    const statusOrder = {
+      Backlog: 0,
+      Pending: 1,
+      'In Progress': 2,
+      'On Hold': 3,
+      Completed: 4,
+      Cancelled: 5,
+    };
+    const sortByStatusThenDate = (list = []) =>
+      [...list].sort((a, b) => {
+        const aRank = statusOrder[a.status] ?? 50;
+        const bRank = statusOrder[b.status] ?? 50;
+        if (aRank !== bRank) return aRank - bRank;
+        return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
+      });
+
     if (page || limit) {
       const result = await paginate(EmployeeTask, query, {
         page,
@@ -88,13 +138,14 @@ router.get('/', async (req, res) => {
         sort,
         populate: EMPLOYEE_POPULATE,
       });
+      result.data = sortByStatusThenDate(result.data);
       return res.json(result);
     }
 
     const tasks = await EmployeeTask.find(query)
       .populate(EMPLOYEE_POPULATE)
       .sort(sort);
-    res.json(tasks);
+    res.json(sortByStatusThenDate(tasks));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -177,8 +228,20 @@ router.put('/:id', async (req, res) => {
     }
 
     if (!scope.canManageAll) {
+      // Any employee can add/update task update notes on their own tasks (HR or personal).
+      if (req.body.delayReason != null) {
+        task.delayReason = String(req.body.delayReason).trim().slice(0, 2000);
+        task.delayReasonUpdatedAt = new Date();
+      }
+
       if (task.source !== 'Personal') {
-        return res.status(403).json({ error: 'You can only edit your personal tasks' });
+        // For HR-assigned tasks, employees may only update task notes (and status via PATCH).
+        if (req.body.delayReason == null) {
+          return res.status(403).json({ error: 'You can only edit your personal tasks' });
+        }
+        await task.save();
+        await task.populate(EMPLOYEE_POPULATE);
+        return res.json(task);
       }
       if (req.body.title != null) task.title = req.body.title;
       if (req.body.description != null) task.description = req.body.description;
@@ -195,6 +258,10 @@ router.put('/:id', async (req, res) => {
       if (req.body.startDate != null) task.startDate = parseInputDate(req.body.startDate);
       if (req.body.dueDate != null) task.dueDate = parseInputDate(req.body.dueDate);
       if (req.body.priority != null) task.priority = req.body.priority;
+      if (req.body.delayReason != null) {
+        task.delayReason = String(req.body.delayReason).trim().slice(0, 2000);
+        task.delayReasonUpdatedAt = new Date();
+      }
       if (req.body.status != null) {
         task.status = req.body.status;
         task.completedAt = req.body.status === 'Completed' ? new Date() : null;
@@ -222,7 +289,7 @@ router.patch('/:id/status', async (req, res) => {
     }
 
     const status = req.body.status;
-    if (!['Pending', 'In Progress', 'Completed'].includes(status)) {
+    if (!TASK_STATUSES.includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }
 
@@ -238,22 +305,13 @@ router.patch('/:id/status', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const scope = await resolveAttendanceScope(req);
+    if (!scope.canManageAll) {
+      return res.status(403).json({ error: 'Employees cannot delete tasks. Contact HR if a task should be removed.' });
+    }
+
     const task = await EmployeeTask.findById(req.params.id);
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
-    }
-
-    if (scope.canManageAll) {
-      await EmployeeTask.findByIdAndDelete(req.params.id);
-      return res.json({ message: 'Task deleted' });
-    }
-
-    if (!recordMatchesScope(task.employee, scope)) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    if (task.source !== 'Personal') {
-      return res.status(403).json({ error: 'You can only delete your personal tasks' });
     }
 
     await EmployeeTask.findByIdAndDelete(req.params.id);

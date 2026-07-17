@@ -173,6 +173,34 @@
   font-weight: 500;
 }
 
+.channel-checkbox-list {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.75rem;
+  max-height: 200px;
+  overflow-y: auto;
+  background: #fafafa;
+}
+
+.channel-checkbox-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.channel-checkbox-item input {
+  margin-top: 0.2rem;
+  width: auto;
+}
+
+.channel-checkbox-empty {
+  color: #666;
+  font-size: 0.95rem;
+}
+
 .form-group input,
 .form-group select,
 .form-group textarea {

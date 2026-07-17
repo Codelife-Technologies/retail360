@@ -111,6 +111,21 @@
   align-items: center;
 }
 
+.hr-filter-label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted, #666);
+}
+
+.hr-filter-label .hr-filter-select,
+.hr-filter-label .hr-filter-input {
+  font-weight: 400;
+  color: var(--text, #333);
+}
+
 .hr-search-input,
 .hr-filter-select,
 .hr-filter-input {
@@ -242,6 +257,100 @@
   max-width: 280px;
 }
 
+.hr-table td.hr-task-issue-date {
+  vertical-align: middle;
+  font-weight: 700;
+  color: #374151;
+  background: #f9fafb;
+  border-right: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.hr-table td.hr-task-issue-date[data-backlog='true'],
+.hr-table tr .hr-task-issue-date.hr-task-issue-backlog {
+  background: #fecaca;
+  color: #7f1d1d;
+  border-right-color: #ef4444;
+}
+
+.hr-task-title-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.hr-task-title-btn:hover strong {
+  color: #6B3894;
+  text-decoration: underline;
+}
+
+.hr-task-delay-reason {
+  max-width: 220px;
+  font-size: 0.9rem;
+  color: #6b21a8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hr-task-delay-preview {
+  display: inline;
+  max-width: 220px;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+  color: #6b21a8;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.hr-task-delay-preview:hover {
+  text-decoration: underline;
+}
+
+.hr-task-delay-box {
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background: #faf5ff;
+  border: 1px solid #e9d5ff;
+}
+
+.hr-task-delay-box p {
+  margin: 0 0 0.35rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hr-task-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.85rem;
+}
+
+.hr-task-detail-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.hr-link {
+  color: #5b21b6;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+
 .hr-status-badge {
   display: inline-block;
   padding: 0.25rem 0.65rem;
@@ -270,8 +379,8 @@
 
 .hr-status-pending,
 .hr-status-half-day {
-  background: #fef3c7;
-  color: #92400e;
+  background: #f59e0b;
+  color: #451a03;
 }
 
 .hr-status-leave,
@@ -282,9 +391,10 @@
 
 .hr-status-holiday,
 .hr-status-work-from-home,
-.hr-status-cancelled {
+.hr-status-cancelled,
+.hr-status-on-hold {
   background: #e5e7eb;
-  color: #374151;
+  color: #4b5563;
 }
 
 .hr-status-submitted,
@@ -299,9 +409,152 @@
   color: #1d4ed8;
 }
 
+.hr-status-backlog {
+  background: #dc2626;
+  color: #fff;
+}
+
+.hr-table tbody tr.hr-task-row-pending {
+  background: #fde68a;
+  box-shadow: inset 4px 0 0 #b45309;
+}
+
+.hr-table tbody tr.hr-task-row-pending:hover {
+  background: #fcd34d;
+}
+
+.hr-table tbody tr.hr-task-row-backlog {
+  background: #fecaca;
+  box-shadow: inset 4px 0 0 #991b1b;
+}
+
+.hr-table tbody tr.hr-task-row-backlog:hover {
+  background: #fca5a5;
+}
+
+.hr-table tbody tr.hr-task-row-backlog td {
+  font-weight: 600;
+}
+
+.hr-table tbody tr.hr-task-row-on-hold,
+.hr-table tbody tr.hr-task-row-cancelled {
+  background: #f3f4f6;
+  box-shadow: inset 4px 0 0 #9ca3af;
+}
+
+.hr-table tbody tr.hr-task-row-on-hold:hover,
+.hr-table tbody tr.hr-task-row-cancelled:hover {
+  background: #e5e7eb;
+}
+
+.hr-worklog-filters {
+  margin-bottom: 1rem;
+}
+
+.hr-period-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+  background: #f1f5f9;
+  padding: 0.2rem;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  width: fit-content;
+}
+
+.hr-period-toggle button {
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.75rem;
+  border-radius: 5px;
+  font-size: 0.9125rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.hr-period-toggle button:hover {
+  color: #1e293b;
+}
+
+.hr-period-toggle button.active {
+  background: white;
+  color: #6B3894;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.hr-worklog-filter-row {
+  margin-bottom: 0.35rem;
+}
+
+.hr-worklog-period-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.hr-worklog-period-hint strong {
+  color: #374151;
+}
+
 .hr-worklog-detail-row td {
   background: #f8fafc;
   padding-top: 0;
+}
+
+.hr-worklog-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 220px;
+  max-width: 420px;
+}
+
+.hr-worklog-task-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.hr-worklog-task-desc {
+  color: #374151;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.hr-worklog-entry-details {
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.hr-worklog-task-time {
+  flex-shrink: 0;
+  color: #6B3894;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hr-worklog-task-notes {
+  margin-top: 0.15rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed #e5e7eb;
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.hr-worklog-total-time {
+  white-space: nowrap;
+  font-size: 1rem;
+  color: #111827;
 }
 
 .hr-worklog-detail {
@@ -605,6 +858,57 @@
 .hr-form-group textarea {
   min-height: 80px;
   resize: vertical;
+}
+
+.hr-form-group-full {
+  grid-column: 1 / -1;
+}
+
+.hr-assign-tasks-block {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.hr-assign-tasks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.hr-assign-tasks-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #374151;
+}
+
+.hr-assign-task-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  background: #f9fafb;
+}
+
+.hr-assign-task-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.65rem;
+}
+
+.hr-assign-task-num {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #6B3894;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.hr-assign-task-card .hr-form-grid {
+  gap: 0.65rem;
 }
 
 .hr-input-readonly {

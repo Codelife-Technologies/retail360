@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -15,13 +15,13 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { reportsAPI, salesChannelsAPI, salesAPI } from '../services/api';
-import { formatMoney } from '../utils/locationCurrency';
 import { getCatalogSku } from '../utils/productDisplayUtils';
 import Pagination from './Pagination';
 import SaleDetailsModal from './SaleDetailsModal';
+import { useCurrency } from '../currency/CurrencyContext';
+import { CurrencySelector, DualKpiValue } from '../currency/CurrencyUI';
+import '../currency/currency.css';
 import './SalesDashboard.css';
-
-const formatAed = (amount) => formatMoney(amount, 'AED');
 
 function parseDateStr(str) {
   if (!str) return null;
@@ -188,11 +188,12 @@ const emptyDashboard = {
     thisMonth: emptyStat(),
     thisYear: emptyStat(),
   },
-  currentPeriod: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
-  previousPeriod: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
+  currentPeriod: { totalSales: 0, totalRevenue: 0, totalRevenueInr: 0, totalItemsSold: 0, averageOrderValue: 0 },
+  previousPeriod: { totalSales: 0, totalRevenue: 0, totalRevenueInr: 0, totalItemsSold: 0, averageOrderValue: 0 },
   change: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
   comparisonChart: [],
   channelBreakdown: [],
+  countryBreakdown: [],
   chartTimeline: 'auto',
   chartTimelineLabel: 'Auto',
 };
@@ -221,6 +222,41 @@ function KpiCard({ label, value, subValue, change, highlight }) {
 }
 
 function SalesDashboard() {
+  const {
+    formatOverall,
+    formatDisplay,
+    formatCurrencyAmount,
+    fromOriginal,
+    convert,
+    displayCurrency,
+  } = useCurrency();
+  const formatRevenue = (stat) => {
+    if (!stat) return '—';
+    const inr = stat.totalRevenueInr != null
+      ? Number(stat.totalRevenueInr)
+      : fromOriginal(stat.totalRevenue, 'AED', 'INR');
+    if (displayCurrency === 'INR') return formatOverall(inr);
+    return `${formatDisplay(inr)} (${formatCurrencyAmount(inr, 'INR')})`;
+  };
+  const formatSaleLine = (sale) => {
+    const channelCur = sale.salesChannel?.defaultCurrency;
+    const country = sale.salesChannel?.country || sale.salesLocation?.location?.country;
+    let currency = (channelCur || sale.currency || 'AED').toUpperCase();
+    if (!channelCur && country) {
+      const c = String(country).toUpperCase();
+      if (c.includes('INDIA') || c === 'IN') currency = 'INR';
+      else if (c.includes('UAE') || c === 'AE' || c.includes('EMIRATE')) currency = 'AED';
+    }
+    const original = sale.originalAmount != null ? sale.originalAmount : sale.total;
+    const inr = sale.exchangeRateToInr > 0 && String(sale.currency || '').toUpperCase() === currency
+      ? Number(original) * Number(sale.exchangeRateToInr)
+      : fromOriginal(original, currency, 'INR');
+    const converted = displayCurrency === 'INR'
+      ? formatOverall(inr)
+      : `${formatDisplay(inr)} (${formatCurrencyAmount(inr, 'INR')})`;
+    return `${formatCurrencyAmount(original, currency)} → ${converted}`;
+  };
+
   const [filters, setFilters] = useState(defaultDashboardFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultDashboardFilters);
   const [channels, setChannels] = useState([]);
@@ -400,11 +436,30 @@ function SalesDashboard() {
   };
 
   const isAllTimeView = appliedFilters.period === 'allTime';
-  const { overview, currentPeriod, previousPeriod, change, comparisonChart, channelBreakdown } = data;
+  const {
+    overview, currentPeriod, previousPeriod, change, comparisonChart, channelBreakdown, countryBreakdown = [],
+  } = data;
   const period = appliedFilters.period;
 
+  const displayComparisonChart = useMemo(() => (
+    (comparisonChart || []).map((row) => ({
+      ...row,
+      currentRevenue: Math.round(convert(row.currentRevenue || 0) * 100) / 100,
+      previousRevenue: Math.round(convert(row.previousRevenue || 0) * 100) / 100,
+    }))
+  ), [comparisonChart, convert, displayCurrency]);
+
+  const displayChannelBreakdown = useMemo(() => (
+    (channelBreakdown || []).map((row) => ({
+      ...row,
+      revenue: Math.round(convert(row.revenue || 0) * 100) / 100,
+    }))
+  ), [channelBreakdown, convert, displayCurrency]);
+
   const chartTooltipFormatter = (value, name) => {
-    if (String(name).toLowerCase().includes('revenue')) return [formatAed(value), name];
+    if (String(name).toLowerCase().includes('revenue')) {
+      return [formatCurrencyAmount(value, displayCurrency), name];
+    }
     return [value, name];
   };
 
@@ -432,10 +487,11 @@ function SalesDashboard() {
         <div>
           <h1>Sales Dashboard</h1>
           <p className="sales-dash-subtitle">
-            Revenue, orders, and trends with period-over-period comparison
+            Amounts follow display currency ({displayCurrency}). Country rows stay in local currency.
           </p>
         </div>
         <div className="sales-dash-header-actions">
+          <CurrencySelector />
           <button
             type="button"
             className="sales-dash-btn-export"
@@ -455,7 +511,7 @@ function SalesDashboard() {
         <div className="sales-dash-kpi-grid">
           <KpiCard
             label="Today"
-            value={loading ? '—' : formatAed(overview.today.totalRevenue)}
+            value={loading ? '—' : formatRevenue(overview.today)}
             subValue={
               loading
                 ? 'Loading…'
@@ -464,7 +520,7 @@ function SalesDashboard() {
           />
           <KpiCard
             label="This Week"
-            value={loading ? '—' : formatAed(overview.thisWeek.totalRevenue)}
+            value={loading ? '—' : formatRevenue(overview.thisWeek)}
             subValue={
               loading
                 ? 'Loading…'
@@ -473,7 +529,7 @@ function SalesDashboard() {
           />
           <KpiCard
             label="This Month"
-            value={loading ? '—' : formatAed(overview.thisMonth.totalRevenue)}
+            value={loading ? '—' : formatRevenue(overview.thisMonth)}
             subValue={
               loading
                 ? 'Loading…'
@@ -482,7 +538,7 @@ function SalesDashboard() {
           />
           <KpiCard
             label="This Year"
-            value={loading ? '—' : formatAed(overview.thisYear.totalRevenue)}
+            value={loading ? '—' : formatRevenue(overview.thisYear)}
             subValue={
               loading
                 ? 'Loading…'
@@ -582,8 +638,8 @@ function SalesDashboard() {
             <div className="sales-dash-kpi-grid period-compare">
               <KpiCard
                 label="Revenue"
-                value={formatAed(currentPeriod.totalRevenue)}
-                subValue={isAllTimeView ? `${currentPeriod.totalSales} orders` : `${previousLegendLabel}: ${formatAed(previousPeriod.totalRevenue)}`}
+                value={formatRevenue(currentPeriod)}
+                subValue={isAllTimeView ? `${currentPeriod.totalSales} orders` : `${previousLegendLabel}: ${formatRevenue(previousPeriod)}`}
                 change={isAllTimeView ? null : change.totalRevenue}
               />
               <KpiCard
@@ -595,13 +651,13 @@ function SalesDashboard() {
               <KpiCard
                 label="Units Sold"
                 value={currentPeriod.totalItemsSold}
-                subValue={isAllTimeView ? `Avg order ${formatAed(currentPeriod.averageOrderValue)}` : `${previousLegendLabel}: ${previousPeriod.totalItemsSold}`}
+                subValue={isAllTimeView ? `Avg order ${formatRevenue({ totalRevenueInr: currentPeriod.averageOrderValue })}` : `${previousLegendLabel}: ${previousPeriod.totalItemsSold}`}
                 change={isAllTimeView ? null : change.totalItemsSold}
               />
               <KpiCard
                 label="Avg Order Value"
-                value={formatAed(currentPeriod.averageOrderValue)}
-                subValue={isAllTimeView ? 'Year-to-date average' : `${previousLegendLabel}: ${formatAed(previousPeriod.averageOrderValue)}`}
+                value={formatRevenue({ totalRevenueInr: currentPeriod.averageOrderValue })}
+                subValue={isAllTimeView ? 'Year-to-date average' : `${previousLegendLabel}: ${formatRevenue({ totalRevenueInr: previousPeriod.averageOrderValue })}`}
                 change={isAllTimeView ? null : change.averageOrderValue}
               />
             </div>
@@ -620,7 +676,7 @@ function SalesDashboard() {
                 </p>
               </div>
             </div>
-            {comparisonChart.length === 0 ? (
+            {displayComparisonChart.length === 0 ? (
               <p className="sales-dash-empty">No comparison data for the selected period.</p>
             ) : (
               <div className="sales-dash-chart-grid comparison">
@@ -629,9 +685,9 @@ function SalesDashboard() {
                   <span className="sales-dash-range-chip previous">{previousLegendLabel}</span>
                 </div>
                 <div className="sales-dash-chart-card">
-                  <h3>Revenue Comparison</h3>
+                  <h3>Revenue Comparison ({displayCurrency})</h3>
                   <ResponsiveContainer width="100%" height={COMPARISON_CHART_HEIGHT}>
-                    <BarChart data={comparisonChart} barGap={4} barCategoryGap="18%">
+                    <BarChart data={displayComparisonChart} barGap={4} barCategoryGap="18%">
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="label" tick={{ fontSize: 15 }} interval={0} angle={-20} textAnchor="end" height={60} />
                       <YAxis tick={{ fontSize: 15 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
@@ -646,7 +702,7 @@ function SalesDashboard() {
                 <div className="sales-dash-chart-card">
                   <h3>Orders Comparison</h3>
                   <ResponsiveContainer width="100%" height={COMPARISON_CHART_HEIGHT}>
-                    <LineChart data={comparisonChart}>
+                    <LineChart data={displayComparisonChart}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="label" tick={{ fontSize: 15 }} interval={0} angle={-20} textAnchor="end" height={60} />
                       <YAxis allowDecimals={false} tick={{ fontSize: 15 }} />
@@ -699,7 +755,7 @@ function SalesDashboard() {
                           <td>{new Date(sale.salesDate).toLocaleDateString('en-IN')}</td>
                           <td>{sale.salesChannel?.name || '—'}</td>
                           <td className="num">{sale.items?.length || 0}</td>
-                          <td className="num">{formatAed(sale.total)}</td>
+                          <td className="num">{formatSaleLine(sale)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -720,8 +776,40 @@ function SalesDashboard() {
           </section>
 
           <section className="sales-dash-section">
-            <h2>Revenue by Channel</h2>
-            {channelBreakdown.length === 0 ? (
+            <h2>Country-wise Revenue</h2>
+            {countryBreakdown.length === 0 ? (
+              <p className="sales-dash-empty">No country data for the selected period.</p>
+            ) : (
+              <div className="sales-dash-channel-table-wrap">
+                <table className="sales-dash-channel-table fx-country-table">
+                  <thead>
+                    <tr>
+                      <th>Country</th>
+                      <th>Orders</th>
+                      <th>Local currency</th>
+                      <th>Amount (local)</th>
+                      <th>INR (USD)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {countryBreakdown.map((row) => (
+                      <tr key={row.country}>
+                        <td>{row.country}</td>
+                        <td>{row.orders}</td>
+                        <td>{row.currency}</td>
+                        <td>{formatCurrencyAmount(row.amountLocal, row.currency)}</td>
+                        <td><DualKpiValue amountInInr={row.amountInr} loading={false} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="sales-dash-section">
+            <h2>Revenue by Channel ({displayCurrency})</h2>
+            {displayChannelBreakdown.length === 0 ? (
               <p className="sales-dash-empty">No channel data for the selected period.</p>
             ) : (
               <div className="sales-dash-chart-grid single">
@@ -729,7 +817,7 @@ function SalesDashboard() {
                   <ResponsiveContainer width="100%" height={PIE_CHART_HEIGHT}>
                     <PieChart>
                       <Pie
-                        data={channelBreakdown}
+                        data={displayChannelBreakdown}
                         dataKey="revenue"
                         nameKey="name"
                         cx="50%"
@@ -737,11 +825,14 @@ function SalesDashboard() {
                         outerRadius={80}
                         label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
                       >
-                        {channelBreakdown.map((entry, index) => (
+                        {displayChannelBreakdown.map((entry, index) => (
                           <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => [formatAed(value), 'Revenue']} />
+                      <Tooltip formatter={(value) => [
+                        formatCurrencyAmount(value, displayCurrency),
+                        'Revenue',
+                      ]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -755,11 +846,11 @@ function SalesDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {channelBreakdown.map((row) => (
+                      {displayChannelBreakdown.map((row) => (
                         <tr key={row.name}>
                           <td>{row.name}</td>
                           <td>{row.orders}</td>
-                          <td>{formatAed(row.revenue)}</td>
+                          <td>{formatCurrencyAmount(row.revenue, displayCurrency)}</td>
                         </tr>
                       ))}
                     </tbody>

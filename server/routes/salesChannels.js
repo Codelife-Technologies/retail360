@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const SalesChannel = require('../models/SalesChannel');
+const { currencyForCountry } = require('../currency/constants');
 const { paginate } = require('../utils/pagination');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
@@ -42,7 +43,7 @@ router.get('/', requirePermission('salesChannels.view'), async (req, res) => {
       });
       res.json(result);
     } else {
-      const salesChannels = await SalesChannel.find(query).sort({ createdAt: -1 });
+      const salesChannels = await SalesChannel.find(query).sort({ name: 1 });
       res.json(salesChannels);
     }
   } catch (error) {
@@ -58,6 +59,8 @@ router.get('/template', requirePermission('salesChannels.view'), (req, res) => {
       { key: 'name', label: 'Name *' },
       { key: 'description', label: 'Description' },
       { key: 'type', label: 'Type' },
+      { key: 'country', label: 'Country *' },
+      { key: 'defaultCurrency', label: 'Currency' },
       { key: 'commissionRate', label: 'Commission Rate (%)' },
       { key: 'paymentTerms', label: 'Payment Terms' },
       { key: 'isActive', label: 'Is Active' }
@@ -97,18 +100,31 @@ router.post('/import', requirePermission('salesChannels.create'), upload.single(
       const rowNum = i + 2;
 
       try {
+        const country = (row['Country *'] || row['Country'] || '').toString().trim().toUpperCase().slice(0, 2);
+        const defaultCurrency = (row['Currency'] || row['Default Currency'] || '').toString().trim().toUpperCase().slice(0, 3);
+        const isActiveRaw = row['Is Active'] ?? row['Active (true/false)'] ?? row['Active'];
+        const isActiveStr = String(isActiveRaw ?? 'true').trim().toLowerCase();
+        const isActive = !['false', '0', 'no', 'n', 'inactive'].includes(isActiveStr);
+
         const channelData = {
           code: (row['Code *'] || '').toString().toUpperCase().trim(),
           name: row['Name *'] || '',
           description: row['Description'] || '',
           type: row['Type'] || '',
+          country,
+          defaultCurrency: defaultCurrency || undefined,
           commissionRate: row['Commission Rate (%)'] ? parseFloat(row['Commission Rate (%)']) : undefined,
           paymentTerms: row['Payment Terms'] || '',
-          isActive: row['Is Active'] === 'true' || row['Is Active'] === true || row['Is Active'] === 'TRUE' || row['Is Active'] === undefined
+          isActive,
         };
 
         if (!channelData.code || !channelData.name) {
           errors.push({ row: rowNum, field: 'code/name', message: 'Code and Name are required', data: row });
+          failed++;
+          continue;
+        }
+        if (!channelData.country || channelData.country.length !== 2) {
+          errors.push({ row: rowNum, field: 'country', message: 'Country is required (2-letter code, e.g. IN, AE)', data: row });
           failed++;
           continue;
         }
@@ -172,10 +188,35 @@ router.post('/', requirePermission('salesChannels.create'), async (req, res) => 
       body: req.body
     });
     if (error.code === 11000) {
-      res.status(400).json({ error: 'Sales channel code already exists' });
-    } else {
-      res.status(400).json({ error: error.message });
+      const code = String(req.body?.code || '').trim().toUpperCase();
+      if (code) {
+        const existing = await SalesChannel.findOne({ code });
+        if (existing) {
+          // If channel already exists but is inactive (common for Amazon UAE), activate it.
+          const update = { isActive: true };
+
+          if (req.body?.country) {
+            update.country = String(req.body.country).trim().toUpperCase().slice(0, 2);
+          }
+          if (req.body?.defaultCurrency) {
+            update.defaultCurrency = String(req.body.defaultCurrency).trim().toUpperCase().slice(0, 3);
+          }
+          if (!update.defaultCurrency && update.country) {
+            update.defaultCurrency = currencyForCountry(update.country);
+          }
+
+          const updated = await SalesChannel.findByIdAndUpdate(existing._id, update, {
+            new: true,
+            runValidators: true,
+          });
+          return res.status(201).json(updated);
+        }
+      }
+
+      return res.status(400).json({ error: 'Sales channel code already exists' });
     }
+
+    return res.status(400).json({ error: error.message });
   }
 });
 

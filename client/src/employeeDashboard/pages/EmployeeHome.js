@@ -120,23 +120,39 @@ function EmployeeHome() {
 
               <div className="hr-chart-grid hr-chart-grid-2">
                 <div className="hr-chart-card">
-                  <h3>Tasks Due Today</h3>
+                  <h3>Tasks for Today</h3>
                   {data?.tasksToday?.length ? (
                     <ul className="hr-mini-list ed-task-mini-list">
                       {data.tasksToday.map((task) => (
-                        <li key={task._id} className={`ed-task-mini priority-${task.priority?.toLowerCase()}`}>
+                        <li
+                          key={task._id}
+                          className={`ed-task-mini priority-${task.priority?.toLowerCase()}${
+                            task.status === 'Backlog'
+                              ? ' status-backlog'
+                              : task.status === 'Pending'
+                                ? ' status-pending'
+                                : task.status === 'On Hold'
+                                  ? ' status-on-hold'
+                                  : task.status === 'Cancelled'
+                                    ? ' status-cancelled'
+                                    : ''
+                          }`}
+                        >
                           <span>
                             <strong>{task.title}</strong>
                             {task.description && (
                               <small>{task.description}</small>
                             )}
+                            {task.status === 'Backlog' ? (
+                              <small className="ed-task-status-hint">Backlog</small>
+                            ) : null}
                           </span>
                           <span className="ed-task-mini-badge">{task.priority}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="ed-empty-chart">No tasks due today.</p>
+                    <p className="ed-empty-chart">No tasks for today and no backlog items.</p>
                   )}
                 </div>
 

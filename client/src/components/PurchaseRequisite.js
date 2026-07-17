@@ -6,6 +6,7 @@ import DetailModal from './DetailModal';
 import PoProductVendorAssign from './PoProductVendorAssign';
 import PoShareActions from './PoShareActions';
 import ProductSearchPicker from './ProductSearchPicker';
+import { truncateProductName } from '../utils/productDisplayUtils';
 import './PurchaseRequisite.css';
 import './PoShareActions.css';
 
@@ -507,7 +508,12 @@ function PurchaseRequisite({ onNavigate }) {
                   <tr key={line._id}>
                     <td>{line.locationName || line.location?.name || '—'}</td>
                     <td className="pr-number-cell">{line.sku || '—'}</td>
-                    <td>{line.productTitle || line.product?.title || '—'}</td>
+                    <td
+                      className="pr-product-name"
+                      title={line.productTitle || line.product?.title || undefined}
+                    >
+                      {truncateProductName(line.productTitle || line.product?.title)}
+                    </td>
                     <td>{getLineVendorName(line)}</td>
                     <td className="text-center font-semibold">{line.requestedQty}</td>
                   </tr>
@@ -588,7 +594,9 @@ function PurchaseRequisite({ onNavigate }) {
                   <tr key={line._id}>
                     <td>{line.locationName}</td>
                     <td className="pr-number-cell">{line.sku}</td>
-                    <td>{line.productTitle}</td>
+                    <td className="pr-product-name" title={line.productTitle || undefined}>
+                      {truncateProductName(line.productTitle)}
+                    </td>
                     <td>{line.supplierName || '—'}</td>
                     <td>
                       <input

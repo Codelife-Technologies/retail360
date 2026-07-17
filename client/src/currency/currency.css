@@ -1,0 +1,85 @@
+.fx-selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.fx-selector-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 180px;
+}
+
+.fx-selector-field span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.fx-select {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+  background: #fff;
+  font-size: 0.9rem;
+  min-width: 180px;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+}
+
+.fx-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.fx-rate-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.fx-refresh {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 6px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.fx-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.fx-dual-value {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.fx-dual-value .fx-primary {
+  font-weight: 700;
+}
+
+.fx-dual-value .fx-secondary {
+  font-size: 0.85em;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.fx-country-table td,
+.fx-country-table th {
+  white-space: nowrap;
+}
+
+.fx-original-converted {
+  font-size: 0.9rem;
+  color: #374151;
+}

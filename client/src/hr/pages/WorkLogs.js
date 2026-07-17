@@ -7,7 +7,10 @@ import {
   formatDate,
   formatDuration,
   employeeName,
-  toInputDate,
+  getCurrentWeekRange,
+  HR_PERIOD_OPTIONS,
+  getHrPeriodRange,
+  formatHrPeriodLabel,
 } from '../utils/hrUtils';
 
 function csvEscape(value) {
@@ -45,7 +48,9 @@ function downloadMonthlyReportCsv(report, periodLabel) {
           index === 0 ? empId : '',
           index === 0 ? dept : '',
           index === 0 ? date : '',
-          entry.description,
+          entry.details
+            ? `${entry.description} — ${entry.details}`
+            : entry.description,
           formatDuration(entry.timeSpentMinutes),
           index === 0 ? log.status : '',
           index === 0 ? notes : '',
@@ -71,12 +76,15 @@ function DailyWorkLogsView({ employees }) {
     byEmployee: [],
   });
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState(null);
-  const [filters, setFilters] = useState({
-    employee: '',
-    status: '',
-    fromDate: toInputDate(new Date(new Date().setDate(new Date().getDate() - 14))),
-    toDate: toInputDate(new Date()),
+  const [filters, setFilters] = useState(() => {
+    const week = getCurrentWeekRange();
+    return {
+      period: 'week',
+      employee: '',
+      status: '',
+      fromDate: week.fromDate,
+      toDate: week.toDate,
+    };
   });
 
   const filterParams = useMemo(() => {
@@ -115,6 +123,15 @@ function DailyWorkLogsView({ employees }) {
     fetchData();
   }, [fetchData]);
 
+  const handlePeriodChange = (period) => {
+    const range = getHrPeriodRange(period);
+    setFilters((f) => ({
+      ...f,
+      period,
+      ...(range || {}),
+    }));
+  };
+
   const handleDelete = async (log) => {
     if (!window.confirm(`Delete work log for ${employeeName(log.employee)} on ${formatDate(log.date)}?`)) {
       return;
@@ -126,6 +143,8 @@ function DailyWorkLogsView({ employees }) {
       alert(error.response?.data?.error || 'Failed to delete work log');
     }
   };
+
+  const periodLabel = formatHrPeriodLabel(filters.period, filters.fromDate, filters.toDate);
 
   return (
     <>
@@ -145,40 +164,70 @@ function DailyWorkLogsView({ employees }) {
         />
       </div>
 
-      <div className="hr-filters-row">
-        <select
-          className="hr-filter-select"
-          value={filters.employee}
-          onChange={(e) => setFilters((f) => ({ ...f, employee: e.target.value }))}
-        >
-          <option value="">All Employees</option>
-          {employees.map((emp) => (
-            <option key={emp._id} value={emp._id}>
-              {employeeName(emp)} ({emp.employeeId})
-            </option>
+      <div className="hr-worklog-filters">
+        <div className="hr-period-toggle">
+          {HR_PERIOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              className={filters.period === opt.id ? 'active' : ''}
+              onClick={() => handlePeriodChange(opt.id)}
+            >
+              {opt.label}
+            </button>
           ))}
-        </select>
-        <select
-          className="hr-filter-select"
-          value={filters.status}
-          onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-        >
-          <option value="">All Status</option>
-          <option value="Draft">Draft</option>
-          <option value="Submitted">Submitted</option>
-        </select>
-        <input
-          type="date"
-          className="hr-filter-select"
-          value={filters.fromDate}
-          onChange={(e) => setFilters((f) => ({ ...f, fromDate: e.target.value }))}
-        />
-        <input
-          type="date"
-          className="hr-filter-select"
-          value={filters.toDate}
-          onChange={(e) => setFilters((f) => ({ ...f, toDate: e.target.value }))}
-        />
+        </div>
+
+        <div className="hr-filters-row hr-worklog-filter-row">
+          {filters.period === 'custom' && (
+            <>
+              <input
+                type="date"
+                className="hr-filter-select"
+                value={filters.fromDate}
+                max={filters.toDate || undefined}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, period: 'custom', fromDate: e.target.value }))
+                }
+                title="From date"
+              />
+              <input
+                type="date"
+                className="hr-filter-select"
+                value={filters.toDate}
+                min={filters.fromDate || undefined}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, period: 'custom', toDate: e.target.value }))
+                }
+                title="To date"
+              />
+            </>
+          )}
+          <select
+            className="hr-filter-select"
+            value={filters.employee}
+            onChange={(e) => setFilters((f) => ({ ...f, employee: e.target.value }))}
+          >
+            <option value="">All Employees</option>
+            {employees.map((emp) => (
+              <option key={emp._id} value={emp._id}>
+                {employeeName(emp)} ({emp.employeeId})
+              </option>
+            ))}
+          </select>
+          <select
+            className="hr-filter-select"
+            value={filters.status}
+            onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+          >
+            <option value="">All Status</option>
+            <option value="Draft">Draft</option>
+            <option value="Submitted">Submitted</option>
+          </select>
+        </div>
+        <p className="hr-worklog-period-hint">
+          Showing: <strong>{periodLabel}</strong>
+        </p>
       </div>
 
       {loading ? (
@@ -188,8 +237,8 @@ function DailyWorkLogsView({ employees }) {
           <table className="hr-table">
             <thead>
               <tr>
-                <th>Employee</th>
                 <th>Date</th>
+                <th>Employee</th>
                 <th>Tasks</th>
                 <th>Total Time</th>
                 <th>Status</th>
@@ -200,61 +249,58 @@ function DailyWorkLogsView({ employees }) {
               {logs.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="hr-empty">
-                    No work logs found for the selected filters
+                    No work logs found for the selected period / filters
                   </td>
                 </tr>
               ) : (
                 logs.map((log) => (
-                  <React.Fragment key={log._id}>
-                    <tr>
-                      <td>{employeeName(log.employee)}</td>
-                      <td>{formatDate(log.date)}</td>
-                      <td>{log.entries?.length || 0}</td>
-                      <td>{formatDuration(log.totalMinutes)}</td>
-                      <td>
-                        <HrStatusBadge status={log.status} />
-                      </td>
-                      <td>
-                        <div className="hr-actions-cell">
-                          <button
-                            type="button"
-                            className="hr-btn hr-btn-secondary hr-btn-sm"
-                            onClick={() => setExpandedId((prev) => (prev === log._id ? null : log._id))}
-                          >
-                            {expandedId === log._id ? 'Hide' : 'View'}
-                          </button>
-                          <button
-                            type="button"
-                            className="hr-btn hr-btn-danger hr-btn-sm"
-                            onClick={() => handleDelete(log)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {expandedId === log._id && (
-                      <tr className="hr-worklog-detail-row">
-                        <td colSpan={6}>
-                          <div className="hr-worklog-detail">
-                            {log.notes && (
-                              <p className="hr-worklog-detail-notes">
-                                <strong>Notes:</strong> {log.notes}
-                              </p>
-                            )}
-                            <ul className="hr-worklog-detail-list">
-                              {(log.entries || []).map((entry) => (
-                                <li key={entry._id || `${entry.description}-${entry.timeSpentMinutes}`}>
-                                  <span>{entry.description}</span>
-                                  <strong>{formatDuration(entry.timeSpentMinutes)}</strong>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
+                  <tr key={log._id}>
+                    <td>{formatDate(log.date)}</td>
+                    <td>{employeeName(log.employee)}</td>
+                    <td>
+                      {(log.entries || []).length === 0 ? (
+                        <span className="hr-muted">—</span>
+                      ) : (
+                        <ul className="hr-worklog-task-list">
+                          {(log.entries || []).map((entry, idx) => (
+                            <li key={entry._id || `${log._id}-${idx}`}>
+                              <span className="hr-worklog-task-desc">
+                                {entry.description || '—'}
+                                {entry.details ? (
+                                  <small className="hr-worklog-entry-details"> — {entry.details}</small>
+                                ) : null}
+                              </span>
+                              <strong className="hr-worklog-task-time">
+                                {formatDuration(entry.timeSpentMinutes)}
+                              </strong>
+                            </li>
+                          ))}
+                          {log.notes ? (
+                            <li className="hr-worklog-task-notes">
+                              <span><em>Notes:</em> {log.notes}</span>
+                            </li>
+                          ) : null}
+                        </ul>
+                      )}
+                    </td>
+                    <td className="hr-worklog-total-time">
+                      <strong>{formatDuration(log.totalMinutes)}</strong>
+                    </td>
+                    <td>
+                      <HrStatusBadge status={log.status} />
+                    </td>
+                    <td>
+                      <div className="hr-actions-cell">
+                        <button
+                          type="button"
+                          className="hr-btn hr-btn-danger hr-btn-sm"
+                          onClick={() => handleDelete(log)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 ))
               )}
             </tbody>

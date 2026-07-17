@@ -571,7 +571,7 @@
 .sales-report-detail-block {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.5rem;
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -584,10 +584,18 @@
   margin-right: 0;
 }
 
+.sales-report-aligned .sales-sku-period-hint {
+  margin-bottom: 0.15rem;
+}
+
 .sales-report-aligned .sales-sku-table-wrap,
 .sales-report-aligned .sales-sku-table-wrap:has(.sales-detail-table) {
   width: 100%;
   max-width: 100%;
+}
+
+.sales-report-aligned .sales-sku-table-wrap:has(.sales-detail-table) {
+  overflow-x: auto;
 }
 
 .product-extreme-card-header {
@@ -936,7 +944,7 @@
 }
 
 .sales-detail-heading {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.5rem;
   font-size: 1.1rem;
   color: #111827;
 }
@@ -952,93 +960,156 @@
 .sales-sku-table.sales-detail-table {
   table-layout: fixed;
   width: 100%;
-  min-width: 0;
+  min-width: 780px;
   max-width: 100%;
+  border-collapse: collapse;
 }
 
 .sales-sku-table.sales-detail-table th,
 .sales-sku-table.sales-detail-table td {
-  padding: 0.5rem 0.45rem;
+  padding: 0.55rem 0.65rem;
   vertical-align: middle;
   box-sizing: border-box;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.sales-sku-table.sales-detail-table col.sales-by-sale-col-sku,
 .sales-by-sale-col-sku {
-  width: 20%;
+  width: 12%;
+}
+
+.sales-sku-table.sales-detail-table col.sales-by-sale-col-order,
+.sales-by-sale-col-order {
+  width: 24%;
+}
+
+.sales-sku-table.sales-detail-table col.sales-by-sale-col-date,
+.sales-by-sale-col-date {
+  width: 12%;
+}
+
+.sales-sku-table.sales-detail-table col.sales-by-sale-col-channel,
+.sales-by-sale-col-channel {
+  width: 14%;
+}
+
+.sales-sku-table.sales-detail-table col.sales-by-sale-col-num,
+.sales-by-sale-col-num {
+  width: 10%;
+}
+
+.sales-sku-table.sales-detail-table col.sales-by-sale-col-money,
+.sales-by-sale-col-money {
+  width: 18%;
+}
+
+.sales-by-sale-col-sku {
   min-width: 0;
   white-space: normal;
   word-break: break-word;
-  line-height: 1.3;
+  line-height: 1.35;
+  text-align: left;
 }
 
 .sales-by-sale-col-order {
-  width: 22%;
   min-width: 0;
   white-space: normal;
   word-break: break-all;
-  line-height: 1.3;
+  line-height: 1.35;
+  text-align: left;
 }
 
 .sales-by-sale-col-date {
-  width: 11%;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: left;
 }
 
 .sales-by-sale-col-channel {
-  width: 14%;
   min-width: 0;
   white-space: normal;
   word-break: break-word;
-  line-height: 1.3;
+  line-height: 1.35;
+  text-align: left;
 }
 
 .sales-by-sale-col-num {
-  width: 10%;
   min-width: 0;
-  text-align: right;
+  text-align: right !important;
   white-space: nowrap;
-  padding-left: 0.35rem;
-  padding-right: 0.5rem;
 }
 
 .sales-by-sale-col-money {
-  width: 13%;
   min-width: 0;
-  text-align: right;
+  text-align: right !important;
   white-space: nowrap;
-  padding-left: 0.35rem;
-  padding-right: 0.55rem;
 }
 
 .sales-sku-table.sales-detail-table th.sales-by-sale-col-num,
-.sales-sku-table.sales-detail-table th.sales-by-sale-col-money {
+.sales-sku-table.sales-detail-table th.sales-by-sale-col-money,
+.sales-sku-table.sales-detail-table td.sales-by-sale-col-num,
+.sales-sku-table.sales-detail-table td.sales-by-sale-col-money {
   text-align: right;
 }
 
-/* Keep By SKU table within the page width as well */
-.sales-sku-report .sales-sku-table:not(.sales-detail-table) {
+/* By SKU table — keep header + cell alignment in sync */
+.sales-sku-report .sales-sku-table.sales-by-sku-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 860px;
+  max-width: 100%;
+  border-collapse: collapse;
+}
+
+.sales-sku-report .sales-by-sku-table th,
+.sales-sku-report .sales-by-sku-table td {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  padding: 0.55rem 0.65rem;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+.sales-sku-report .sales-by-sku-table .sku-col-product { width: 28%; }
+.sales-sku-report .sales-by-sku-table .sku-col-category { width: 12%; }
+.sales-sku-report .sales-by-sku-table .sku-col-subcategory { width: 12%; }
+.sales-sku-report .sales-by-sku-table .sku-col-hsn { width: 10%; }
+.sales-sku-report .sales-by-sku-table .sku-col-qty { width: 9%; }
+.sales-sku-report .sales-by-sku-table .sku-col-price { width: 11%; }
+.sales-sku-report .sales-by-sku-table .sku-col-revenue { width: 11%; }
+.sales-sku-report .sales-by-sku-table .sku-col-orders { width: 7%; }
+
+.sales-sku-report .sales-by-sku-table th.num,
+.sales-sku-report .sales-by-sku-table td.num {
+  text-align: right;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.sales-sku-report .sales-sku-table:not(.sales-detail-table):not(.sales-by-sku-table) {
   table-layout: fixed;
   width: 100%;
   min-width: 0;
   max-width: 100%;
 }
 
-.sales-sku-report .sales-sku-table:not(.sales-detail-table) th,
-.sales-sku-report .sales-sku-table:not(.sales-detail-table) td {
+.sales-sku-report .sales-sku-table:not(.sales-detail-table):not(.sales-by-sku-table) th,
+.sales-sku-report .sales-sku-table:not(.sales-detail-table):not(.sales-by-sku-table) td {
   white-space: normal;
   word-break: break-word;
   overflow-wrap: anywhere;
-  padding: 0.5rem 0.45rem;
+  padding: 0.55rem 0.65rem;
 }
 
-.sales-sku-report .sales-sku-table:not(.sales-detail-table) td.num,
-.sales-sku-report .sales-sku-table:not(.sales-detail-table) th:nth-child(n + 5) {
+.sales-sku-report .sales-sku-table:not(.sales-detail-table):not(.sales-by-sku-table) td.num,
+.sales-sku-report .sales-sku-table:not(.sales-detail-table):not(.sales-by-sku-table) th:nth-child(n + 5) {
   white-space: nowrap;
+  text-align: right;
 }
 
 .sales-sku-report .btn-delete,

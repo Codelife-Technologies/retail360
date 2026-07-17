@@ -10,6 +10,9 @@ const {
   monthKey,
   SALES_CHANNELS_COMPARE,
 } = require('../utils/constants');
+const { getRates, rateToInr, convertAmount } = require('../../currency/services/exchangeRateService');
+const { currencyForCountry, BASE_CURRENCY } = require('../../currency/constants');
+const { resolveSaleCurrency } = require('../../currency/utils/saleCurrency');
 
 let PayrollModel = null;
 try {
@@ -18,9 +21,156 @@ try {
   PayrollModel = null;
 }
 
+function resolveTxnInr(doc, amount, defaultCurrency = BASE_CURRENCY, rates) {
+  const currency = String(doc.currency || defaultCurrency).toUpperCase();
+  const original =
+    doc.originalAmount != null ? Number(doc.originalAmount) : Number(amount) || 0;
+  if (Number(doc.exchangeRateToInr) > 0) {
+    return {
+      currency,
+      originalAmount: original,
+      exchangeRateToInr: Number(doc.exchangeRateToInr),
+      amountInr: original * Number(doc.exchangeRateToInr),
+    };
+  }
+  const rate = rateToInr(currency, rates);
+  return {
+    currency,
+    originalAmount: original,
+    exchangeRateToInr: rate,
+    amountInr: original * rate,
+  };
+}
+
+function withSaleInr(sale, rates) {
+  const currency = resolveSaleCurrency(sale);
+  const original =
+    sale.originalAmount != null ? Number(sale.originalAmount) : Number(sale.total) || 0;
+  // Prefer live/location-resolved rate when stored currency disagrees (legacy AED hardcode).
+  const storedCurrency = String(sale.currency || '').toUpperCase();
+  const useStoredRate =
+    Number(sale.exchangeRateToInr) > 0 && storedCurrency === currency;
+  const rate = useStoredRate
+    ? Number(sale.exchangeRateToInr)
+    : rateToInr(currency, rates);
+  const fx = {
+    currency,
+    originalAmount: original,
+    exchangeRateToInr: rate,
+    amountInr: original * rate,
+  };
+
+  const items = (sale.items || []).map((item) => ({
+    ...item,
+    unitPrice: (Number(item.unitPrice) || 0) * rate,
+    total: (Number(item.total) || 0) * rate,
+  }));
+
+  return {
+    ...sale,
+    currency,
+    total: fx.amountInr,
+    tax: (Number(sale.tax) || 0) * rate,
+    discount: (Number(sale.discount) || 0) * rate,
+    subtotal: (Number(sale.subtotal) || 0) * rate,
+    items,
+    _fx: fx,
+  };
+}
+
+function withPurchaseInr(p, rates) {
+  const fx = resolveTxnInr(p, p.total, p.currency || BASE_CURRENCY, rates);
+  return { ...p, total: fx.amountInr, _fx: fx };
+}
+
+function withExpenseInr(e, rates) {
+  const amt = (Number(e.amount) || 0) + (Number(e.gst) || 0);
+  const fx = resolveTxnInr(
+    {
+      ...e,
+      originalAmount:
+        e.originalAmount != null ? e.originalAmount : amt,
+    },
+    amt,
+    e.currency || BASE_CURRENCY,
+    rates
+  );
+  // Keep amount/gst split proportional in INR for category sums
+  const base = (Number(e.amount) || 0) + (Number(e.gst) || 0);
+  const share = base > 0 ? (Number(e.amount) || 0) / base : 1;
+  return {
+    ...e,
+    amount: fx.amountInr * share,
+    gst: fx.amountInr * (1 - share),
+    _fx: fx,
+  };
+}
+
+function withIncomeInr(i, rates) {
+  const amt = (Number(i.amount) || 0) + (Number(i.gst) || 0);
+  const fx = resolveTxnInr(
+    {
+      ...i,
+      originalAmount: i.originalAmount != null ? i.originalAmount : Number(i.amount) || 0,
+    },
+    Number(i.amount) || 0,
+    i.currency || BASE_CURRENCY,
+    rates
+  );
+  const gstFx = resolveTxnInr(
+    { ...i, originalAmount: i.gst, exchangeRateToInr: fx.exchangeRateToInr },
+    i.gst,
+    i.currency || BASE_CURRENCY,
+    rates
+  );
+  return {
+    ...i,
+    amount: fx.amountInr,
+    gst: gstFx.amountInr,
+    _fx: fx,
+  };
+}
+
+function buildCountryBreakdown(salesInr, rates) {
+  const map = new Map();
+  salesInr.forEach((s) => {
+    const country =
+      s.salesChannel?.country ||
+      s.salesLocation?.location?.country ||
+      (String(s.currency || '').toUpperCase() === 'AED' ? 'UAE' : 'India');
+    const localCurrency = currencyForCountry(country);
+    const key = String(country);
+    if (!map.has(key)) {
+      map.set(key, {
+        country: key,
+        currency: localCurrency,
+        orders: 0,
+        amountLocal: 0,
+        amountInr: 0,
+      });
+    }
+    const row = map.get(key);
+    row.orders += 1;
+    row.amountInr += Number(s.total) || 0;
+    if (String(s._fx?.currency || s.currency || '').toUpperCase() === localCurrency) {
+      row.amountLocal += Number(s._fx?.originalAmount) || 0;
+    } else {
+      row.amountLocal += convertAmount(Number(s.total) || 0, BASE_CURRENCY, localCurrency, rates);
+    }
+  });
+  return Array.from(map.values())
+    .map((r) => ({
+      ...r,
+      amountLocal: Math.round(r.amountLocal * 100) / 100,
+      amountInr: Math.round(r.amountInr),
+      amountUsd: Math.round(convertAmount(r.amountInr, BASE_CURRENCY, 'USD', rates) * 100) / 100,
+    }))
+    .sort((a, b) => b.amountInr - a.amountInr);
+}
+
 async function getPriceMap() {
   const prices = await Price.find({ isActive: { $ne: false } })
-    .select('product purchasePrice salesPrice effectiveDate')
+    .select('product purchasePrice salesPrice effectiveDate currency')
     .sort({ effectiveDate: -1 })
     .lean();
   const map = new Map();
@@ -31,8 +181,46 @@ async function getPriceMap() {
   return map;
 }
 
-function sumBy(arr, field) {
-  return arr.reduce((acc, row) => acc + (Number(row[field]) || 0), 0);
+function purchaseUnitCostInr(priceDoc, rates) {
+  if (!priceDoc) return 0;
+  const amount = Number(priceDoc.purchasePrice) || 0;
+  const currency = String(priceDoc.currency || BASE_CURRENCY).toUpperCase();
+  if (currency === BASE_CURRENCY) return amount;
+  return amount * rateToInr(currency, rates);
+}
+
+function computeProductProfits(sales, priceMap, rates) {
+  const bySku = new Map();
+  sales.forEach((sale) => {
+    (sale.items || []).forEach((item) => {
+      const product = item.product;
+      if (!product) return;
+      const id = String(product._id || product);
+      const sku = product.sku || id;
+      const name = product.name || 'Product';
+      const revenue = Number(item.total) || 0;
+      const qty = Number(item.quantity) || 0;
+      const unitCost = purchaseUnitCostInr(priceMap.get(id), rates);
+      const cost = unitCost * qty;
+      if (!bySku.has(id)) {
+        bySku.set(id, { sku, product: name, revenue: 0, cost: 0, qty: 0 });
+      }
+      const row = bySku.get(id);
+      row.revenue += revenue;
+      row.cost += cost;
+      row.qty += qty;
+    });
+  });
+
+  return Array.from(bySku.values()).map((row) => {
+    const profit = row.revenue - row.cost;
+    return {
+      ...row,
+      profit,
+      loss: profit < 0 ? Math.abs(profit) : 0,
+      marginPct: pct(profit, row.revenue),
+    };
+  });
 }
 
 async function loadSales(dateFrom, dateTo, extra = {}) {
@@ -41,7 +229,12 @@ async function loadSales(dateFrom, dateTo, extra = {}) {
     ...extra,
   };
   return Sale.find(query)
-    .populate('salesChannel', 'name code type')
+    .populate('salesChannel', 'name code type country defaultCurrency')
+    .populate({
+      path: 'salesLocation',
+      select: 'name code location country currency',
+      populate: { path: 'location', select: 'name country city' },
+    })
     .populate('items.product', 'sku name category')
     .sort({ salesDate: -1 })
     .lean();
@@ -50,6 +243,7 @@ async function loadSales(dateFrom, dateTo, extra = {}) {
 async function loadPurchases(dateFrom, dateTo) {
   return Purchase.find(buildDateQuery('purchaseDate', dateFrom, dateTo))
     .populate('supplier', 'name')
+    .populate('location', 'name country city')
     .sort({ purchaseDate: -1 })
     .lean();
 }
@@ -83,38 +277,8 @@ async function loadPayrollExpense(dateFrom, dateTo) {
   return sumBy(rows, 'netSalary');
 }
 
-function computeProductProfits(sales, priceMap) {
-  const bySku = new Map();
-  sales.forEach((sale) => {
-    (sale.items || []).forEach((item) => {
-      const product = item.product;
-      if (!product) return;
-      const id = String(product._id || product);
-      const sku = product.sku || id;
-      const name = product.name || 'Product';
-      const revenue = Number(item.total) || 0;
-      const qty = Number(item.quantity) || 0;
-      const unitCost = Number(priceMap.get(id)?.purchasePrice) || 0;
-      const cost = unitCost * qty;
-      if (!bySku.has(id)) {
-        bySku.set(id, { sku, product: name, revenue: 0, cost: 0, qty: 0 });
-      }
-      const row = bySku.get(id);
-      row.revenue += revenue;
-      row.cost += cost;
-      row.qty += qty;
-    });
-  });
-
-  return Array.from(bySku.values()).map((row) => {
-    const profit = row.revenue - row.cost;
-    return {
-      ...row,
-      profit,
-      loss: profit < 0 ? Math.abs(profit) : 0,
-      marginPct: pct(profit, row.revenue),
-    };
-  });
+function sumBy(arr, field) {
+  return arr.reduce((acc, row) => acc + (Number(row[field]) || 0), 0);
 }
 
 function buildMonthlySeries(sales, expenses, purchases) {
@@ -229,7 +393,10 @@ async function getFinanceSnapshot(query = {}) {
   if (query.salesChannel) saleFilter.salesChannel = query.salesChannel;
   if (query.paymentStatus) saleFilter.paymentStatus = query.paymentStatus;
 
-  const [sales, purchases, expenses, otherIncome, priceMap, payrollExpense] = await Promise.all([
+  const ratesPayload = await getRates();
+  const rates = ratesPayload.rates;
+
+  const [salesRaw, purchasesRaw, expensesRaw, otherIncomeRaw, priceMap, payrollExpense] = await Promise.all([
     loadSales(dateFrom, dateTo, saleFilter),
     loadPurchases(dateFrom, dateTo),
     loadExpenses(dateFrom, dateTo, query),
@@ -237,6 +404,12 @@ async function getFinanceSnapshot(query = {}) {
     getPriceMap(),
     loadPayrollExpense(dateFrom, dateTo),
   ]);
+
+  const sales = salesRaw.map((s) => withSaleInr(s, rates));
+  const purchases = purchasesRaw.map((p) => withPurchaseInr(p, rates));
+  const expenses = expensesRaw.map((e) => withExpenseInr(e, rates));
+  const otherIncome = otherIncomeRaw.map((i) => withIncomeInr(i, rates));
+  const countryBreakdown = buildCountryBreakdown(sales, rates);
 
   const productSales = sumBy(sales, 'total');
   const gstCollected = sumBy(sales, 'tax');
@@ -252,7 +425,7 @@ async function getFinanceSnapshot(query = {}) {
   const netRevenue = grossRevenue - discountTotal;
   const purchaseCost = sumBy(purchases, 'total');
 
-  const products = computeProductProfits(sales, priceMap);
+  const products = computeProductProfits(sales, priceMap, rates);
   const cogs = products.reduce((a, p) => a + p.cost, 0) || purchaseCost;
 
   const recordedExpenses = expenses.reduce(
@@ -318,7 +491,7 @@ async function getFinanceSnapshot(query = {}) {
     })),
   ]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 12);
+    .slice(0, 10);
 
   const insights = buildInsights({
     monthly,
@@ -331,6 +504,16 @@ async function getFinanceSnapshot(query = {}) {
 
   return {
     filters: { dateFrom, dateTo },
+    exchangeRates: {
+      base: ratesPayload.base,
+      rates,
+      source: ratesPayload.source,
+      fetchedAt: ratesPayload.fetchedAt,
+      nextRefreshAt: ratesPayload.nextRefreshAt,
+      refreshMinutes: ratesPayload.refreshMinutes,
+    },
+    reportingCurrency: BASE_CURRENCY,
+    countryBreakdown,
     kpis: {
       totalRevenue: Math.round(grossRevenue),
       totalExpenses: Math.round(totalExpenses),
@@ -340,6 +523,12 @@ async function getFinanceSnapshot(query = {}) {
       netMarginPct: pct(netProfit, netRevenue || grossRevenue),
       totalOrders: sales.length,
       totalPurchaseCost: Math.round(purchaseCost),
+      // Dual display helpers (INR primary; USD secondary)
+      totalRevenueUsd: Math.round(convertAmount(grossRevenue, BASE_CURRENCY, 'USD', rates) * 100) / 100,
+      totalExpensesUsd: Math.round(convertAmount(totalExpenses, BASE_CURRENCY, 'USD', rates) * 100) / 100,
+      grossProfitUsd: Math.round(convertAmount(grossProfit, BASE_CURRENCY, 'USD', rates) * 100) / 100,
+      netProfitUsd: Math.round(convertAmount(netProfit, BASE_CURRENCY, 'USD', rates) * 100) / 100,
+      totalPurchaseCostUsd: Math.round(convertAmount(purchaseCost, BASE_CURRENCY, 'USD', rates) * 100) / 100,
     },
     incomeCards: {
       grossRevenue: Math.round(grossRevenue),

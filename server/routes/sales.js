@@ -10,6 +10,7 @@ const { computeCategoryTax } = require('../utils/taxRates');
 const { isUaeSalesLocation } = require('../utils/locationCurrency');
 const { deductSaleStockItems, restoreSaleStockItems } = require('../utils/saleStockUtils');
 const { requireAdminOrRole } = require('../middleware/auth');
+const { resolveSaleCurrency } = require('../currency/utils/saleCurrency');
 const {
   SKU_COLUMN_KEYS,
   QUANTITY_COLUMN_KEYS,
@@ -23,8 +24,6 @@ const {
 
 const adminOnlyAccess = requireAdminOrRole('admin');
 
-const SALES_CURRENCY = 'AED';
-
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }
@@ -32,9 +31,34 @@ const upload = multer({
 
 const SALES_LOCATION_POPULATE = {
   path: 'salesLocation',
-  select: 'name code',
+  select: 'name code salesChannels country currency',
   populate: { path: 'location', select: 'name code city country' },
 };
+
+function locationHasChannel(salesLocation, salesChannelId) {
+  if (!salesLocation || !salesChannelId) return false;
+  const channelId = String(salesChannelId);
+  const channels = salesLocation.salesChannels || [];
+  return channels.some((ch) => String(ch?._id || ch) === channelId);
+}
+
+function assertChannelBelongsToLocation(salesLocation, salesChannelId) {
+  if (!locationHasChannel(salesLocation, salesChannelId)) {
+    throw new Error('Selected sales channel is not linked to this sales location');
+  }
+}
+
+async function resolveCurrencyForSaleRefs(salesChannelId, salesLocationDoc) {
+  const SalesChannel = require('../models/SalesChannel');
+  const channel =
+    salesChannelId && typeof salesChannelId === 'object' && salesChannelId.defaultCurrency != null
+      ? salesChannelId
+      : await SalesChannel.findById(salesChannelId).select('country defaultCurrency').lean();
+  return resolveSaleCurrency({
+    salesChannel: channel,
+    salesLocation: salesLocationDoc,
+  });
+}
 
 async function loadProductsForItems(items) {
   const Product = require('../models/Product');
@@ -127,6 +151,8 @@ async function buildSalePayloadFromImportGroup(entries, importContext = {}) {
     throw new Error(`Sales Location code '${locationCode}' not found`);
   }
 
+  assertChannelBelongsToLocation(salesLocation, channel._id);
+
   const items = [];
   const productDocs = [];
   const rowErrors = [];
@@ -208,7 +234,10 @@ async function buildSalePayloadFromImportGroup(entries, importContext = {}) {
     ? parseExcelNumber(taxCell) || 0
     : computeSaleTax(salesLocation, mergedItems, mergedProductDocs, { defaultTaxRate });
   const taxFinal = isUaeSalesLocation(salesLocation) ? 0 : tax;
-  const currency = SALES_CURRENCY;
+  const currency = resolveSaleCurrency({
+    salesChannel: channel,
+    salesLocation,
+  });
   const salesDate = parseImportSaleDate(first['Sales Date (YYYY-MM-DD)'] || first['Sales Date']);
 
   return {
@@ -311,7 +340,7 @@ router.get('/', async (req, res) => {
     
     // Apply populate
     salesQuery = salesQuery
-      .populate('salesChannel', 'name code type')
+      .populate('salesChannel', 'name code type country defaultCurrency')
       .populate(SALES_LOCATION_POPULATE)
       .populate({
         path: 'items.product',
@@ -412,7 +441,7 @@ router.get('/template', (req, res) => {
         tax: '',
         paymentStatus: 'pending',
         orderStatus: 'pending',
-        notes: 'Rows with the same Sale Reference become one sale. Tax auto-calculates from category if Tax is blank (Brass/Copper 12%, Gemstone 5%). Currency is AED.'
+        notes: 'Rows with the same Sale Reference become one sale. Tax auto-calculates from category if Tax is blank (Brass/Copper 12%, Gemstone 5%). Currency follows the sales channel country (e.g. INR for India, AED for UAE).'
       },
       {
         saleRef: 'ORDER-1',
@@ -614,7 +643,7 @@ router.get('/:id', async (req, res) => {
   }
   try {
     const sale = await Sale.findById(req.params.id)
-      .populate('salesChannel', 'name code type')
+      .populate('salesChannel', 'name code type country defaultCurrency')
       .populate(SALES_LOCATION_POPULATE)
       .populate('items.product', 'name title sku images parentSkuOrAsin variation');
     if (!sale) {
@@ -644,6 +673,11 @@ router.post('/', async (req, res) => {
     if (!salesLocation || !salesLocation.location) {
       return res.status(400).json({ error: 'Invalid sales location' });
     }
+    try {
+      assertChannelBelongsToLocation(salesLocation, req.body.salesChannel);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
 
     const productDocs = await loadProductsForItems(items);
     const subtotal = items.reduce((sum, item) => sum + item.total, 0);
@@ -654,11 +688,12 @@ router.post('/', async (req, res) => {
       taxOverride: req.body.tax,
     });
     const total = subtotal - discount + tax;
+    const currency = await resolveCurrencyForSaleRefs(req.body.salesChannel, salesLocation);
 
     const saleData = {
       ...req.body,
       items,
-      currency: SALES_CURRENCY,
+      currency,
       subtotal,
       discount,
       defaultTaxRate,
@@ -671,7 +706,7 @@ router.post('/', async (req, res) => {
     await sale.save();
     
     const populatedSale = await Sale.findById(sale._id)
-      .populate('salesChannel', 'name code type')
+      .populate('salesChannel', 'name code type country defaultCurrency')
       .populate(SALES_LOCATION_POPULATE)
       .populate('items.product', 'name title sku images parentSkuOrAsin variation');
     
@@ -711,6 +746,13 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Invalid sales location' });
     }
 
+    const channelId = req.body.salesChannel || existingSale.salesChannel;
+    try {
+      assertChannelBelongsToLocation(salesLocation, channelId);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+
     if (req.body.items) {
       const warehouseLocation = salesLocation.location._id || salesLocation.location;
       
@@ -740,12 +782,13 @@ router.put('/:id', async (req, res) => {
       taxOverride: req.body.tax,
     });
     const total = subtotal - discount + tax;
+    const currency = await resolveCurrencyForSaleRefs(channelId, salesLocation);
 
     const sale = await Sale.findByIdAndUpdate(
       req.params.id,
       {
         ...req.body,
-        currency: SALES_CURRENCY,
+        currency,
         subtotal,
         discount,
         defaultTaxRate,
@@ -754,7 +797,7 @@ router.put('/:id', async (req, res) => {
       },
       { new: true, runValidators: true }
     )
-      .populate('salesChannel', 'name code type')
+      .populate('salesChannel', 'name code type country defaultCurrency')
       .populate(SALES_LOCATION_POPULATE)
       .populate('items.product', 'name title sku images parentSkuOrAsin variation');
     

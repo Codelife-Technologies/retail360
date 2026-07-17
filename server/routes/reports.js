@@ -10,6 +10,9 @@ const {
   aggregateReplenishSalesMonthly,
   aggregateReplenishSalesDaily,
 } = require('../utils/replenishReportUtils');
+const { getRates, rateToInr, convertAmount } = require('../currency/services/exchangeRateService');
+const { currencyForCountry, BASE_CURRENCY } = require('../currency/constants');
+const { resolveSaleCurrency } = require('../currency/utils/saleCurrency');
 
 /** Calendar month grouping for sales reports (aligns with dashboard date ranges). */
 const SALES_REPORT_TIMEZONE = process.env.SALES_REPORT_TIMEZONE || 'Asia/Kolkata';
@@ -44,20 +47,91 @@ function endOfDay(date = new Date()) {
   return d;
 }
 
-function computeSaleStats(sales = []) {
+function saleAmountInr(sale, rates) {
+  const currency = resolveSaleCurrency(sale);
+  const original =
+    sale.originalAmount != null ? Number(sale.originalAmount) : Number(sale.total) || 0;
+  const storedCurrency = String(sale.currency || '').toUpperCase();
+  if (
+    Number(sale.exchangeRateToInr) > 0 &&
+    storedCurrency === currency
+  ) {
+    return original * Number(sale.exchangeRateToInr);
+  }
+  if (!rates) return original;
+  return original * rateToInr(currency, rates);
+}
+
+function computeSaleStats(sales = [], rates = null) {
   const totalSales = sales.length;
   const totalRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
+  const totalRevenueInr = rates
+    ? sales.reduce((sum, s) => sum + saleAmountInr(s, rates), 0)
+    : totalRevenue;
   const totalItemsSold = sales.reduce(
     (sum, s) => sum + s.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0),
     0
   );
-  const averageOrderValue = totalSales > 0 ? totalRevenue / totalSales : 0;
+  const averageOrderValue = totalSales > 0 ? totalRevenueInr / totalSales : 0;
+  const totalRevenueUsd = rates
+    ? convertAmount(totalRevenueInr, BASE_CURRENCY, 'USD', rates)
+    : totalRevenueInr;
   return {
     totalSales,
     totalRevenue: Math.round(totalRevenue * 100) / 100,
+    totalRevenueInr: Math.round(totalRevenueInr * 100) / 100,
+    totalRevenueUsd: Math.round(totalRevenueUsd * 100) / 100,
     totalItemsSold,
     averageOrderValue: Math.round(averageOrderValue * 100) / 100,
+    averageOrderValueUsd: rates
+      ? Math.round(convertAmount(averageOrderValue, BASE_CURRENCY, 'USD', rates) * 100) / 100
+      : Math.round(averageOrderValue * 100) / 100,
   };
+}
+
+function buildCountrySalesBreakdown(sales = [], rates = null) {
+  const map = new Map();
+  sales.forEach((s) => {
+    const currency = resolveSaleCurrency(s);
+    const country =
+      s.salesChannel?.country ||
+      s.salesLocation?.location?.country ||
+      (currency === 'AED' ? 'UAE' : 'India');
+    const localCurrency = currencyForCountry(country);
+    const key = String(country);
+    if (!map.has(key)) {
+      map.set(key, {
+        country: key,
+        currency: localCurrency,
+        orders: 0,
+        amountLocal: 0,
+        amountInr: 0,
+      });
+    }
+    const row = map.get(key);
+    row.orders += 1;
+    const inr = saleAmountInr(s, rates);
+    row.amountInr += inr;
+    const original =
+      s.originalAmount != null ? Number(s.originalAmount) : Number(s.total) || 0;
+    if (currency === localCurrency) {
+      row.amountLocal += original;
+    } else if (rates) {
+      row.amountLocal += convertAmount(inr, BASE_CURRENCY, localCurrency, rates);
+    } else {
+      row.amountLocal += original;
+    }
+  });
+  return Array.from(map.values())
+    .map((r) => ({
+      ...r,
+      amountLocal: Math.round(r.amountLocal * 100) / 100,
+      amountInr: Math.round(r.amountInr * 100) / 100,
+      amountUsd: rates
+        ? Math.round(convertAmount(r.amountInr, BASE_CURRENCY, 'USD', rates) * 100) / 100
+        : Math.round(r.amountInr * 100) / 100,
+    }))
+    .sort((a, b) => b.amountInr - a.amountInr);
 }
 
 function computeBusinessReportStats(sales = []) {
@@ -295,18 +369,18 @@ function subtractCalendarMonth(date) {
   return startOfDay(d);
 }
 
-function salesTotalsByDateKey(sales) {
+function salesTotalsByDateKey(sales, rates = null) {
   const map = {};
   sales.forEach((sale) => {
     const key = toDateInputStr(startOfDay(new Date(sale.salesDate)));
     if (!map[key]) map[key] = { revenue: 0, orders: 0 };
-    map[key].revenue += sale.total || 0;
+    map[key].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
     map[key].orders += 1;
   });
   return map;
 }
 
-function salesTotalsByHourKey(sales, dayStart) {
+function salesTotalsByHourKey(sales, dayStart, rates = null) {
   const map = {};
   const dayKey = toDateInputStr(startOfDay(dayStart));
   sales.forEach((sale) => {
@@ -314,7 +388,7 @@ function salesTotalsByHourKey(sales, dayStart) {
     if (toDateInputStr(startOfDay(saleDate)) !== dayKey) return;
     const hour = saleDate.getHours();
     if (!map[hour]) map[hour] = { revenue: 0, orders: 0 };
-    map[hour].revenue += sale.total || 0;
+    map[hour].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
     map[hour].orders += 1;
   });
   return map;
@@ -466,14 +540,14 @@ function buildIndexedComparison(
   previousSales,
   currentRange,
   previousRange,
-  { period = 'month', allSales = [] } = {}
+  { period = 'month', allSales = [], rates = null } = {}
 ) {
   const usePreviousMonthAlignment =
     period !== 'day' && period !== 'allTime' && period !== 'all-time';
   const salesForLookup = allSales.length ? allSales : [...currentSales, ...previousSales];
 
   if (usePreviousMonthAlignment) {
-    const byDate = salesTotalsByDateKey(salesForLookup);
+    const byDate = salesTotalsByDateKey(salesForLookup, rates);
     const maxIndex = maxBucketIndex(currentRange.start, currentRange.end, timeline);
 
     return Array.from({ length: maxIndex + 1 }, (_, index) => {
@@ -494,8 +568,8 @@ function buildIndexedComparison(
   }
 
   if (period === 'day' && timeline === 'hour') {
-    const currentByHour = salesTotalsByHourKey(currentSales, currentRange.start);
-    const previousByHour = salesTotalsByHourKey(previousSales, previousRange.start);
+    const currentByHour = salesTotalsByHourKey(currentSales, currentRange.start, rates);
+    const previousByHour = salesTotalsByHourKey(previousSales, previousRange.start, rates);
     const maxIndex = maxBucketIndex(currentRange.start, currentRange.end, timeline);
 
     return Array.from({ length: maxIndex + 1 }, (_, index) => {
@@ -517,14 +591,14 @@ function buildIndexedComparison(
   currentSales.forEach((sale) => {
     const idx = bucketIndexForDate(sale.salesDate, currentRange.start, timeline);
     if (!currentAgg[idx]) currentAgg[idx] = { revenue: 0, orders: 0 };
-    currentAgg[idx].revenue += sale.total || 0;
+    currentAgg[idx].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
     currentAgg[idx].orders += 1;
   });
 
   previousSales.forEach((sale) => {
     const idx = bucketIndexForDate(sale.salesDate, previousRange.start, timeline);
     if (!previousAgg[idx]) previousAgg[idx] = { revenue: 0, orders: 0 };
-    previousAgg[idx].revenue += sale.total || 0;
+    previousAgg[idx].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
     previousAgg[idx].orders += 1;
   });
 
@@ -543,7 +617,7 @@ function buildIndexedComparison(
   });
 }
 
-function buildComparisonChart(period, currentSales, previousSales, currentRange, previousRange, requestedTimeline, allSales = []) {
+function buildComparisonChart(period, currentSales, previousSales, currentRange, previousRange, requestedTimeline, allSales = [], rates = null) {
   const timeline = resolveChartTimeline(period, currentRange, requestedTimeline);
   const chart = buildIndexedComparison(
     timeline,
@@ -551,12 +625,12 @@ function buildComparisonChart(period, currentSales, previousSales, currentRange,
     previousSales,
     currentRange,
     previousRange,
-    { period, allSales }
+    { period, allSales, rates }
   );
   return { timeline, chart };
 }
 
-function buildChannelBreakdown(sales) {
+function buildChannelBreakdown(sales, rates = null) {
   const channelMap = {};
   sales.forEach((sale) => {
     const channelId = sale.salesChannel?._id || sale.salesChannel || 'unknown';
@@ -564,7 +638,9 @@ function buildChannelBreakdown(sales) {
     if (!channelMap[channelId]) {
       channelMap[channelId] = { name, revenue: 0, orders: 0 };
     }
-    channelMap[channelId].revenue += sale.total || 0;
+    channelMap[channelId].revenue += rates
+      ? saleAmountInr(sale, rates)
+      : (sale.total || 0);
     channelMap[channelId].orders += 1;
   });
 
@@ -835,7 +911,7 @@ function groupData(data, groupBy, dateField = 'salesDate', isSales = true) {
 }
 
 function buildSaleFilterQuery(query = {}) {
-  const { startDate, endDate, salesChannel, salesLocation, paymentStatus, orderStatus } = query;
+  const { startDate, endDate, salesChannel, salesLocation, paymentStatus, orderStatus, search } = query;
   const saleMatch = {};
 
   if (salesChannel) {
@@ -849,6 +925,15 @@ function buildSaleFilterQuery(query = {}) {
 
   const dateQuery = buildDateQuery(startDate, endDate);
   if (dateQuery) saleMatch.salesDate = dateQuery;
+
+  const term = String(search || '').trim();
+  if (term) {
+    saleMatch.$or = [
+      { salesNumber: { $regex: term, $options: 'i' } },
+      { amazonOrderId: { $regex: term, $options: 'i' } },
+      { 'customer.name': { $regex: term, $options: 'i' } },
+    ];
+  }
 
   return saleMatch;
 }
@@ -970,8 +1055,8 @@ async function fetchSalesDetailedReport(filters = {}) {
       limit: limit || 25,
       sort: mongoSort,
       populate: [
-        { path: 'salesChannel', select: 'name code' },
-        { path: 'salesLocation', select: 'name code' },
+        { path: 'salesChannel', select: 'name code country defaultCurrency' },
+        { path: 'salesLocation', select: 'name code country currency' },
         { path: 'items.product', select: 'name title sku images parentSkuOrAsin variation' },
       ],
     });
@@ -982,8 +1067,8 @@ async function fetchSalesDetailedReport(filters = {}) {
   }
 
   let sales = await Sale.find(query)
-    .populate('salesChannel', 'name code')
-    .populate('salesLocation', 'name code')
+    .populate('salesChannel', 'name code country defaultCurrency')
+    .populate('salesLocation', 'name code country currency')
     .populate('items.product', 'name title sku images parentSkuOrAsin variation')
     .sort(resolveMongoSalesSort(sortBy === 'channel' ? 'salesDate' : sortBy, sortDir))
     .lean();
@@ -1500,20 +1585,27 @@ router.get('/sales/dashboard', async (req, res) => {
       ...baseQuery,
       salesDate: { $gte: fetchStart },
     })
-      .populate('salesChannel', 'name code')
-      .populate('salesLocation', 'name code')
+      .populate('salesChannel', 'name code country defaultCurrency')
+      .populate({
+        path: 'salesLocation',
+        select: 'name code location country currency',
+        populate: { path: 'location', select: 'name country city' },
+      })
       .populate('items.product', 'name title sku images parentSkuOrAsin variation')
       .sort({ salesDate: -1 });
+
+    const ratesPayload = await getRates();
+    const rates = ratesPayload.rates;
 
     const currentSales = filterSalesInRange(sales, currentRange.start, currentRange.end);
     const previousSales = filterSalesInRange(sales, previousRange.start, previousRange.end);
 
-    const currentPeriod = computeSaleStats(currentSales);
-    const previousPeriod = computeSaleStats(previousSales);
+    const currentPeriod = computeSaleStats(currentSales, rates);
+    const previousPeriod = computeSaleStats(previousSales, rates);
 
     const change = {
       totalSales: pctChange(currentPeriod.totalSales, previousPeriod.totalSales),
-      totalRevenue: pctChange(currentPeriod.totalRevenue, previousPeriod.totalRevenue),
+      totalRevenue: pctChange(currentPeriod.totalRevenueInr, previousPeriod.totalRevenueInr),
       totalItemsSold: pctChange(currentPeriod.totalItemsSold, previousPeriod.totalItemsSold),
       averageOrderValue: pctChange(currentPeriod.averageOrderValue, previousPeriod.averageOrderValue),
     };
@@ -1525,7 +1617,8 @@ router.get('/sales/dashboard', async (req, res) => {
       currentRange,
       previousRange,
       chartTimeline,
-      sales
+      sales,
+      rates
     );
 
     res.json({
@@ -1541,17 +1634,25 @@ router.get('/sales/dashboard', async (req, res) => {
         start: toDateInputStr(previousRange.start),
         end: toDateInputStr(previousRange.end),
       },
+      exchangeRates: {
+        base: ratesPayload.base,
+        rates,
+        source: ratesPayload.source,
+        fetchedAt: ratesPayload.fetchedAt,
+        nextRefreshAt: ratesPayload.nextRefreshAt,
+      },
       overview: {
-        today: computeSaleStats(filterSalesInRange(sales, startOfDay(now), endOfDay(now))),
-        thisWeek: computeSaleStats(filterSalesInRange(sales, startOfDay(weekStart), endOfDay(now))),
-        thisMonth: computeSaleStats(filterSalesInRange(sales, startOfDay(monthStart), endOfDay(now))),
-        thisYear: computeSaleStats(filterSalesInRange(sales, startOfDay(yearStart), endOfDay(now))),
+        today: computeSaleStats(filterSalesInRange(sales, startOfDay(now), endOfDay(now)), rates),
+        thisWeek: computeSaleStats(filterSalesInRange(sales, startOfDay(weekStart), endOfDay(now)), rates),
+        thisMonth: computeSaleStats(filterSalesInRange(sales, startOfDay(monthStart), endOfDay(now)), rates),
+        thisYear: computeSaleStats(filterSalesInRange(sales, startOfDay(yearStart), endOfDay(now)), rates),
       },
       currentPeriod,
       previousPeriod,
       change,
       comparisonChart: comparison.chart,
-      channelBreakdown: buildChannelBreakdown(currentSales),
+      channelBreakdown: buildChannelBreakdown(currentSales, rates),
+      countryBreakdown: buildCountrySalesBreakdown(currentSales, rates),
       businessReport: buildBusinessReport(sales, currentRange.start, currentRange.end, reportGroupBy),
       reportGroupBy: ['day', 'week', 'month'].includes(reportGroupBy) ? reportGroupBy : 'day',
     });
@@ -1576,8 +1677,8 @@ router.get('/sales/summary', async (req, res) => {
     if (dateQuery) query.salesDate = dateQuery;
     
     const sales = await Sale.find(query)
-      .populate('salesChannel', 'name code')
-      .populate('salesLocation', 'name code')
+      .populate('salesChannel', 'name code country defaultCurrency')
+      .populate('salesLocation', 'name code country currency')
       .populate('items.product', 'name title sku images parentSkuOrAsin variation')
       .sort({ salesDate: -1 });
     
@@ -1587,6 +1688,20 @@ router.get('/sales/summary', async (req, res) => {
     const totalItemsSold = sales.reduce((sum, s) => 
       sum + s.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0), 0
     );
+
+    let displayCurrency = 'INR';
+    if (salesChannel) {
+      const sample = sales[0];
+      displayCurrency = resolveSaleCurrency(sample) || 'INR';
+      if (!sample) {
+        const SalesChannel = require('../models/SalesChannel');
+        const ch = await SalesChannel.findById(salesChannel).select('country defaultCurrency').lean();
+        displayCurrency = resolveSaleCurrency({ salesChannel: ch }) || 'INR';
+      }
+    } else if (sales.length > 0) {
+      const currencies = new Set(sales.map((s) => resolveSaleCurrency(s)));
+      displayCurrency = currencies.size === 1 ? [...currencies][0] : 'INR';
+    }
     
     const groupedData = groupBy ? groupData(sales, groupBy, 'salesDate', true) : [];
     
@@ -1641,6 +1756,7 @@ router.get('/sales/summary', async (req, res) => {
       totalRevenue,
       averageOrderValue,
       totalItemsSold,
+      displayCurrency,
       groupedData,
       statistics: {
         topProducts,
@@ -1673,23 +1789,16 @@ router.get('/sales/detailed', async (req, res) => {
 // GET sales statistics
 router.get('/sales/statistics', async (req, res) => {
   try {
-    const { startDate, endDate, salesChannel, salesLocation } = req.query;
-    const query = {};
-    
-    if (salesChannel) query.salesChannel = salesChannel;
-    if (salesLocation) query.salesLocation = salesLocation;
-    
-    const dateQuery = buildDateQuery(startDate, endDate);
-    if (dateQuery) query.salesDate = dateQuery;
-    
+    const query = buildSaleFilterQuery(req.query);
+
     const sales = await Sale.find(query)
       .populate('salesChannel', 'name code')
       .populate('items.product', 'name title sku images parentSkuOrAsin variation');
-    
+
     const totalRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
     const totalSales = sales.length;
     const averageOrderValue = totalSales > 0 ? totalRevenue / totalSales : 0;
-    
+
     res.json({
       totalRevenue,
       totalSales,
@@ -2041,11 +2150,11 @@ async function buildReplenishReportData(query = {}) {
       salesLocationFilter.location = new mongoose.Types.ObjectId(location);
     }
     if (salesChannel) {
-      salesLocationFilter.salesChannel = new mongoose.Types.ObjectId(salesChannel);
+      salesLocationFilter.salesChannels = new mongoose.Types.ObjectId(salesChannel);
     }
     const salesLocations = await SalesLocation.find(salesLocationFilter)
       .populate('location', 'name code city country isActive')
-      .populate('salesChannel', 'name code')
+      .populate('salesChannels', 'name code')
       .sort({ name: 1 })
       .lean();
 
@@ -2120,11 +2229,16 @@ async function buildReplenishReportData(query = {}) {
         _id: salesLoc._id,
         name: salesLoc.name,
         code: salesLoc.code,
-        salesChannel: salesLoc.salesChannel
+        salesChannels: (salesLoc.salesChannels || []).map((ch) => ({
+          _id: ch._id,
+          name: ch.name,
+          code: ch.code,
+        })),
+        salesChannel: salesLoc.salesChannels?.[0]
           ? {
-              _id: salesLoc.salesChannel._id,
-              name: salesLoc.salesChannel.name,
-              code: salesLoc.salesChannel.code,
+              _id: salesLoc.salesChannels[0]._id,
+              name: salesLoc.salesChannels[0].name,
+              code: salesLoc.salesChannels[0].code,
             }
           : null,
         warehouse: {

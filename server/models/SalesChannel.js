@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { currencyForCountry } = require('../currency/constants');
 
 const salesChannelSchema = new mongoose.Schema({
   code: {
@@ -38,12 +39,14 @@ const salesChannelSchema = new mongoose.Schema({
   },
   country: {
     type: String,
+    required: true,
     trim: true,
     uppercase: true,
     maxlength: 2
   },
   defaultCurrency: {
     type: String,
+    required: true,
     trim: true,
     uppercase: true,
     maxlength: 3
@@ -53,22 +56,21 @@ const salesChannelSchema = new mongoose.Schema({
 });
 
 salesChannelSchema.pre('validate', function(next) {
-  if (this.type === 'marketplace') {
-    if (!this.country || !this.country.trim()) {
-      this.invalidate('country', 'Country is required for marketplace channels');
-    }
-    if (!this.defaultCurrency || !this.defaultCurrency.trim()) {
-      this.invalidate('defaultCurrency', 'Default currency is required for marketplace channels');
+  if (this.country) {
+    this.country = String(this.country).trim().toUpperCase().slice(0, 2);
+    if (!this.defaultCurrency) {
+      this.defaultCurrency = currencyForCountry(this.country);
+    } else {
+      this.defaultCurrency = String(this.defaultCurrency).trim().toUpperCase().slice(0, 3);
     }
   }
   next();
 });
 
-// Indexes
 salesChannelSchema.index({ code: 1 });
 salesChannelSchema.index({ name: 1 });
 salesChannelSchema.index({ type: 1 });
 salesChannelSchema.index({ isActive: 1 });
+salesChannelSchema.index({ country: 1 });
 
 module.exports = mongoose.model('SalesChannel', salesChannelSchema);
-

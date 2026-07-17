@@ -1,4 +1,5 @@
 import React from 'react';
+import { FIN_PERIOD_OPTIONS, formatFinPeriodLabel } from '../utils/financeUtils';
 
 export function FinanceKpiCard({ label, value, tone = 'info', loading }) {
   if (loading) return <div className="fin-skeleton-card" />;
@@ -24,71 +25,141 @@ export function FinanceFilters({
   const set = (key, value) => onChange({ ...filters, [key]: value });
 
   return (
-    <div className="fin-toolbar">
-      <input
-        type="date"
-        className="fin-input"
-        title="From"
-        value={filters.dateFrom || ''}
-        onChange={(e) => set('dateFrom', e.target.value)}
-      />
-      <input
-        type="date"
-        className="fin-input"
-        title="To"
-        value={filters.dateTo || ''}
-        onChange={(e) => set('dateTo', e.target.value)}
-      />
-      <input
-        type="month"
-        className="fin-input"
-        title="Month"
-        value={filters.month || ''}
-        onChange={(e) => set('month', e.target.value)}
-      />
-      <select
-        className="fin-input"
-        value={filters.financialYear || ''}
-        onChange={(e) => set('financialYear', e.target.value)}
-      >
-        <option value="">Financial Year</option>
-        {(filters.fyOptions || []).map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      {showCategory ? (
+    <div className="fin-toolbar fin-filters-grid">
+      <label className="fin-field">
+        <span>From Date</span>
+        <input
+          type="date"
+          className="fin-input"
+          value={filters.dateFrom || ''}
+          onChange={(e) => set('dateFrom', e.target.value)}
+        />
+      </label>
+      <label className="fin-field">
+        <span>To Date</span>
+        <input
+          type="date"
+          className="fin-input"
+          value={filters.dateTo || ''}
+          onChange={(e) => set('dateTo', e.target.value)}
+        />
+      </label>
+      <label className="fin-field">
+        <span>Month</span>
+        <input
+          type="month"
+          className="fin-input"
+          value={filters.month || ''}
+          onChange={(e) => set('month', e.target.value)}
+        />
+      </label>
+      <label className="fin-field">
+        <span>Financial Year</span>
         <select
           className="fin-input"
-          value={filters.category || ''}
-          onChange={(e) => set('category', e.target.value)}
+          value={filters.financialYear || ''}
+          onChange={(e) => set('financialYear', e.target.value)}
         >
-          <option value="">All Categories</option>
-          {categoryOptions.map((c) => (
-            <option key={c} value={c}>
-              {c}
+          <option value="">All</option>
+          {(filters.fyOptions || []).map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
             </option>
           ))}
         </select>
+      </label>
+      {showCategory ? (
+        <label className="fin-field">
+          <span>Category</span>
+          <select
+            className="fin-input"
+            value={filters.category || ''}
+            onChange={(e) => set('category', e.target.value)}
+          >
+            <option value="">All Categories</option>
+            {categoryOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
       ) : null}
       {showStatus ? (
-        <select
-          className="fin-input"
-          value={filters.status || filters.paymentStatus || ''}
-          onChange={(e) =>
-            set(filters.status !== undefined || showStatus === 'status' ? 'status' : 'paymentStatus', e.target.value)
-          }
-        >
-          <option value="">All Status</option>
-          {statusOptions.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <label className="fin-field">
+          <span>Status</span>
+          <select
+            className="fin-input"
+            value={filters.status || filters.paymentStatus || ''}
+            onChange={(e) =>
+              set(filters.status !== undefined || showStatus === 'status' ? 'status' : 'paymentStatus', e.target.value)
+            }
+          >
+            <option value="">All Status</option>
+            {statusOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
       ) : null}
       {extra}
+    </div>
+  );
+}
+
+export function FinancePeriodToggle({
+  period,
+  dateFrom,
+  dateTo,
+  onPeriodChange,
+  onCustomDateChange,
+  showHint = true,
+  extra = null,
+}) {
+  return (
+    <div className="fin-period-bar">
+      <div className="fin-period-row">
+        <div className="fin-period-toggle">
+          {FIN_PERIOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              className={period === opt.id ? 'active' : ''}
+              onClick={() => onPeriodChange(opt.id)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {extra}
+      </div>
+      {period === 'custom' ? (
+        <div className="fin-period-custom">
+          <input
+            type="date"
+            className="fin-input"
+            value={dateFrom || ''}
+            max={dateTo || undefined}
+            onChange={(e) => onCustomDateChange({ dateFrom: e.target.value })}
+            title="From date"
+          />
+          <input
+            type="date"
+            className="fin-input"
+            value={dateTo || ''}
+            min={dateFrom || undefined}
+            onChange={(e) => onCustomDateChange({ dateTo: e.target.value })}
+            title="To date"
+          />
+        </div>
+      ) : null}
+      {showHint ? (
+        <p className="fin-period-hint">
+          Showing: <strong>{formatFinPeriodLabel(period, dateFrom, dateTo)}</strong>
+        </p>
+      ) : null}
     </div>
   );
 }

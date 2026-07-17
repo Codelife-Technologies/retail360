@@ -1,16 +1,14 @@
-import React, { lazy, Suspense } from 'react';
+import React from 'react';
 import FinanceDashboard from './pages/FinanceDashboard';
 import IncomeReport from './pages/IncomeReport';
 import ExpenseReport from './pages/ExpenseReport';
 import ProfitLoss from './pages/ProfitLoss';
 import FinanceRecords from './pages/FinanceRecords';
+import FinanceSales from './pages/FinanceSales';
 import './FinanceModule.css';
-import '../components/Sales.css';
-import '../components/SalesSkuReport.css';
 import '../components/PurchaseReport.css';
 
-const SalesSkuReport = lazy(() => import('../components/SalesSkuReport'));
-const PurchaseReport = lazy(() => import('../components/PurchaseReport'));
+const PurchaseReport = React.lazy(() => import('../components/PurchaseReport'));
 
 function FinanceModule({ subTab = 'finance-dashboard' }) {
   switch (subTab) {
@@ -40,23 +38,17 @@ function FinanceModule({ subTab = 'finance-dashboard' }) {
       );
     case 'sales-report':
       return (
-        <div className="finance-module finance-report-shell">
-          <div className="finance-report-panel">
-            <div className="sales-container sales-report-page">
-              <Suspense fallback={<div className="sales-sku-loading">Loading sales report…</div>}>
-                <SalesSkuReport />
-              </Suspense>
-            </div>
-          </div>
+        <div className="finance-module">
+          <FinanceSales />
         </div>
       );
     case 'purchase-report':
       return (
         <div className="finance-module finance-report-shell">
           <div className="finance-report-panel">
-            <Suspense fallback={<div className="sales-sku-loading">Loading purchase report…</div>}>
+            <React.Suspense fallback={<div className="fin-skeleton-list"><div className="fin-skeleton-row" /></div>}>
               <PurchaseReport />
-            </Suspense>
+            </React.Suspense>
           </div>
         </div>
       );

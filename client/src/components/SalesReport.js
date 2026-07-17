@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { reportsAPI, salesChannelsAPI, salesLocationsAPI } from '../services/api';
-import { formatMoney } from '../utils/locationCurrency';
+import {
+  formatMoney,
+  formatSaleMoney,
+  getCurrencyForSalesChannelId,
+} from '../utils/locationCurrency';
 import logger from '../utils/logger';
 import SalesMonthlyTrendCharts from './SalesMonthlyTrendCharts';
 import './SalesReport.css';
-
-const formatAed = (amount) => formatMoney(amount, 'AED');
 
 function SalesReport() {
   const [view, setView] = useState('summary'); // 'summary' or 'detailed'
@@ -25,6 +27,17 @@ function SalesReport() {
     orderStatus: '',
     groupBy: 'date'
   });
+
+  const reportCurrency = useMemo(() => {
+    if (summaryData?.displayCurrency) return summaryData.displayCurrency;
+    if (filters.salesChannel) {
+      return getCurrencyForSalesChannelId(filters.salesChannel, salesChannels);
+    }
+    return 'INR';
+  }, [summaryData?.displayCurrency, filters.salesChannel, salesChannels]);
+
+  const formatAmount = (amount) => formatMoney(amount, reportCurrency);
+  const formatSaleAmount = (sale, amount) => formatSaleMoney(sale, amount, reportCurrency);
 
   useEffect(() => {
     fetchSalesChannels();
@@ -255,7 +268,7 @@ function SalesReport() {
         <div className="loading">Loading report data...</div>
       ) : (
         <>
-          <SalesMonthlyTrendCharts groupedData={monthlyTrend} formatCurrency={formatAed} />
+          <SalesMonthlyTrendCharts groupedData={monthlyTrend} formatCurrency={formatAmount} />
 
           {view === 'summary' && summaryData ? (
         <div className="summary-view">
@@ -266,11 +279,11 @@ function SalesReport() {
             </div>
             <div className="stat-card">
               <h3>Total Revenue</h3>
-              <p className="stat-value">{formatAed(summaryData.totalRevenue)}</p>
+              <p className="stat-value">{formatAmount(summaryData.totalRevenue)}</p>
             </div>
             <div className="stat-card">
               <h3>Average Order Value</h3>
-              <p className="stat-value">{formatAed(summaryData.averageOrderValue)}</p>
+              <p className="stat-value">{formatAmount(summaryData.averageOrderValue)}</p>
             </div>
             <div className="stat-card">
               <h3>Total Items Sold</h3>
@@ -295,7 +308,7 @@ function SalesReport() {
                     <tr key={idx}>
                       <td>{group.group}</td>
                       <td>{group.count}</td>
-                      <td>{formatAed(group.revenue)}</td>
+                      <td>{formatAmount(group.revenue)}</td>
                       <td>{group.itemsSold}</td>
                     </tr>
                   ))}
@@ -312,7 +325,7 @@ function SalesReport() {
                   <ul>
                     {summaryData.statistics.topProducts.slice(0, 5).map((item, idx) => (
                       <li key={idx}>
-                        {item.product?.name || 'Unknown'}: {formatAed(item.revenue)} ({item.quantity} units)
+                        {item.product?.name || 'Unknown'}: {formatAmount(item.revenue)} ({item.quantity} units)
                       </li>
                     ))}
                   </ul>
@@ -322,7 +335,7 @@ function SalesReport() {
                   <ul>
                     {summaryData.statistics.topChannels.slice(0, 5).map((item, idx) => (
                       <li key={idx}>
-                        {item.channel?.name || 'Unknown'}: {formatAed(item.revenue)} ({item.count} orders)
+                        {item.channel?.name || 'Unknown'}: {formatAmount(item.revenue)} ({item.count} orders)
                       </li>
                     ))}
                   </ul>
@@ -378,10 +391,10 @@ function SalesReport() {
                   <td>{sale.salesLocation?.name || '-'}</td>
                   <td>{sale.customer?.name || '-'}</td>
                   <td>{sale.items.length} items</td>
-                  <td>{formatAed(sale.subtotal)}</td>
-                  <td>{formatAed(sale.discount)}</td>
-                  <td>{formatAed(sale.tax)}</td>
-                  <td>{formatAed(sale.total)}</td>
+                  <td>{formatSaleAmount(sale, sale.subtotal)}</td>
+                  <td>{formatSaleAmount(sale, sale.discount)}</td>
+                  <td>{formatSaleAmount(sale, sale.tax)}</td>
+                  <td>{formatSaleAmount(sale, sale.total)}</td>
                   <td>
                     <span className={`status-badge status-${sale.paymentStatus}`}>
                       {sale.paymentStatus}

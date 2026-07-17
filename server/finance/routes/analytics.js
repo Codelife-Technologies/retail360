@@ -8,21 +8,32 @@ const {
   PAYMENT_MODES,
   EXPENSE_STATUSES,
 } = require('../utils/constants');
+const SalesChannel = require('../../models/SalesChannel');
 
 const router = express.Router();
 
 router.get(
   '/meta',
   requireFinance('finance.dashboard.view', 'finance.expense.view', 'finance.income.view'),
-  (req, res) => {
-    res.json({
-      expenseCategories: EXPENSE_CATEGORIES,
-      categories: CATEGORY_LIST,
-      paymentModes: PAYMENT_MODES,
-      expenseStatuses: EXPENSE_STATUSES,
-      incomeTypes: ['Service Income', 'Other Income', 'Interest Income', 'Commission'],
-      incomeStatuses: ['Pending', 'Received', 'Cancelled'],
-    });
+  async (req, res) => {
+    try {
+      const salesChannels = await SalesChannel.find({})
+        .select('_id name code isActive country defaultCurrency type')
+        .sort({ name: 1 })
+        .lean();
+
+      res.json({
+        expenseCategories: EXPENSE_CATEGORIES,
+        categories: CATEGORY_LIST,
+        paymentModes: PAYMENT_MODES,
+        expenseStatuses: EXPENSE_STATUSES,
+        incomeTypes: ['Service Income', 'Other Income', 'Interest Income', 'Commission'],
+        incomeStatuses: ['Pending', 'Received', 'Cancelled'],
+        salesChannels,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
   }
 );
 
@@ -43,6 +54,9 @@ router.get('/dashboard', requireFinance('finance.dashboard.view'), async (req, r
       channelAnalysis: snap.channelAnalysis,
       insights: snap.insights,
       filters: snap.filters,
+      exchangeRates: snap.exchangeRates,
+      countryBreakdown: snap.countryBreakdown,
+      reportingCurrency: snap.reportingCurrency,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -84,12 +98,17 @@ router.get('/income', requireFinance('finance.income.view'), async (req, res) =>
         description: i.description || '',
         department: i.department || '',
         incomeType: i.incomeType,
+        bill: i.bill?.filePath ? i.bill : null,
       })),
     ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
     if (req.query.paymentStatus) {
       const status = String(req.query.paymentStatus).toLowerCase();
       rows = rows.filter((r) => String(r.paymentStatus || '').toLowerCase() === status);
+    }
+    if (req.query.salesChannel) {
+      // Sales are already filtered in the snapshot; hide manual income when a channel is selected
+      rows = rows.filter((r) => r.source === 'sale');
     }
     if (req.query.customer) {
       const term = String(req.query.customer).toLowerCase();
@@ -310,13 +329,11 @@ router.get('/records', requireFinance('finance.reports.view'), async (req, res) 
       const exportRows = rows.map((r) => ({
         Type: r.type,
         Reference: r.ref,
-        Party: r.party,
         Category: r.category,
         Date: r.date,
         Amount: r.amount,
         Tax: r.tax,
         Status: r.status,
-        Description: r.description,
       }));
       return sendWorkbook(res, exportRows, 'Finance_Records', req.query.export);
     }
