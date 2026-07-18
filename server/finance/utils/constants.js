@@ -17,16 +17,40 @@ const PAYMENT_MODES = ['Cash', 'Bank Transfer', 'UPI', 'Card', 'Cheque', 'Other'
 const EXPENSE_STATUSES = ['Pending', 'Paid', 'Partial', 'Cancelled'];
 const SALES_CHANNELS_COMPARE = ['Amazon', 'Flipkart', 'Website', 'Wholesale', 'Retail'];
 
+function parseLocalDateInput(value, endOfDay = false) {
+  if (value == null || value === '') return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const d = new Date(value.getFullYear(), value.getMonth(), value.getDate());
+    if (endOfDay) d.setHours(23, 59, 59, 999);
+    return d;
+  }
+
+  const raw = String(value).trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    if (endOfDay) d.setHours(23, 59, 59, 999);
+    return d;
+  }
+
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if (endOfDay) local.setHours(23, 59, 59, 999);
+  return local;
+}
+
 function parseDateRange(query = {}) {
-  let dateFrom = query.dateFrom ? new Date(query.dateFrom) : null;
-  let dateTo = query.dateTo ? new Date(query.dateTo) : null;
+  let dateFrom = parseLocalDateInput(query.dateFrom, false);
+  let dateTo = parseLocalDateInput(query.dateTo, true);
 
   if (query.financialYear) {
     const fy = String(query.financialYear);
     const startYear = Number(fy.split('-')[0]) || Number(fy);
     if (!Number.isNaN(startYear)) {
-      dateFrom = new Date(startYear, 3, 1); // 1 Apr
-      dateTo = new Date(startYear + 1, 2, 31, 23, 59, 59, 999); // 31 Mar
+      dateFrom = new Date(startYear, 3, 1); // 1 Apr local
+      dateTo = new Date(startYear + 1, 2, 31, 23, 59, 59, 999); // 31 Mar local
     }
   }
 
@@ -38,7 +62,6 @@ function parseDateRange(query = {}) {
     }
   }
 
-  if (dateTo) dateTo.setHours(23, 59, 59, 999);
   return { dateFrom, dateTo };
 }
 

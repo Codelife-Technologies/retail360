@@ -646,13 +646,35 @@ function ExpenseReport() {
             'Amount * — expense amount in INR',
             'Voucher No — optional; auto-generated when blank',
           ]}
-          onUploadComplete={() => {
+          onUploadComplete={(result) => {
+            const imported = result?.imported || 0;
+            const updated = result?.updated || 0;
+            const failed = result?.failed || 0;
+            if (imported + updated > 0) {
+              // Show a wider range so newly imported rows are visible
+              const range = getFinPeriodRange('year');
+              setPage(1);
+              setFilters((f) => ({
+                ...f,
+                period: 'year',
+                dateFrom: range.dateFrom,
+                dateTo: range.dateTo,
+                month: '',
+                financialYear: '',
+              }));
+            }
+            setToast(
+              imported + updated > 0
+                ? `Expense import done: ${imported} added, ${updated} updated${failed ? `, ${failed} failed` : ''}`
+                : `Expense import finished with no new rows${failed ? ` (${failed} failed)` : ''}`
+            );
+            window.setTimeout(() => setToast(''), 4000);
+            // Keep the upload modal open so the full error/success summary stays visible
+          }}
+          onClose={() => {
             setShowImport(false);
-            setToast('Expense import completed');
-            window.setTimeout(() => setToast(''), 2500);
             fetchData();
           }}
-          onClose={() => setShowImport(false)}
         />
       ) : null}
     </div>

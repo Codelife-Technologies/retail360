@@ -2,7 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const FinanceExpense = require('../models/FinanceExpense');
 const { paginate } = require('../../utils/pagination');
-const { parseExcel } = require('../../utils/excelParser');
 const { generateTemplate } = require('../../utils/excelGenerator');
 const { requireFinance } = require('../utils/auth');
 const {
@@ -55,7 +54,7 @@ function pickCell(row, ...labels) {
   if (!row || typeof row !== 'object') return '';
   for (const label of labels) {
     if (row[label] != null && String(row[label]).trim() !== '') {
-      return String(row[label]).trim();
+      return row[label];
     }
   }
   const normalized = {};
@@ -66,30 +65,62 @@ function pickCell(row, ...labels) {
   for (const label of labels) {
     const nk = String(label).toLowerCase().replace(/\*+$/, '').trim();
     if (normalized[nk] != null && String(normalized[nk]).trim() !== '') {
-      return String(normalized[nk]).trim();
+      return normalized[nk];
     }
   }
   return '';
 }
 
+function parseAmount(value) {
+  if (value == null || value === '') return 0;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const cleaned = String(value)
+    .replace(/[,₹$€£\s]/g, '')
+    .replace(/^\((.*)\)$/, '-$1')
+    .trim();
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function parseExpenseDate(value) {
-  if (!value) return null;
+  if (value == null || value === '') return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value) && value > 20000) {
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    const parsed = new Date(epoch.getTime() + value * 86400000);
+    return new Date(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate());
+  }
+
   const raw = String(value).trim();
   if (!raw) return null;
 
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
 
-  const dmy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (dmy) return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
-
-  const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) return parsed;
+  const dmyOrMdy = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (dmyOrMdy) {
+    const a = Number(dmyOrMdy[1]);
+    const b = Number(dmyOrMdy[2]);
+    const y = Number(dmyOrMdy[3]);
+    // If first part > 12, treat as DD/MM/YYYY; if second > 12, treat as MM/DD/YYYY; else prefer DD/MM
+    if (a > 12) return new Date(y, b - 1, a);
+    if (b > 12) return new Date(y, a - 1, b);
+    return new Date(y, b - 1, a);
+  }
 
   const serial = Number(raw);
-  if (Number.isFinite(serial) && serial > 30000) {
+  if (Number.isFinite(serial) && serial > 20000) {
     const epoch = new Date(Date.UTC(1899, 11, 30));
-    return new Date(epoch.getTime() + serial * 86400000);
+    const parsed = new Date(epoch.getTime() + serial * 86400000);
+    return new Date(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate());
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
   }
   return null;
 }
@@ -110,6 +141,14 @@ function normalizeEnum(value, allowed, fallback) {
   return match || fallback;
 }
 
+function normalizePaymentMode(value) {
+  return normalizeEnum(value, PAYMENT_MODES, 'Bank Transfer');
+}
+
+function normalizeStatus(value) {
+  return normalizeEnum(value, EXPENSE_STATUSES, 'Paid');
+}
+
 async function generateNextVoucherNo(date = new Date()) {
   const d = new Date(date);
   const key = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
@@ -128,23 +167,27 @@ async function generateNextVoucherNo(date = new Date()) {
   return `${prefix}${String(seq).padStart(3, '0')}`;
 }
 
+function cellText(value) {
+  if (value == null) return '';
+  return String(value).trim();
+}
+
 function mapExpenseRow(row) {
   const category = normalizeCategory(pickCell(row, 'Category *', 'Category'));
-  const subcategory = pickCell(row, 'Subcategory', 'Sub Category');
-  const allowedSubs = EXPENSE_CATEGORIES[category] || [];
+  const subcategory = cellText(pickCell(row, 'Subcategory', 'Sub Category'));
 
   return {
     date: parseExpenseDate(pickCell(row, 'Date *', 'Date')),
-    voucherNo: pickCell(row, 'Voucher No', 'VoucherNo', 'Voucher'),
+    voucherNo: cellText(pickCell(row, 'Voucher No', 'VoucherNo', 'Voucher')),
     category,
-    subcategory: allowedSubs.includes(subcategory) ? subcategory : subcategory,
-    vendor: pickCell(row, 'Vendor'),
-    description: pickCell(row, 'Description'),
-    amount: Number(pickCell(row, 'Amount *', 'Amount')) || 0,
-    gst: Number(pickCell(row, 'GST', 'Gst')) || 0,
-    paymentMode: normalizeEnum(pickCell(row, 'Payment Mode', 'PaymentMode'), PAYMENT_MODES, 'Bank Transfer'),
-    status: normalizeEnum(pickCell(row, 'Status'), EXPENSE_STATUSES, 'Paid'),
-    department: pickCell(row, 'Department'),
+    subcategory,
+    vendor: cellText(pickCell(row, 'Vendor', 'Vendor Name', 'Supplier')),
+    description: cellText(pickCell(row, 'Description', 'Details', 'Narration', 'Remark', 'Remarks')),
+    amount: parseAmount(pickCell(row, 'Amount *', 'Amount')),
+    gst: parseAmount(pickCell(row, 'GST', 'Gst', 'Tax')),
+    paymentMode: normalizePaymentMode(pickCell(row, 'Payment Mode', 'PaymentMode', 'Mode')),
+    status: normalizeStatus(pickCell(row, 'Status', 'Payment Status')),
+    department: cellText(pickCell(row, 'Department', 'Dept')),
   };
 }
 
@@ -284,7 +327,15 @@ router.post('/import', requireFinance('finance.expense.create'), upload.single('
     }
 
     const { mode = 'both' } = req.body;
-    const excelData = parseExcel(req.file.buffer);
+    const XLSX = require('xlsx');
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    const sheetName = workbook.SheetNames.includes('Data')
+      ? 'Data'
+      : workbook.SheetNames[0];
+    const excelData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+      raw: false,
+      defval: '',
+    });
     if (excelData.length === 0) {
       return res.status(400).json({ error: 'Excel file is empty' });
     }
@@ -355,7 +406,11 @@ router.post('/import', requireFinance('finance.expense.create'), upload.single('
             failed++;
             continue;
           }
-          await FinanceExpense.create(expenseData);
+          await FinanceExpense.create({
+            ...expenseData,
+            currency: 'INR',
+            originalAmount: (Number(expenseData.amount) || 0) + (Number(expenseData.gst) || 0),
+          });
           imported++;
         }
       } catch (error) {
@@ -371,11 +426,11 @@ router.post('/import', requireFinance('finance.expense.create'), upload.single('
       updated,
       failed,
       skipped,
-      totalRows,
+      totalRows: excelData.length,
       processed: imported + updated + failed,
-      errors: errors.slice(0, 100),
+      errors,
       errorSummary: errors.reduce((acc, err) => {
-        const key = (err.message || 'Unknown error').split('.')[0].slice(0, 120);
+        const key = String(err.message || 'Unknown error').trim().slice(0, 200);
         acc[key] = (acc[key] || 0) + 1;
         return acc;
       }, {}),
