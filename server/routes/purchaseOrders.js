@@ -18,13 +18,54 @@ const PURCHASE_ORDER_HEADERS = [
   { key: 'supplier', label: 'Supplier Name *' },
   { key: 'orderDate', label: 'Order Date (YYYY-MM-DD)' },
   { key: 'expectedDeliveryDate', label: 'Expected Delivery Date (YYYY-MM-DD)' },
-  { key: 'status', label: 'Status (pending/approved/received/cancelled)' },
+  { key: 'status', label: 'Status (pending/approved/received/closed/cancelled)' },
   { key: 'sku', label: 'Product SKU *' },
   { key: 'quantity', label: 'Quantity *' },
   { key: 'unitPrice', label: 'Unit Price (Amount) *' },
   { key: 'tax', label: 'Tax' },
   { key: 'notes', label: 'Notes' }
 ];
+
+const PO_STATUS_ENUM = [
+  'draft', 'pending', 'pending_approval', 'approved',
+  'partially_received', 'fully_received', 'received',
+  'closed', 'cancelled',
+];
+
+const PO_STATUS_ALIASES = {
+  done: 'closed',
+  complete: 'closed',
+  completed: 'closed',
+  finish: 'closed',
+  finished: 'closed',
+  'fully received': 'fully_received',
+  'partially received': 'partially_received',
+  'pending approval': 'pending_approval',
+  cancel: 'cancelled',
+  canceled: 'cancelled',
+};
+
+function normalizePoStatus(raw) {
+  const value = String(raw || 'pending').trim().toLowerCase();
+  if (!value) return 'pending';
+  if (PO_STATUS_ALIASES[value]) return PO_STATUS_ALIASES[value];
+  if (PO_STATUS_ENUM.includes(value)) return value;
+  return null;
+}
+
+function pushValidationErrors(errors, row, field, err) {
+  if (err?.name === 'ValidationError' && err.errors) {
+    Object.values(err.errors).forEach((ve) => {
+      errors.push({
+        row,
+        field: ve.path || field,
+        message: ve.message || err.message,
+      });
+    });
+    return;
+  }
+  errors.push({ row, field, message: err?.message || String(err) });
+}
 
 const PO_POPULATE = [
   { path: 'supplier', select: 'name contactPerson email phone address gstin pan state' },
@@ -129,7 +170,7 @@ router.get('/template', (req, res) => {
         quantity: 10,
         unitPrice: 250,
         tax: 0,
-        notes: 'Rows that share the same PO Reference become one purchase order'
+        notes: 'Same vendor + same PO Reference = one PO with multiple lines'
       },
       {
         poRef: 'PO-1',
@@ -142,6 +183,18 @@ router.get('/template', (req, res) => {
         unitPrice: 800,
         tax: 0,
         notes: ''
+      },
+      {
+        poRef: 'PO-1',
+        supplier: 'Global Traders',
+        orderDate: '2026-06-23',
+        expectedDeliveryDate: '2026-07-05',
+        status: 'pending',
+        sku: 'PROD-003',
+        quantity: 8,
+        unitPrice: 150,
+        tax: 0,
+        notes: 'Different vendor = separate purchase order even with same PO Reference'
       }
     ];
     const buffer = generateTemplate(PURCHASE_ORDER_HEADERS, sampleData);
@@ -167,35 +220,90 @@ router.post('/import', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'Excel file is empty' });
     }
 
-    // Group rows into purchase orders by their PO Reference
+    // Group rows into purchase orders by vendor + PO reference
+    // (same Excel with multiple vendors → one PO per vendor)
     const groups = new Map();
     const errors = [];
 
     rows.forEach((row, idx) => {
       const rowNum = idx + 2;
       const ref = (row['PO Reference *'] || '').toString().trim();
+      const supplierName = (row['Supplier Name *'] || '').toString().trim();
+
       if (!ref) {
         errors.push({ row: rowNum, field: 'PO Reference *', message: 'PO Reference is required' });
         return;
       }
-      if (!groups.has(ref)) {
-        groups.set(ref, []);
+      if (!supplierName) {
+        errors.push({
+          row: rowNum,
+          field: 'Supplier Name *',
+          message: `PO '${ref}': Supplier Name is required — each vendor gets its own purchase order`,
+        });
+        return;
       }
-      groups.get(ref).push({ row, rowNum });
+
+      const key = `${supplierName.toLowerCase()}||${ref}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          ref,
+          supplierName,
+          entries: [],
+        });
+      }
+      groups.get(key).entries.push({ row, rowNum });
     });
 
     let imported = 0;
     let failed = 0;
     let skipped = 0;
+    const readyToSave = [];
 
-    for (const [ref, entries] of groups) {
+    // Phase 1: validate every vendor PO / line and collect ALL errors together
+    for (const [, group] of groups) {
+      const { ref, supplierName, entries } = group;
       const first = entries[0].row;
-      try {
-        const supplierName = (first['Supplier Name *'] || '').toString().trim();
-        if (!supplierName) throw new Error('Supplier Name is required');
+      const firstRowNum = entries[0].rowNum;
+      const label = `PO '${ref}' / Vendor '${supplierName}'`;
+      const poErrors = [];
+      let supplier = null;
 
-        const supplier = await Supplier.findOne({ name: supplierName });
-        if (!supplier) throw new Error(`Supplier '${supplierName}' not found`);
+      try {
+        supplier = await Supplier.findOne({ name: supplierName });
+        if (!supplier) {
+          poErrors.push({
+            row: firstRowNum,
+            field: 'Supplier Name *',
+            message: `${label}: Supplier '${supplierName}' not found in master`,
+          });
+        }
+
+        // Warn if other rows in this vendor group somehow differ (defensive)
+        for (const { row, rowNum } of entries) {
+          const rowSupplier = (row['Supplier Name *'] || '').toString().trim();
+          if (rowSupplier && rowSupplier.toLowerCase() !== supplierName.toLowerCase()) {
+            poErrors.push({
+              row: rowNum,
+              field: 'Supplier Name *',
+              message: `${label}: mixed vendor '${rowSupplier}' on the same group — each vendor must be separate`,
+            });
+          }
+        }
+
+        const statusRaw = (
+          first['Status (pending/approved/received/closed/cancelled)']
+          || first['Status (pending/approved/received/cancelled)']
+          || first['Status']
+          || 'pending'
+        );
+        const status = normalizePoStatus(statusRaw);
+        if (!status) {
+          poErrors.push({
+            row: firstRowNum,
+            field: 'Status',
+            message: `${label}: status '${String(statusRaw).trim()}' is invalid. Use one of: ${PO_STATUS_ENUM.join(', ')}`,
+          });
+        }
 
         const items = [];
         for (const { row, rowNum } of entries) {
@@ -205,30 +313,30 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
           if (!sku) {
             skipped++;
-            errors.push({
+            poErrors.push({
               row: rowNum,
               field: 'Product SKU *',
-              message: `PO '${ref}': Product SKU is required — line not added`,
+              message: `${label}: Product SKU is required — line not added`,
             });
             continue;
           }
 
           if (!quantity || quantity <= 0) {
             skipped++;
-            errors.push({
+            poErrors.push({
               row: rowNum,
               field: 'Quantity *',
-              message: `PO '${ref}': SKU '${sku}' — quantity must be greater than 0 — line not added`,
+              message: `${label}: SKU '${sku}' — quantity must be greater than 0 — line not added`,
             });
             continue;
           }
 
           if (isNaN(unitPrice) || unitPrice < 0) {
             skipped++;
-            errors.push({
+            poErrors.push({
               row: rowNum,
               field: 'Unit Price (Amount) *',
-              message: `PO '${ref}': SKU '${sku}' — unit price must be a valid number — line not added`,
+              message: `${label}: SKU '${sku}' — unit price must be a valid number — line not added`,
             });
             continue;
           }
@@ -236,10 +344,10 @@ router.post('/import', upload.single('file'), async (req, res) => {
           const product = await Product.findOne({ sku });
           if (!product) {
             skipped++;
-            errors.push({
+            poErrors.push({
               row: rowNum,
               field: 'Product SKU *',
-              message: `Product not available — SKU '${sku}' was not added to PO '${ref}'`,
+              message: `Product not available — SKU '${sku}' was not added to ${label}`,
             });
             continue;
           }
@@ -253,38 +361,55 @@ router.post('/import', upload.single('file'), async (req, res) => {
         }
 
         if (items.length === 0) {
-          failed++;
-          errors.push({
-            row: entries[0].rowNum,
-            field: `PO '${ref}'`,
-            message: `PO '${ref}' was not created — no valid products found (all SKUs missing or invalid)`,
+          poErrors.push({
+            row: firstRowNum,
+            field: label,
+            message: `${label} was not created — no valid products found (all SKUs missing or invalid)`,
           });
+        }
+
+        if (poErrors.length > 0) {
+          failed++;
+          errors.push(...poErrors);
           continue;
         }
 
-        const statusRaw = (first['Status (pending/approved/received/cancelled)'] || 'pending')
-          .toString()
-          .trim()
-          .toLowerCase();
+        const noteParts = [
+          first['Notes'] ? String(first['Notes']).trim() : '',
+          `Excel ref: ${ref}`,
+          `Vendor: ${supplierName}`,
+        ].filter(Boolean);
 
-        const poData = {
-          poNumber: await generatePONumber(),
-          supplier: supplier._id,
-          orderDate: first['Order Date (YYYY-MM-DD)'] ? new Date(first['Order Date (YYYY-MM-DD)']) : new Date(),
-          expectedDeliveryDate: first['Expected Delivery Date (YYYY-MM-DD)']
-            ? new Date(first['Expected Delivery Date (YYYY-MM-DD)'])
-            : undefined,
-          status: statusRaw || 'pending',
-          items,
-          tax: parseFloat(first['Tax']) || 0,
-          notes: first['Notes'] || '',
-        };
+        readyToSave.push({
+          ref: label,
+          rowNum: firstRowNum,
+          poData: {
+            poNumber: await generatePONumber(),
+            supplier: supplier._id,
+            orderDate: first['Order Date (YYYY-MM-DD)'] ? new Date(first['Order Date (YYYY-MM-DD)']) : new Date(),
+            expectedDeliveryDate: first['Expected Delivery Date (YYYY-MM-DD)']
+              ? new Date(first['Expected Delivery Date (YYYY-MM-DD)'])
+              : undefined,
+            status,
+            items,
+            tax: parseFloat(first['Tax']) || 0,
+            notes: noteParts.join(' | '),
+          },
+        });
+      } catch (err) {
+        failed++;
+        pushValidationErrors(errors, firstRowNum, label, err);
+      }
+    }
 
-        await new PurchaseOrder(poData).save();
+    // Phase 2: save only fully-valid POs (errors from phase 1 already listed together)
+    for (const item of readyToSave) {
+      try {
+        await new PurchaseOrder(item.poData).save();
         imported++;
       } catch (err) {
         failed++;
-        errors.push({ row: entries[0].rowNum, field: `PO '${ref}'`, message: err.message });
+        pushValidationErrors(errors, item.rowNum, `PO '${item.ref}'`, err);
       }
     }
 

@@ -4,7 +4,7 @@ import './ExcelUpload.css';
 
 const buildErrorSummary = (errors = []) =>
   errors.reduce((acc, err) => {
-    const key = (err.message || 'Unknown error').split('.')[0].slice(0, 120);
+    const key = String(err.message || 'Unknown error').trim().slice(0, 200);
     acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
@@ -49,7 +49,6 @@ const ExcelUpload = ({
   const [processingOnServer, setProcessingOnServer] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [showAllErrors, setShowAllErrors] = useState(false);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -66,7 +65,6 @@ const ExcelUpload = ({
       setFile(selectedFile);
       setError(null);
       setResult(null);
-      setShowAllErrors(false);
     }
   };
 
@@ -151,7 +149,6 @@ const ExcelUpload = ({
     setError(null);
     setUploadProgress(0);
     setProcessingOnServer(false);
-    setShowAllErrors(false);
 
     try {
       const formData = new FormData();
@@ -193,11 +190,7 @@ const ExcelUpload = ({
   };
 
   const totals = result ? getImportTotals(result) : null;
-  const visibleErrors = result?.errors
-    ? showAllErrors
-      ? result.errors
-      : result.errors.slice(0, 25)
-    : [];
+  const visibleErrors = result?.errors || [];
 
   return (
     <div className="excel-upload-modal">
@@ -448,15 +441,6 @@ const ExcelUpload = ({
                         <span className="error-message-text">{err.message}</span>
                       </div>
                     ))}
-                    {result.errors.length > 25 && !showAllErrors && (
-                      <button
-                        type="button"
-                        className="show-more-errors-btn"
-                        onClick={() => setShowAllErrors(true)}
-                      >
-                        Show all {result.errors.length} row issues
-                      </button>
-                    )}
                   </div>
                 </div>
               )}

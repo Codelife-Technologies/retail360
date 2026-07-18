@@ -379,7 +379,7 @@
 }
 
 .errors-scroll {
-  max-height: 280px;
+  max-height: 420px;
   overflow-y: auto;
   border: 1px solid #dee2e6;
   border-radius: 4px;

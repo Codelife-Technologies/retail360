@@ -898,6 +898,12 @@ function PurchaseOrders({ onNavigate }) {
           templateEndpoint="/purchase-orders/template"
           onUploadComplete={() => fetchPurchaseOrders()}
           onClose={() => setShowExcelUpload(false)}
+          mandatoryFieldsHelp={[
+            'PO Reference * — groups lines for the same vendor',
+            'Supplier Name * — each vendor creates a separate purchase order',
+            'Product SKU *, Quantity *, Unit Price (Amount) * — line items',
+            'Multiple vendors in one Excel file → one PO per vendor',
+          ]}
         />
       )}
 
