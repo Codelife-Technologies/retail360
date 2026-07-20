@@ -27,7 +27,7 @@ function MIS({ onNavigate }) {
   const renderReport = () => {
     switch (activeTab) {
       case 'sales-dashboard':
-        return <SalesDashboard />;
+        return <SalesDashboard onSelectReport={setActiveTab} />;
       case 'sales':
         return (
           <div className="sales-container sales-report-page">
@@ -43,7 +43,7 @@ function MIS({ onNavigate }) {
       case 'replenish':
         return <ReplenishReport onNavigate={onNavigate} />;
       default:
-        return <SalesDashboard />;
+        return <SalesDashboard onSelectReport={setActiveTab} />;
     }
   };
 

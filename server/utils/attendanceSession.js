@@ -40,7 +40,7 @@ function applyLoginToAttendanceSession(user) {
     user.attendanceSession = {
       date: todayKey,
       checkInAt: session.checkInAt || now,
-      checkOutAt: session.checkOutAt || null,
+      checkOutAt: null,
       lastLoginAt: now,
     };
   }

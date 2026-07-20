@@ -85,6 +85,17 @@ function readSessionTimes(user, forDate = new Date()) {
     }
   }
 
+  // Still logged in (login more recent than logout) — no check-out yet
+  if (user.lastLoginAt) {
+    const loginAt = new Date(user.lastLoginAt);
+    if (loginAt >= dayStart && loginAt <= dayEnd) {
+      const logoutAt = user.lastLogoutAt ? new Date(user.lastLogoutAt) : null;
+      if (!logoutAt || logoutAt < loginAt) {
+        checkOut = '';
+      }
+    }
+  }
+
   return { checkIn, checkOut };
 }
 
@@ -173,15 +184,18 @@ function recordMatchesScope(recordEmployeeId, scope) {
 function withComputedWorkingHours(record, { allowLiveNow = true } = {}) {
   if (!record) return record;
   const plain = typeof record.toObject === 'function' ? record.toObject() : { ...record };
-  let checkOut = plain.checkOut;
+  const actualCheckOut = plain.checkOut || '';
   const isToday = getDateKey(plain.date) === getDateKey(new Date());
 
-  if (allowLiveNow && isToday && plain.checkIn && !checkOut) {
-    checkOut = formatTimeHHMM(new Date());
+  let checkOutForHours = actualCheckOut;
+  if (allowLiveNow && isToday && plain.checkIn && !actualCheckOut) {
+    checkOutForHours = formatTimeHHMM(new Date());
     plain.hoursInProgress = true;
   }
 
-  plain.workingHours = calcWorkingHoursFromTimes(plain.checkIn, checkOut);
+  // Keep stored checkOut empty until a real logout; only hours use live "now"
+  plain.checkOut = actualCheckOut;
+  plain.workingHours = calcWorkingHoursFromTimes(plain.checkIn, checkOutForHours);
   return plain;
 }
 

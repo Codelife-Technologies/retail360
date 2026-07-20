@@ -899,10 +899,12 @@ function PurchaseOrders({ onNavigate }) {
           onUploadComplete={() => fetchPurchaseOrders()}
           onClose={() => setShowExcelUpload(false)}
           mandatoryFieldsHelp={[
-            'PO Reference * — groups lines for the same vendor',
-            'Supplier Name * — each vendor creates a separate purchase order',
+            'PO Reference * — your PO number / reference for each order',
+            'Supplier Name * — vendor from Supplier Master',
+            'Order Date & Expected Delivery Date — different dates create separate POs',
+            'One PO is created per unique vendor + PO reference + dates combination',
+            'Multiple line rows with the same vendor, PO ref, and dates = one PO with many items',
             'Product SKU *, Quantity *, Unit Price (Amount) * — line items',
-            'Multiple vendors in one Excel file → one PO per vendor',
           ]}
         />
       )}

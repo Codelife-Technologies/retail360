@@ -4,7 +4,6 @@ export const HR_TABS = [
   { id: 'employee-tasks', label: 'Assign Task', icon: '✅', permission: 'hr.access' },
   { id: 'work-logs', label: 'Work Logs', icon: '📝', permission: 'hr.access' },
   { id: 'attendance', label: 'Attendance', icon: '🕐', permission: 'hr.access' },
-  { id: 'location-settings', label: 'Location Settings', icon: '📍', permission: 'hr.access' },
   { id: 'leave-management', label: 'Leave Management', icon: '📅', permission: 'hr.access' },
   { id: 'payroll', label: 'Payroll', icon: '💰', permission: 'hr.access' },
   { id: 'holidays', label: 'Holidays', icon: '🎉', permission: 'hr.access' },

@@ -58,7 +58,10 @@ function normalizeDashboardData(payload = {}) {
   };
 }
 
-function HrDashboard() {
+function HrDashboard({ onNavigate }) {
+  const go = (tab) => {
+    if (onNavigate) onNavigate(`hr:${tab}`);
+  };
   const [data, setData] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -109,15 +112,39 @@ function HrDashboard() {
       )}
 
       <div className="hr-kpi-grid">
-        <HrKpiCard icon="👥" label="Total Employees" value={kpis.totalEmployees} variant="info" />
-        <HrKpiCard icon="✅" label="Present Today" value={kpis.presentToday} variant="success" />
-        <HrKpiCard icon="❌" label="Absent Today" value={kpis.absentToday} variant="danger" />
-        <HrKpiCard icon="🏖️" label="Employees on Leave" value={kpis.employeesOnLeave} />
+        <HrKpiCard
+          icon="👥"
+          label="Total Employees"
+          value={kpis.totalEmployees}
+          variant="info"
+          onClick={() => go('employee-master')}
+        />
+        <HrKpiCard
+          icon="✅"
+          label="Present Today"
+          value={kpis.presentToday}
+          variant="success"
+          onClick={() => go('attendance')}
+        />
+        <HrKpiCard
+          icon="❌"
+          label="Absent Today"
+          value={kpis.absentToday}
+          variant="danger"
+          onClick={() => go('attendance')}
+        />
+        <HrKpiCard
+          icon="🏖️"
+          label="Employees on Leave"
+          value={kpis.employeesOnLeave}
+          onClick={() => go('leave-management')}
+        />
         <HrKpiCard
           icon="📋"
           label="Pending Leave Requests"
           value={kpis.pendingLeaveRequests}
           variant="warning"
+          onClick={() => go('leave-management')}
         />
       </div>
 

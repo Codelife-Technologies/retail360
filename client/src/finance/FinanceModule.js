@@ -10,12 +10,12 @@ import '../components/PurchaseReport.css';
 
 const PurchaseReport = React.lazy(() => import('../components/PurchaseReport'));
 
-function FinanceModule({ subTab = 'finance-dashboard' }) {
+function FinanceModule({ subTab = 'finance-dashboard', onNavigate }) {
   switch (subTab) {
     case 'finance-dashboard':
       return (
         <div className="finance-module">
-          <FinanceDashboard />
+          <FinanceDashboard onNavigate={onNavigate} />
         </div>
       );
     case 'income-report':
@@ -62,7 +62,7 @@ function FinanceModule({ subTab = 'finance-dashboard' }) {
     default:
       return (
         <div className="finance-module">
-          <FinanceDashboard />
+          <FinanceDashboard onNavigate={onNavigate} />
         </div>
       );
   }

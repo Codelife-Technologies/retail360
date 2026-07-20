@@ -75,6 +75,15 @@
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
+.hr-kpi-card.clickable {
+  cursor: pointer;
+}
+
+.hr-kpi-card.clickable:focus-visible {
+  outline: 2px solid #6B3894;
+  outline-offset: 2px;
+}
+
 .hr-kpi-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px var(--shadow, rgba(0, 0, 0, 0.15));

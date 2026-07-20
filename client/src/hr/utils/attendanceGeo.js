@@ -69,21 +69,65 @@ function getCurrentPosition(options = {}) {
   });
 }
 
-async function buildAttendanceLocationPayload({ requireGps = true } = {}) {
+/** Prefer a fresh prefetched fix so Mark Attendance does not wait on GPS. */
+const LOCATION_CACHE_MAX_AGE_MS = 2 * 60 * 1000;
+
+function isFreshLocationCache(cache, maxAgeMs = LOCATION_CACHE_MAX_AGE_MS) {
+  if (!cache || cache.latitude == null || cache.longitude == null || !cache.capturedAt) {
+    return false;
+  }
+  return Date.now() - cache.capturedAt <= maxAgeMs;
+}
+
+/**
+ * Fetch GPS early (e.g. on attendance page load).
+ * @returns {Promise<{ latitude: number, longitude: number, accuracy?: number, capturedAt: number }>}
+ */
+async function prefetchAttendanceLocation(options = {}) {
+  const coords = await getCurrentPosition(options);
+  return {
+    ...coords,
+    capturedAt: Date.now(),
+  };
+}
+
+async function buildAttendanceLocationPayload({
+  requireGps = true,
+  optionalGps = false,
+  cachedLocation = null,
+  maxCacheAgeMs = LOCATION_CACHE_MAX_AGE_MS,
+} = {}) {
   const deviceInfo = getDeviceInfo();
   const browserInfo = getBrowserInfo();
 
-  if (!requireGps) {
+  if (!requireGps && !optionalGps) {
     return { deviceInfo, browserInfo };
   }
 
-  const coords = await getCurrentPosition();
-  return {
-    latitude: coords.latitude,
-    longitude: coords.longitude,
-    deviceInfo,
-    browserInfo,
-  };
+  if (isFreshLocationCache(cachedLocation, maxCacheAgeMs)) {
+    return {
+      latitude: cachedLocation.latitude,
+      longitude: cachedLocation.longitude,
+      deviceInfo,
+      browserInfo,
+    };
+  }
+
+  try {
+    const coords = await getCurrentPosition();
+    return {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      deviceInfo,
+      browserInfo,
+    };
+  } catch (error) {
+    // Soft mode: mark attendance without coords when GPS is unavailable
+    if (optionalGps || !requireGps) {
+      return { deviceInfo, browserInfo };
+    }
+    throw error;
+  }
 }
 
 function formatLocationAttendanceError(error) {
@@ -112,6 +156,9 @@ export {
   formatDistanceMeters,
   googleMapsUrl,
   getCurrentPosition,
+  LOCATION_CACHE_MAX_AGE_MS,
+  isFreshLocationCache,
+  prefetchAttendanceLocation,
   buildAttendanceLocationPayload,
   formatLocationAttendanceError,
 };

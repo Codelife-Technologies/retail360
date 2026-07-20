@@ -12,6 +12,8 @@ const FALLBACK_RATES_FROM_INR = {
   SAR: 0.045,
   SGD: 0.016,
   AUD: 0.018,
+  CAD: 0.016,
+  JPY: 1.8,
 };
 
 function refreshMinutes() {

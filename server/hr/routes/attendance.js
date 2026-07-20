@@ -23,10 +23,6 @@ const {
 } = require('../utils/attendanceCutoff');
 const { validateAttendanceLocation } = require('../utils/attendanceLocation');
 
-function statusesRequireOfficeLocation(status) {
-  return status === 'Present' || status === 'Half Day' || !status;
-}
-
 function parseClientLocation(body = {}) {
   return {
     latitude: body.latitude ?? body.location?.latitude,
@@ -36,44 +32,43 @@ function parseClientLocation(body = {}) {
   };
 }
 
-async function applyLocationValidation({
-  employeeId,
-  status,
-  body,
-  employeeMarking,
-  canManageAll,
-}) {
-  const needsGps = employeeMarking && statusesRequireOfficeLocation(status)
-    && status !== 'Work From Home'
-    && status !== 'Absent'
-    && status !== 'On Leave'
-    && status !== 'Holiday';
-
-  if (!needsGps) {
-    // Still allow optional location capture if client sends it
-    const loc = parseClientLocation(body);
-    if (loc.latitude != null && loc.longitude != null) {
-      const result = await validateAttendanceLocation({
-        employeeId,
-        ...loc,
-        requireLocation: false,
-      });
-      return result.ok ? result : { ok: true, locationPayload: null };
-    }
-    return { ok: true, locationPayload: null };
+/**
+ * If GPS is outside office radius, auto-assign Work From Home.
+ */
+function applyOutsideRadiusStatus(status, locationCheck, notes = '') {
+  if (!locationCheck?.outsideRadius) {
+    return { status, notes, autoWfh: false };
   }
 
+  const wfhNote = 'Auto Work From Home — marked outside office attendance radius';
+  let nextNotes = String(notes || '').trim();
+  if (!nextNotes.includes('outside office attendance radius')) {
+    nextNotes = nextNotes ? `${nextNotes} | ${wfhNote}` : wfhNote;
+  }
+
+  return { status: 'Work From Home', notes: nextNotes, autoWfh: true };
+}
+
+async function applyLocationValidation({
+  employeeId,
+  body,
+}) {
+  // GPS is optional for SaaS / desktop use. When coords are present and outside
+  // the office radius, attendance is auto-marked Work From Home.
   const loc = parseClientLocation(body);
+  if (loc.latitude == null || loc.longitude == null) {
+    return { ok: true, locationPayload: null, outsideRadius: false, locationUnavailable: true };
+  }
+
   const result = await validateAttendanceLocation({
     employeeId,
     ...loc,
-    requireLocation: true,
+    requireLocation: false,
   });
+  if (result.ok) return result;
 
-  if (!result.ok) {
-    return result;
-  }
-  return result;
+  // Invalid GPS should not block marking for customers without location access
+  return { ok: true, locationPayload: null, outsideRadius: false, locationUnavailable: true };
 }
 
 function enrichAttendanceRecord(record) {
@@ -355,8 +350,8 @@ router.post('/', async (req, res) => {
       scope.canManageAll && req.body.checkOut != null && req.body.checkOut !== ''
         ? req.body.checkOut
         : (req.body.checkOut || sessionTimes.checkOut);
-    const resolvedCheckOut = checkOut
-      || (employeeMarking ? nowTime : '');
+    // Employees only get check-out after they log out of the app (session times)
+    const resolvedCheckOut = checkOut || '';
 
     if (employeeMarking && !checkIn) {
       return res.status(400).json({
@@ -371,7 +366,7 @@ router.post('/', async (req, res) => {
 
     if (existing) {
       if (employeeMarking) {
-        const nextStatus = resolveSelfMarkStatus({
+        let nextStatus = resolveSelfMarkStatus({
           requestedStatus: req.body.status,
           existing,
           nowHHMM: nowTime,
@@ -379,10 +374,7 @@ router.post('/', async (req, res) => {
 
         const locationCheck = await applyLocationValidation({
           employeeId,
-          status: nextStatus,
           body: req.body,
-          employeeMarking,
-          canManageAll: scope.canManageAll,
         });
         if (!locationCheck.ok) {
           return res.status(400).json({
@@ -394,17 +386,27 @@ router.post('/', async (req, res) => {
           });
         }
 
+        const adjusted = applyOutsideRadiusStatus(
+          nextStatus,
+          locationCheck,
+          req.body.notes != null ? req.body.notes : existing.notes
+        );
+        nextStatus = adjusted.status;
+
         if (checkIn) {
           existing.checkIn = existing.checkIn
             ? pickEarlierTime(existing.checkIn, checkIn)
             : checkIn;
         }
-        if (resolvedCheckOut) {
+        if (employeeMarking) {
+          // Check-out only after real logout; clear any previously invented time
+          existing.checkOut = resolvedCheckOut || '';
+        } else if (resolvedCheckOut) {
           existing.checkOut = existing.checkOut
             ? pickLaterTime(existing.checkOut, resolvedCheckOut)
             : resolvedCheckOut;
         }
-        if (req.body.notes != null) existing.notes = req.body.notes;
+        existing.notes = adjusted.notes;
         existing.status = nextStatus;
         if (
           existing.status === 'Half Day'
@@ -419,7 +421,11 @@ router.post('/', async (req, res) => {
         }
         await existing.save();
         await existing.populate('employee', 'employeeId firstName lastName department photo');
-        return res.json(enrichAttendanceRecord(existing));
+        const enriched = enrichAttendanceRecord(existing);
+        return res.json({
+          ...(enriched && typeof enriched === 'object' ? enriched : { data: enriched }),
+          autoWorkFromHome: Boolean(adjusted.autoWfh),
+        });
       }
       return res.status(400).json({ error: 'Attendance already marked for this employee today' });
     }
@@ -437,10 +443,7 @@ router.post('/', async (req, res) => {
 
     const locationCheck = await applyLocationValidation({
       employeeId,
-      status: defaultStatus,
       body: req.body,
-      employeeMarking,
-      canManageAll: scope.canManageAll,
     });
     if (!locationCheck.ok) {
       return res.status(400).json({
@@ -452,16 +455,20 @@ router.post('/', async (req, res) => {
       });
     }
 
+    const baseNotes = req.body.notes
+      || (employeeMarking && defaultStatus === 'Half Day'
+        ? 'Marked after 12:30 — counted as half day'
+        : '');
+    const adjusted = applyOutsideRadiusStatus(defaultStatus, locationCheck, baseNotes);
+    defaultStatus = adjusted.status;
+
     const payload = {
       employee: employeeId,
       date: today,
       checkIn,
       checkOut: resolvedCheckOut,
       status: defaultStatus,
-      notes: req.body.notes
-        || (employeeMarking && defaultStatus === 'Half Day'
-          ? 'Marked after 12:30 — counted as half day'
-          : ''),
+      notes: adjusted.notes,
     };
     if (locationCheck.locationPayload) {
       payload.location = locationCheck.locationPayload;
@@ -470,7 +477,11 @@ router.post('/', async (req, res) => {
     const record = new Attendance(payload);
     await record.save();
     await record.populate('employee', 'employeeId firstName lastName department photo');
-    res.status(201).json(enrichAttendanceRecord(record));
+    const enriched = enrichAttendanceRecord(record);
+    res.status(201).json({
+      ...(enriched && typeof enriched === 'object' ? enriched : { data: enriched }),
+      autoWorkFromHome: Boolean(adjusted.autoWfh),
+    });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

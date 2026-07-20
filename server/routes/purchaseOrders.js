@@ -7,6 +7,8 @@ const Supplier = require('../models/Supplier');
 const { paginate } = require('../utils/pagination');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
+const { linkPurchaseOrderProductsToSupplier } = require('../utils/productSuppliers');
+const { findProductBySkuForImport } = require('../utils/saleImportUtils');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -67,6 +69,90 @@ function pushValidationErrors(errors, row, field, err) {
   errors.push({ row, field, message: err?.message || String(err) });
 }
 
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function parseImportPoDate(value) {
+  if (value == null || value === '') return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value) && value > 20000) {
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    const parsed = new Date(epoch.getTime() + value * 86400000);
+    return new Date(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate());
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+
+  const dmyOrMdy = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (dmyOrMdy) {
+    const a = Number(dmyOrMdy[1]);
+    const b = Number(dmyOrMdy[2]);
+    const y = Number(dmyOrMdy[3]);
+    if (a > 12) return new Date(y, b - 1, a);
+    if (b > 12) return new Date(y, a - 1, b);
+    return new Date(y, b - 1, a);
+  }
+
+  const serial = Number(raw);
+  if (Number.isFinite(serial) && serial > 20000) {
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    const parsed = new Date(epoch.getTime() + serial * 86400000);
+    return new Date(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate());
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  }
+  return null;
+}
+
+function dateGroupKey(value) {
+  const d = parseImportPoDate(value);
+  if (!d) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getPoImportCell(row, ...keys) {
+  for (const key of keys) {
+    if (row[key] != null && String(row[key]).trim() !== '') {
+      return row[key];
+    }
+  }
+  return '';
+}
+
+function buildPoImportGroupKey(row) {
+  const ref = String(getPoImportCell(row, 'PO Reference *', 'PO Reference')).trim();
+  const supplierName = String(getPoImportCell(row, 'Supplier Name *', 'Supplier Name')).trim();
+  const orderDateKey = dateGroupKey(getPoImportCell(row, 'Order Date (YYYY-MM-DD)', 'Order Date'));
+  const deliveryKey = dateGroupKey(
+    getPoImportCell(row, 'Expected Delivery Date (YYYY-MM-DD)', 'Expected Delivery Date')
+  );
+  return `${supplierName.toLowerCase()}||${ref.toLowerCase()}||${orderDateKey}||${deliveryKey}`;
+}
+
+async function findSupplierByName(name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return null;
+  const exact = await Supplier.findOne({ name: trimmed });
+  if (exact) return exact;
+  return Supplier.findOne({
+    name: { $regex: new RegExp(`^${escapeRegex(trimmed)}$`, 'i') },
+  });
+}
+
 const PO_POPULATE = [
   { path: 'supplier', select: 'name contactPerson email phone address gstin pan state' },
   { path: 'purchaseRequisite', select: 'prNumber status' },
@@ -102,21 +188,30 @@ async function buildPurchaseOrderSearchOr(search) {
 
 // Helper function to generate PO number
 async function generatePONumber() {
-  const today = new Date();
-  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-  const prefix = `PO-${dateStr}-`;
-  
-  const lastPO = await PurchaseOrder.findOne({
-    poNumber: { $regex: `^${prefix}` }
-  }).sort({ poNumber: -1 });
-  
-  let sequence = 1;
-  if (lastPO) {
-    const lastSequence = parseInt(lastPO.poNumber.split('-')[2]);
-    sequence = lastSequence + 1;
-  }
-  
-  return `${prefix}${String(sequence).padStart(3, '0')}`;
+  const allocator = createPoNumberAllocator();
+  return allocator();
+}
+
+// Assigns unique PO numbers within a batch import (avoids duplicate key on poNumber)
+function createPoNumberAllocator() {
+  let prefix = null;
+  let nextSeq = null;
+
+  return async function allocatePoNumber() {
+    if (prefix == null) {
+      const today = new Date();
+      const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+      prefix = `PO-${dateStr}-`;
+      const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const lastPO = await PurchaseOrder.findOne({
+        poNumber: { $regex: `^${escaped}` },
+      }).sort({ poNumber: -1 });
+      nextSeq = lastPO ? parseInt(lastPO.poNumber.split('-')[2], 10) + 1 : 1;
+    }
+    const poNumber = `${prefix}${String(nextSeq).padStart(3, '0')}`;
+    nextSeq += 1;
+    return poNumber;
+  };
 }
 
 // GET all purchase orders (with pagination)
@@ -185,16 +280,28 @@ router.get('/template', (req, res) => {
         notes: ''
       },
       {
-        poRef: 'PO-1',
+        poRef: 'PO-2',
         supplier: 'Global Traders',
-        orderDate: '2026-06-23',
-        expectedDeliveryDate: '2026-07-05',
+        orderDate: '2026-07-01',
+        expectedDeliveryDate: '2026-07-10',
         status: 'pending',
         sku: 'PROD-003',
         quantity: 8,
         unitPrice: 150,
         tax: 0,
-        notes: 'Different vendor = separate purchase order even with same PO Reference'
+        notes: 'Different vendor + PO ref + dates = separate purchase order'
+      },
+      {
+        poRef: 'PO-3',
+        supplier: 'Acme Supplies',
+        orderDate: '2026-07-15',
+        expectedDeliveryDate: '2026-07-25',
+        status: 'approved',
+        sku: 'PROD-001',
+        quantity: 4,
+        unitPrice: 260,
+        tax: 0,
+        notes: 'Same vendor but different PO ref or dates = another PO'
       }
     ];
     const buffer = generateTemplate(PURCHASE_ORDER_HEADERS, sampleData);
@@ -213,22 +320,19 @@ router.post('/import', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const Product = require('../models/Product');
-
     const rows = parseExcel(req.file.buffer);
     if (rows.length === 0) {
       return res.status(400).json({ error: 'Excel file is empty' });
     }
 
-    // Group rows into purchase orders by vendor + PO reference
-    // (same Excel with multiple vendors → one PO per vendor)
+    // Group rows: one PO per unique vendor + PO reference + order/delivery dates
     const groups = new Map();
     const errors = [];
 
     rows.forEach((row, idx) => {
       const rowNum = idx + 2;
-      const ref = (row['PO Reference *'] || '').toString().trim();
-      const supplierName = (row['Supplier Name *'] || '').toString().trim();
+      const ref = String(getPoImportCell(row, 'PO Reference *', 'PO Reference')).trim();
+      const supplierName = String(getPoImportCell(row, 'Supplier Name *', 'Supplier Name')).trim();
 
       if (!ref) {
         errors.push({ row: rowNum, field: 'PO Reference *', message: 'PO Reference is required' });
@@ -238,16 +342,20 @@ router.post('/import', upload.single('file'), async (req, res) => {
         errors.push({
           row: rowNum,
           field: 'Supplier Name *',
-          message: `PO '${ref}': Supplier Name is required — each vendor gets its own purchase order`,
+          message: `PO '${ref}': Supplier Name is required`,
         });
         return;
       }
 
-      const key = `${supplierName.toLowerCase()}||${ref}`;
+      const key = buildPoImportGroupKey(row);
       if (!groups.has(key)) {
         groups.set(key, {
           ref,
           supplierName,
+          orderDateKey: dateGroupKey(getPoImportCell(row, 'Order Date (YYYY-MM-DD)', 'Order Date')),
+          deliveryDateKey: dateGroupKey(
+            getPoImportCell(row, 'Expected Delivery Date (YYYY-MM-DD)', 'Expected Delivery Date')
+          ),
           entries: [],
         });
       }
@@ -269,7 +377,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
       let supplier = null;
 
       try {
-        supplier = await Supplier.findOne({ name: supplierName });
+        supplier = await findSupplierByName(supplierName);
         if (!supplier) {
           poErrors.push({
             row: firstRowNum,
@@ -278,14 +386,39 @@ router.post('/import', upload.single('file'), async (req, res) => {
           });
         }
 
-        // Warn if other rows in this vendor group somehow differ (defensive)
+        const headerOrderDate = parseImportPoDate(
+          getPoImportCell(first, 'Order Date (YYYY-MM-DD)', 'Order Date')
+        );
+        const headerDeliveryDate = parseImportPoDate(
+          getPoImportCell(first, 'Expected Delivery Date (YYYY-MM-DD)', 'Expected Delivery Date')
+        );
+
         for (const { row, rowNum } of entries) {
-          const rowSupplier = (row['Supplier Name *'] || '').toString().trim();
+          const rowSupplier = String(getPoImportCell(row, 'Supplier Name *', 'Supplier Name')).trim();
           if (rowSupplier && rowSupplier.toLowerCase() !== supplierName.toLowerCase()) {
             poErrors.push({
               row: rowNum,
               field: 'Supplier Name *',
-              message: `${label}: mixed vendor '${rowSupplier}' on the same group — each vendor must be separate`,
+              message: `${label}: mixed vendor '${rowSupplier}' in the same PO group`,
+            });
+          }
+
+          const rowOrderKey = dateGroupKey(getPoImportCell(row, 'Order Date (YYYY-MM-DD)', 'Order Date'));
+          const rowDeliveryKey = dateGroupKey(
+            getPoImportCell(row, 'Expected Delivery Date (YYYY-MM-DD)', 'Expected Delivery Date')
+          );
+          if (group.orderDateKey && rowOrderKey && rowOrderKey !== group.orderDateKey) {
+            poErrors.push({
+              row: rowNum,
+              field: 'Order Date (YYYY-MM-DD)',
+              message: `${label}: order date must match other lines in this PO group`,
+            });
+          }
+          if (group.deliveryDateKey && rowDeliveryKey && rowDeliveryKey !== group.deliveryDateKey) {
+            poErrors.push({
+              row: rowNum,
+              field: 'Expected Delivery Date (YYYY-MM-DD)',
+              message: `${label}: expected delivery date must match other lines in this PO group`,
             });
           }
         }
@@ -307,7 +440,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
         const items = [];
         for (const { row, rowNum } of entries) {
-          const sku = (row['Product SKU *'] || '').toString().trim();
+          const sku = String(getPoImportCell(row, 'Product SKU *', 'Product SKU', 'SKU') || '').trim();
           const quantity = parseFloat(row['Quantity *']);
           const unitPrice = parseFloat(row['Unit Price (Amount) *']);
 
@@ -341,13 +474,13 @@ router.post('/import', upload.single('file'), async (req, res) => {
             continue;
           }
 
-          const product = await Product.findOne({ sku });
+          const product = await findProductBySkuForImport(sku);
           if (!product) {
             skipped++;
             poErrors.push({
               row: rowNum,
               field: 'Product SKU *',
-              message: `Product not available — SKU '${sku}' was not added to ${label}`,
+              message: `Product not available — SKU '${sku}' was not added to ${label} (not found in Product Master; check spelling, leading zeros, or add the product first)`,
             });
             continue;
           }
@@ -384,12 +517,10 @@ router.post('/import', upload.single('file'), async (req, res) => {
           ref: label,
           rowNum: firstRowNum,
           poData: {
-            poNumber: await generatePONumber(),
+            purchaseRequisitionNumber: ref,
             supplier: supplier._id,
-            orderDate: first['Order Date (YYYY-MM-DD)'] ? new Date(first['Order Date (YYYY-MM-DD)']) : new Date(),
-            expectedDeliveryDate: first['Expected Delivery Date (YYYY-MM-DD)']
-              ? new Date(first['Expected Delivery Date (YYYY-MM-DD)'])
-              : undefined,
+            orderDate: headerOrderDate || new Date(),
+            expectedDeliveryDate: headerDeliveryDate || undefined,
             status,
             items,
             tax: parseFloat(first['Tax']) || 0,
@@ -403,9 +534,12 @@ router.post('/import', upload.single('file'), async (req, res) => {
     }
 
     // Phase 2: save only fully-valid POs (errors from phase 1 already listed together)
+    const allocatePoNumber = createPoNumberAllocator();
     for (const item of readyToSave) {
       try {
-        await new PurchaseOrder(item.poData).save();
+        item.poData.poNumber = await allocatePoNumber();
+        const saved = await new PurchaseOrder(item.poData).save();
+        await linkPurchaseOrderProductsToSupplier(saved).catch(() => {});
         imported++;
       } catch (err) {
         failed++;
@@ -419,6 +553,8 @@ router.post('/import', upload.single('file'), async (req, res) => {
       failed,
       skipped,
       totalRows: rows.length,
+      purchaseOrdersCreated: imported,
+      groupsProcessed: groups.size,
       errors,
     });
   } catch (error) {
@@ -460,6 +596,9 @@ router.post('/', async (req, res) => {
     
     const purchaseOrder = new PurchaseOrder(poData);
     await purchaseOrder.save();
+    await linkPurchaseOrderProductsToSupplier(purchaseOrder).catch((err) => {
+      console.warn('Could not link PO products to supplier:', err.message);
+    });
     
     const populatedPO = await PurchaseOrder.findById(purchaseOrder._id)
       .populate(PO_POPULATE);
@@ -493,6 +632,12 @@ router.put('/:id', async (req, res) => {
     
     if (!purchaseOrder) {
       return res.status(404).json({ error: 'Purchase order not found' });
+    }
+
+    if (purchaseOrder.supplier) {
+      await linkPurchaseOrderProductsToSupplier(purchaseOrder).catch((err) => {
+        console.warn('Could not link PO products to supplier:', err.message);
+      });
     }
     
     res.json(purchaseOrder);

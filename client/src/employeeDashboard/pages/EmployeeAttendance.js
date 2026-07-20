@@ -10,9 +10,13 @@ import {
   formatWorkingHoursDisplay,
   isWorkingHoursInProgress,
   formatTime12Hour,
-  getDisplayCheckOut,
   formatNow12Hour,
 } from '../../hr/utils/attendanceUtils';
+import {
+  buildAttendanceLocationPayload,
+  formatLocationAttendanceError,
+  prefetchAttendanceLocation,
+} from '../../hr/utils/attendanceGeo';
 
 const WORK_LOCATIONS = [
   { id: 'office', label: 'Office', status: 'Present', icon: '🏢' },
@@ -44,11 +48,30 @@ function EmployeeAttendanceContent({ employeeId }) {
   const [marking, setMarking] = useState(false);
   const [workLocation, setWorkLocation] = useState('office');
   const [notes, setNotes] = useState('');
+  const [geoStatus, setGeoStatus] = useState('idle'); // idle | loading | ready | error
+  const [geoCache, setGeoCache] = useState(null);
+  const [geoError, setGeoError] = useState('');
   const [filters, setFilters] = useState({
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
   });
   const [liveTick, setLiveTick] = useState(0);
+
+  const refreshBrowserLocation = useCallback(async () => {
+    setGeoStatus('loading');
+    setGeoError('');
+    try {
+      const location = await prefetchAttendanceLocation();
+      setGeoCache(location);
+      setGeoStatus('ready');
+      return location;
+    } catch (error) {
+      setGeoCache(null);
+      setGeoStatus('error');
+      setGeoError(error?.message || 'Unable to fetch your location.');
+      return null;
+    }
+  }, []);
 
   const loadTodayDefaults = useCallback(async () => {
     try {
@@ -107,6 +130,27 @@ function EmployeeAttendanceContent({ employeeId }) {
     fetchMonthData();
   }, [fetchMonthData]);
 
+  // Prefetch browser GPS on open, then refresh every 90s while the page is open
+  useEffect(() => {
+    let cancelled = false;
+    let timer;
+
+    const run = async () => {
+      if (cancelled) return;
+      await refreshBrowserLocation();
+      if (!cancelled) {
+        timer = setTimeout(run, 90000);
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [refreshBrowserLocation]);
+
   useEffect(() => {
     const inProgress = todayDefaults?.hoursInProgress
       || isWorkingHoursInProgress(todayDefaults?.existingRecord || {});
@@ -127,13 +171,30 @@ function EmployeeAttendanceContent({ employeeId }) {
 
     try {
       setMarking(true);
-      await hrAttendanceAPI.create({
-        notes,
-        status: workLocationToStatus(workLocation),
+      const selectedStatus = workLocationToStatus(workLocation);
+      // GPS is optional — used when available for office radius checks
+      const locationPayload = await buildAttendanceLocationPayload({
+        requireGps: false,
+        optionalGps: selectedStatus !== 'Work From Home',
+        cachedLocation: geoCache,
       });
+
+      const response = await hrAttendanceAPI.create({
+        notes,
+        status: selectedStatus,
+        ...locationPayload,
+      });
+
+      if (response.data?.autoWorkFromHome) {
+        setWorkLocation('home');
+        alert(
+          'You are outside the office attendance radius, so attendance was marked as Work From Home.'
+        );
+      }
+
       await Promise.all([loadTodayDefaults(), fetchMonthData()]);
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to mark attendance');
+      alert(formatLocationAttendanceError(error));
     } finally {
       setMarking(false);
     }
@@ -142,7 +203,8 @@ function EmployeeAttendanceContent({ employeeId }) {
   const todayRecord = todayDefaults?.existingRecord;
   const alreadyMarked = Boolean(todayDefaults?.alreadyMarked);
   const todayCheckIn = todayDefaults?.checkIn || todayRecord?.checkIn || '';
-  const todayCheckOut = todayRecord?.checkOut || todayDefaults?.checkOut || '';
+  // Only real logout time — never show live clock as check-out
+  const todayCheckOut = todayDefaults?.checkOut || '';
   const todayHoursInProgress = Boolean(
     todayDefaults?.hoursInProgress
     || isWorkingHoursInProgress({
@@ -153,19 +215,18 @@ function EmployeeAttendanceContent({ employeeId }) {
   );
   const todayWorkingHours = resolveWorkingHours({
     checkIn: todayCheckIn,
-    checkOut: getDisplayCheckOut(todayCheckOut, { inProgress: todayHoursInProgress }),
+    checkOut: todayCheckOut,
     date: todayDefaults?.date || new Date(),
     workingHours: todayRecord?.workingHours ?? todayDefaults?.workingHours,
   });
-  const displayCheckOut = getDisplayCheckOut(todayCheckOut, { inProgress: todayHoursInProgress });
+  const displayCheckOut = todayCheckOut;
   void liveTick;
 
   return (
     <>
-      <header className="ed-section-header">
+      <header className="ed-section-header ed-attendance-page-header">
         <div>
           <h2>My Attendance</h2>
-          <p>Mark today&apos;s attendance and select whether you are working from office or home.</p>
         </div>
       </header>
 
@@ -173,11 +234,32 @@ function EmployeeAttendanceContent({ employeeId }) {
         <div className="ed-attendance-today-header">
           <div>
             <h3>Today — {formatTodayLabel()}</h3>
-            <p className="ed-attendance-today-subtitle">
-              Check-in and check-out are taken from when you log in and out of the app.
-              Mark by 12:30 for a full day; after 12:30 it counts as a half day. Unmarked staff are auto-marked absent after 12:30.
+            <p className="ed-attendance-live-clock">
+              {formatNow12Hour()}
+              <span
+                className={`ed-attendance-geo-status${
+                  geoStatus === 'ready' ? ' ready' : geoStatus === 'error' ? ' error' : ''
+                }`}
+              >
+                {geoStatus === 'loading' || geoStatus === 'idle'
+                  ? ' · Locating…'
+                  : geoStatus === 'ready'
+                    ? ' · Location ready'
+                    : ' · Location off'}
+                {geoStatus === 'error' && (
+                  <>
+                    {' '}
+                    <button
+                      type="button"
+                      className="ed-attendance-geo-retry"
+                      onClick={refreshBrowserLocation}
+                    >
+                      Retry
+                    </button>
+                  </>
+                )}
+              </span>
             </p>
-            <p className="ed-attendance-live-clock">Current time: {formatNow12Hour()}</p>
           </div>
           <button
             type="button"
@@ -188,13 +270,13 @@ function EmployeeAttendanceContent({ employeeId }) {
             {marking
               ? 'Saving…'
               : alreadyMarked
-                ? 'Update Attendance'
-                : 'Mark Today\'s Attendance'}
+                ? 'Update'
+                : 'Mark Attendance'}
           </button>
         </div>
 
         {loadingToday ? (
-          <div className="ed-attendance-today-body ed-loading-inline">Loading today&apos;s session…</div>
+          <div className="ed-attendance-today-body ed-loading-inline">Loading…</div>
         ) : (
           <div className="ed-attendance-today-body">
             <div className="ed-attendance-times">
@@ -207,7 +289,7 @@ function EmployeeAttendanceContent({ employeeId }) {
                 <strong>{formatTime12Hour(displayCheckOut)}</strong>
               </div>
               <div>
-                <span className="ed-attendance-time-label">Working Hours</span>
+                <span className="ed-attendance-time-label">Hours</span>
                 <strong>
                   {formatWorkingHoursDisplay(todayWorkingHours, { inProgress: todayHoursInProgress })}
                 </strong>
@@ -222,7 +304,7 @@ function EmployeeAttendanceContent({ employeeId }) {
               </div>
             </div>
 
-            <div className="ed-form-group">
+            <div className="ed-form-group ed-attendance-work-from">
               <label>Working From</label>
               <div className="ed-work-location-options">
                 {WORK_LOCATIONS.map((option) => (
@@ -240,42 +322,32 @@ function EmployeeAttendanceContent({ employeeId }) {
             </div>
 
             {!todayDefaults?.checkIn && !alreadyMarked && (
-              <p className="ed-attendance-hint">
-                Check-in time is recorded when you log in. If it is missing, log out and sign in again, then return to this page.
-              </p>
+              <p className="ed-attendance-hint">Log in first to record check-in, then mark attendance.</p>
             )}
 
             {!alreadyMarked && todayDefaults?.pastHalfDayCutoff && (
-              <p className="ed-attendance-hint">
-                It is past 12:30. Marking now will be counted as a half day.
-              </p>
+              <p className="ed-attendance-hint">Past 12:30 — marking now counts as a half day.</p>
             )}
 
             {alreadyMarked && todayRecord?.status === 'Half Day' && (
-              <p className="ed-attendance-hint">
-                Today is recorded as a half day because attendance was marked after 12:30.
-              </p>
+              <p className="ed-attendance-hint">Marked after 12:30 — recorded as half day.</p>
             )}
 
             {alreadyMarked && todayRecord?.status === 'Absent' && (
-              <p className="ed-attendance-hint">
-                Auto-marked absent (not marked by 12:30). Mark now to convert this to a half day.
-              </p>
+              <p className="ed-attendance-hint">Auto-absent after 12:30. Mark now to convert to half day.</p>
             )}
 
             {alreadyMarked && todayRecord?.status !== 'Absent' && todayRecord?.status !== 'Half Day' && (
-              <p className="ed-attendance-hint success">
-                Attendance marked for today. You can change office/home or log out and click &quot;Update Attendance&quot; to refresh checkout.
-              </p>
+              <p className="ed-attendance-hint success">Marked for today. Update to change office/home or refresh checkout.</p>
             )}
 
-            <div className="ed-form-group">
+            <div className="ed-form-group ed-attendance-notes">
               <label>Notes (optional)</label>
               <textarea
-                rows={2}
+                rows={1}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add a note for today"
+                placeholder="Add a note"
               />
             </div>
           </div>

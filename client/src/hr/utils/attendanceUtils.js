@@ -114,10 +114,9 @@ export function formatNow12Hour(date = new Date()) {
   return formatTime12Hour(normalizeTimeInput(date));
 }
 
-export function getDisplayCheckOut(checkOut, { inProgress = false } = {}) {
-  if (checkOut) return checkOut;
-  if (inProgress) return currentTimeHHMM();
-  return '';
+export function getDisplayCheckOut(checkOut) {
+  // Only show an actual logout/check-out time — never invent "now"
+  return checkOut || '';
 }
 
 export function time24to12(timeStr) {

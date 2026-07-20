@@ -71,6 +71,16 @@ async function validateAttendanceLocation({
   }
 
   if (latitude == null || longitude == null || latitude === '' || longitude === '') {
+    if (!requireLocation) {
+      return {
+        ok: true,
+        office,
+        distanceMeters: null,
+        locationPayload: null,
+        outsideRadius: false,
+        locationUnavailable: true,
+      };
+    }
     return {
       ok: false,
       error: 'Location permission is required to mark office attendance. Please enable GPS and try again.',
@@ -96,19 +106,30 @@ async function validateAttendanceLocation({
   );
 
   if (distanceMeters > office.radiusMeters) {
+    // Outside radius — allow mark, but flag so callers can auto-assign Work From Home
     return {
-      ok: false,
-      error: 'You are outside the allowed attendance area.',
-      code: 'OUTSIDE_RADIUS',
+      ok: true,
+      outsideRadius: true,
       office,
       distanceMeters,
       allowedRadiusMeters: office.radiusMeters,
       currentDistanceMeters: distanceMeters,
+      locationPayload: {
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        distanceMeters,
+        officeName: office.name,
+        officeLocation: office._id,
+        capturedAt: new Date(),
+        deviceInfo: String(deviceInfo || '').slice(0, 500),
+        browserInfo: String(browserInfo || '').slice(0, 500),
+      },
     };
   }
 
   return {
     ok: true,
+    outsideRadius: false,
     office,
     distanceMeters,
     locationPayload: {

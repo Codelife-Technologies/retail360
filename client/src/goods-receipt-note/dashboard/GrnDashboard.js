@@ -13,17 +13,23 @@ function GrnDashboard({ onNavigate, onSelectGrn, onCreateFromPo }) {
 
   const kpis = stats
     ? [
-        { label: 'Upcoming POs', value: stats.upcomingPoCount ?? 0, cls: 'upcoming' },
-        { label: 'Total GRNs', value: stats.totalGrns, cls: '' },
-        { label: 'Pending Receipt', value: stats.pendingReceipt, cls: 'warn' },
-        { label: 'Completed', value: stats.completedReceipts, cls: 'ok' },
-        { label: 'Partially Received', value: stats.partiallyReceived, cls: 'info' },
-        { label: 'Fully Received', value: stats.fullyReceived, cls: 'ok' },
-        { label: 'Rejected', value: stats.rejectedReceipts, cls: 'danger' },
-        { label: 'Inventory Value Received', value: formatINR(stats.inventoryValueReceived), cls: 'primary' },
-        { label: 'Monthly Received Value', value: formatINR(stats.monthlyReceivedValue), cls: 'primary' },
+        { label: 'Upcoming POs', value: stats.upcomingPoCount ?? 0, cls: 'upcoming', status: 'upcoming' },
+        { label: 'Total GRNs', value: stats.totalGrns, cls: '', status: '' },
+        { label: 'Pending Receipt', value: stats.pendingReceipt, cls: 'warn', status: 'draft' },
+        { label: 'Completed', value: stats.completedReceipts, cls: 'ok', status: 'closed' },
+        { label: 'Partially Received', value: stats.partiallyReceived, cls: 'info', status: 'partially_received' },
+        { label: 'Fully Received', value: stats.fullyReceived, cls: 'ok', status: 'fully_received' },
+        { label: 'Rejected', value: stats.rejectedReceipts, cls: 'danger', status: 'cancelled' },
+        { label: 'Inventory Value Received', value: formatINR(stats.inventoryValueReceived), cls: 'primary', status: 'fully_received' },
+        { label: 'Monthly Received Value', value: formatINR(stats.monthlyReceivedValue), cls: 'primary', status: '' },
       ]
     : [];
+
+  const handleKpiClick = (status) => {
+    setFilters((f) => ({ ...f, status: status || '' }));
+    const el = document.querySelector('.grn-list-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <div className="grn-dashboard">
@@ -48,7 +54,20 @@ function GrnDashboard({ onNavigate, onSelectGrn, onCreateFromPo }) {
         <>
           <div className="grn-kpi-grid">
             {kpis.map((k) => (
-              <div key={k.label} className={`grn-kpi-card ${k.cls}`}>
+              <div
+                key={k.label}
+                className={`grn-kpi-card ${k.cls} clickable`}
+                role="button"
+                tabIndex={0}
+                title={`Filter: ${k.label}`}
+                onClick={() => handleKpiClick(k.status)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleKpiClick(k.status);
+                  }
+                }}
+              >
                 <span className="grn-kpi-label">{k.label}</span>
                 <span className="grn-kpi-value">{k.value}</span>
               </div>

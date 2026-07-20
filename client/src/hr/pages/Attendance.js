@@ -16,7 +16,7 @@ import HrStatusBadge from '../components/HrStatusBadge';
 import HrEmployeeAvatar from '../components/HrEmployeeAvatar';
 import TimeInput12 from '../components/TimeInput12';
 import { extractList, extractPagination, formatDate, employeeName, toInputDate } from '../utils/hrUtils';
-import { calcWorkingHoursFromTimes, resolveWorkingHours, formatWorkingHoursDisplay, isWorkingHoursInProgress, formatTime12Hour, getDisplayCheckOut } from '../utils/attendanceUtils';
+import { calcWorkingHoursFromTimes, resolveWorkingHours, formatWorkingHoursDisplay, isWorkingHoursInProgress, formatTime12Hour } from '../utils/attendanceUtils';
 
 const STATUS_OPTIONS = ['Present', 'Absent', 'Half Day', 'Leave', 'Holiday', 'Work From Home'];
 
@@ -448,9 +448,7 @@ function Attendance() {
                     <td>{formatDate(row.date)}</td>
                     <td>{formatTime12Hour(row.checkIn)}</td>
                     <td>
-                      {formatTime12Hour(getDisplayCheckOut(row.checkOut, {
-                        inProgress: isWorkingHoursInProgress(row),
-                      }))}
+                      {formatTime12Hour(row.checkOut)}
                     </td>
                     <td>
                       {formatWorkingHoursDisplay(resolveWorkingHours(row), {

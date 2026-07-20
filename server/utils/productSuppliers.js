@@ -82,9 +82,71 @@ function parseSupplierLinksPayload(payload, product = {}) {
   return dedupeSupplierLinks(links);
 }
 
+/**
+ * Ensure each product is linked to the supplier (for future vendor-wise POs).
+ * Idempotent — skips products that already include this supplier.
+ * @returns {Promise<{ linked: number, skipped: number }>}
+ */
+async function linkProductsToSupplier(supplierId, productIds = [], ProductModel) {
+  const Product = ProductModel || require('../models/Product');
+  const sid = supplierId?._id || supplierId;
+  if (!sid) return { linked: 0, skipped: 0 };
+
+  const ids = [...new Set(
+    (productIds || [])
+      .map((id) => {
+        if (!id) return null;
+        if (typeof id === 'object') return String(id._id || id.product || '');
+        return String(id);
+      })
+      .filter((id) => id && /^[a-f\d]{24}$/i.test(id))
+  )];
+
+  if (ids.length === 0) return { linked: 0, skipped: 0 };
+
+  const products = await Product.find({ _id: { $in: ids } }).select('sku unit suppliers');
+  let linked = 0;
+  let skipped = 0;
+
+  await Promise.all(products.map(async (product) => {
+    const existing = normalizeSupplierLinks(product.suppliers, product);
+    const alreadyLinked = existing.some((link) => String(link.supplier) === String(sid));
+    if (alreadyLinked) {
+      skipped += 1;
+      return;
+    }
+
+    product.suppliers = dedupeSupplierLinks([
+      ...existing,
+      {
+        supplier: sid,
+        sku: product.sku || '',
+        unit: product.unit || 'pcs',
+      },
+    ]);
+    product.markModified('suppliers');
+    await product.save();
+    linked += 1;
+  }));
+
+  return { linked, skipped };
+}
+
+/**
+ * Link every line-item product on a PO to that PO's supplier.
+ */
+async function linkPurchaseOrderProductsToSupplier(po, ProductModel) {
+  if (!po?.supplier) return { linked: 0, skipped: 0 };
+  const supplierId = po.supplier._id || po.supplier;
+  const productIds = (po.items || []).map((item) => item.product);
+  return linkProductsToSupplier(supplierId, productIds, ProductModel);
+}
+
 module.exports = {
   normalizeSupplierLinks,
   parseSupplierLinksPayload,
   dedupeSupplierLinks,
   isLegacySupplierEntry,
+  linkProductsToSupplier,
+  linkPurchaseOrderProductsToSupplier,
 };

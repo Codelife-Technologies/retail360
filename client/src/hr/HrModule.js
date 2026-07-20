@@ -2,7 +2,6 @@ import React from 'react';
 import HrDashboard from './pages/HrDashboard';
 import EmployeeMaster from './pages/EmployeeMaster';
 import Attendance from './pages/Attendance';
-import LocationSettings from './pages/LocationSettings';
 import LeaveManagement from './pages/LeaveManagement';
 import Payroll from './pages/Payroll';
 import Holidays from './pages/Holidays';
@@ -11,11 +10,11 @@ import WorkLogs from './pages/WorkLogs';
 import './HrModule.css';
 import './styles/hrShared.css';
 
-function HrModule({ subTab = 'hr-dashboard' }) {
+function HrModule({ subTab = 'hr-dashboard', onNavigate }) {
   const renderPanel = () => {
     switch (subTab) {
       case 'hr-dashboard':
-        return <HrDashboard />;
+        return <HrDashboard onNavigate={onNavigate} />;
       case 'employee-master':
         return <EmployeeMaster />;
       case 'employee-tasks':
@@ -25,8 +24,6 @@ function HrModule({ subTab = 'hr-dashboard' }) {
         return <WorkLogs />;
       case 'attendance':
         return <Attendance />;
-      case 'location-settings':
-        return <LocationSettings />;
       case 'leave-management':
         return <LeaveManagement />;
       case 'payroll':
@@ -34,7 +31,7 @@ function HrModule({ subTab = 'hr-dashboard' }) {
       case 'holidays':
         return <Holidays />;
       default:
-        return <HrDashboard />;
+        return <HrDashboard onNavigate={onNavigate} />;
     }
   };
 

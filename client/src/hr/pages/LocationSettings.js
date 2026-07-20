@@ -8,7 +8,7 @@ const emptyForm = () => ({
   name: '',
   latitude: '',
   longitude: '',
-  radiusMeters: 200,
+  radiusMeters: 100,
   address: '',
   assignedDepartments: [],
   assignedEmployees: [],
@@ -204,7 +204,11 @@ function LocationSettings() {
       <header className="hr-page-header">
         <div>
           <h1>Location Settings</h1>
-          <p>Configure office GPS coordinates and allowed attendance radius for employees.</p>
+          <p>
+            Configure office GPS coordinates and allowed attendance radius.
+            Employee GPS is optional — when location is available and outside the radius,
+            attendance is auto-marked Work From Home. Without GPS, employees can still mark Office or Home.
+          </p>
         </div>
         <button type="button" className="hr-btn hr-btn-primary" onClick={openCreate}>
           + Add Office Location

@@ -9,11 +9,11 @@ import EmployeeChat from './pages/EmployeeChat';
 import './EmployeeDashboardModule.css';
 import '../hr/styles/hrShared.css';
 
-function EmployeeDashboardModule({ subTab = 'home' }) {
+function EmployeeDashboardModule({ subTab = 'home', onNavigate }) {
   const renderPanel = () => {
     switch (subTab) {
       case 'home':
-        return <EmployeeHome />;
+        return <EmployeeHome onNavigate={onNavigate} />;
       case 'attendance':
         return <EmployeeAttendance />;
       case 'tasks':
@@ -27,7 +27,7 @@ function EmployeeDashboardModule({ subTab = 'home' }) {
       case 'chat':
         return <EmployeeChat />;
       default:
-        return <EmployeeHome />;
+        return <EmployeeHome onNavigate={onNavigate} />;
     }
   };
 

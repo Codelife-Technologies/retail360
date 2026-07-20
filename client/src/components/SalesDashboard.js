@@ -210,9 +210,22 @@ function ChangeBadge({ value }) {
   );
 }
 
-function KpiCard({ label, value, subValue, change, highlight }) {
+function KpiCard({ label, value, subValue, change, highlight, onClick, title }) {
+  const clickable = typeof onClick === 'function';
   return (
-    <div className={`sales-dash-kpi${highlight ? ' highlight' : ''}`}>
+    <div
+      className={`sales-dash-kpi${highlight ? ' highlight' : ''}${clickable ? ' clickable' : ''}`}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      title={title || (clickable ? `Open ${label}` : undefined)}
+      onClick={clickable ? onClick : undefined}
+      onKeyDown={clickable ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      } : undefined}
+    >
       <span className="sales-dash-kpi-label">{label}</span>
       <strong className="sales-dash-kpi-value">{value}</strong>
       {subValue != null && <span className="sales-dash-kpi-sub">{subValue}</span>}
@@ -221,7 +234,7 @@ function KpiCard({ label, value, subValue, change, highlight }) {
   );
 }
 
-function SalesDashboard() {
+function SalesDashboard({ onSelectReport }) {
   const {
     formatOverall,
     formatDisplay,
@@ -364,6 +377,15 @@ function SalesDashboard() {
       setRecordsPage(1);
       setAppliedFilters(next);
     }
+  };
+
+  const goToSalesReport = () => {
+    if (typeof onSelectReport === 'function') {
+      onSelectReport('sales');
+      return;
+    }
+    const el = document.getElementById('sales-dash-records');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const handleCustomDateChange = (field, value) => {
@@ -517,6 +539,8 @@ function SalesDashboard() {
                 ? 'Loading…'
                 : `${overview.today.totalSales} orders · ${overview.today.totalItemsSold} units`
             }
+            onClick={() => handlePeriodChange('day')}
+            title="View today’s sales"
           />
           <KpiCard
             label="This Week"
@@ -526,6 +550,8 @@ function SalesDashboard() {
                 ? 'Loading…'
                 : `${overview.thisWeek.totalSales} orders · ${overview.thisWeek.totalItemsSold} units`
             }
+            onClick={() => handlePeriodChange('week')}
+            title="View this week’s sales"
           />
           <KpiCard
             label="This Month"
@@ -535,6 +561,8 @@ function SalesDashboard() {
                 ? 'Loading…'
                 : `${overview.thisMonth.totalSales} orders · ${overview.thisMonth.totalItemsSold} units`
             }
+            onClick={() => handlePeriodChange('month')}
+            title="View this month’s sales"
           />
           <KpiCard
             label="This Year"
@@ -545,6 +573,8 @@ function SalesDashboard() {
                 : `${overview.thisYear.totalSales} orders · ${overview.thisYear.totalItemsSold} units`
             }
             highlight
+            onClick={() => handlePeriodChange('allTime')}
+            title="View this year’s sales"
           />
         </div>
       </section>
@@ -641,24 +671,32 @@ function SalesDashboard() {
                 value={formatRevenue(currentPeriod)}
                 subValue={isAllTimeView ? `${currentPeriod.totalSales} orders` : `${previousLegendLabel}: ${formatRevenue(previousPeriod)}`}
                 change={isAllTimeView ? null : change.totalRevenue}
+                onClick={goToSalesReport}
+                title="Open Sales Report"
               />
               <KpiCard
                 label="Orders"
                 value={currentPeriod.totalSales}
                 subValue={isAllTimeView ? `${currentPeriod.totalItemsSold} units sold` : `${previousLegendLabel}: ${previousPeriod.totalSales}`}
                 change={isAllTimeView ? null : change.totalSales}
+                onClick={goToSalesReport}
+                title="Open Sales Report"
               />
               <KpiCard
                 label="Units Sold"
                 value={currentPeriod.totalItemsSold}
                 subValue={isAllTimeView ? `Avg order ${formatRevenue({ totalRevenueInr: currentPeriod.averageOrderValue })}` : `${previousLegendLabel}: ${previousPeriod.totalItemsSold}`}
                 change={isAllTimeView ? null : change.totalItemsSold}
+                onClick={goToSalesReport}
+                title="Open Sales Report"
               />
               <KpiCard
                 label="Avg Order Value"
                 value={formatRevenue({ totalRevenueInr: currentPeriod.averageOrderValue })}
-                subValue={isAllTimeView ? 'Year-to-date average' : `${previousLegendLabel}: ${formatRevenue({ totalRevenueInr: previousPeriod.averageOrderValue })}`}
+                subValue={isAllTimeView ? null : `${previousLegendLabel}: ${formatRevenue({ totalRevenueInr: previousPeriod.averageOrderValue })}`}
                 change={isAllTimeView ? null : change.averageOrderValue}
+                onClick={goToSalesReport}
+                title="Open Sales Report"
               />
             </div>
           </section>
@@ -718,7 +756,7 @@ function SalesDashboard() {
           </section>
           )}
 
-          <section className="sales-dash-section">
+          <section id="sales-dash-records" className="sales-dash-section">
             <h2>Sales Records — {data.periodLabel || 'Selected Period'}</h2>
             <p className="sales-dash-range-hint">
               {isAllTimeView

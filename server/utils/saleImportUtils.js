@@ -145,24 +145,54 @@ async function createPlaceholderProduct(sku) {
   return product.populate('category', 'name');
 }
 
+function buildSkuLookupCandidates(sku) {
+  const normalized = String(sku || '').trim();
+  if (!normalized) return [];
+
+  const candidates = new Set([normalized]);
+  const collapsed = normalized.replace(/\s+/g, '');
+  candidates.add(collapsed);
+  candidates.add(collapsed.replace(/([A-Za-z]+-)(\d+)/i, '$1 $2'));
+
+  const prefixNum = collapsed.match(/^(.+-)(\d+)$/i);
+  if (prefixNum) {
+    const [, prefix, numStr] = prefixNum;
+    const num = parseInt(numStr, 10);
+    if (!Number.isNaN(num)) {
+      candidates.add(`${prefix}${num}`);
+      candidates.add(`${prefix}${String(num).padStart(2, '0')}`);
+      candidates.add(`${prefix}${String(num).padStart(3, '0')}`);
+      candidates.add(`${prefix}${numStr}`);
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+async function findProductBySkuForImport(sku) {
+  const candidates = buildSkuLookupCandidates(sku);
+  for (const candidate of candidates) {
+    let product = await Product.findOne({ sku: candidate });
+    if (product) return product;
+    product = await Product.findOne({
+      sku: { $regex: new RegExp(`^${escapeRegex(candidate)}$`, 'i') },
+    });
+    if (product) return product;
+  }
+
+  const normalized = String(sku || '').trim();
+  let product = await Product.findOne({ parentSkuOrAsin: normalized });
+  if (product) return product;
+  return Product.findOne({ ean: normalized });
+}
+
 async function resolveProductForImport(sku, { autoCreate = true, createdSkus = new Set() } = {}) {
   const normalized = String(sku || '').trim();
   if (!normalized) return { product: null, created: false };
 
-  let product = await Product.findOne({ sku: normalized }).populate('category', 'name');
-  if (!product) {
-    product = await Product.findOne({
-      sku: { $regex: new RegExp(`^${escapeRegex(normalized)}$`, 'i') },
-    }).populate('category', 'name');
-  }
-  if (!product) {
-    product = await Product.findOne({ parentSkuOrAsin: normalized }).populate('category', 'name');
-  }
-  if (!product) {
-    product = await Product.findOne({ ean: normalized }).populate('category', 'name');
-  }
-
+  let product = await findProductBySkuForImport(normalized);
   if (product) {
+    product = await product.populate('category', 'name');
     return { product, created: false };
   }
 
@@ -256,6 +286,8 @@ module.exports = {
   UNIT_PRICE_COLUMN_KEYS,
   getImportCellValue,
   parseExcelNumber,
+  buildSkuLookupCandidates,
+  findProductBySkuForImport,
   resolveProductForImport,
   mergeSaleItems,
   parseImportSaleDate,

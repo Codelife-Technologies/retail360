@@ -1,10 +1,23 @@
 import React from 'react';
 import { FIN_PERIOD_OPTIONS, formatFinPeriodLabel } from '../utils/financeUtils';
 
-export function FinanceKpiCard({ label, value, tone = 'info', loading }) {
+export function FinanceKpiCard({ label, value, tone = 'info', loading, onClick, title }) {
   if (loading) return <div className="fin-skeleton-card" />;
+  const clickable = typeof onClick === 'function';
   return (
-    <div className={`fin-kpi-card ${tone}`}>
+    <div
+      className={`fin-kpi-card ${tone}${clickable ? ' clickable' : ''}`}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      title={title || (clickable ? `Go to ${label}` : undefined)}
+      onClick={clickable ? onClick : undefined}
+      onKeyDown={clickable ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      } : undefined}
+    >
       <div className="fin-kpi-body">
         <h3>{value}</h3>
         <p>{label}</p>

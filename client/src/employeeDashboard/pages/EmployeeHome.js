@@ -23,7 +23,10 @@ function attendanceKpiVariant(status) {
   return 'info';
 }
 
-function EmployeeHome() {
+function EmployeeHome({ onNavigate }) {
+  const go = (tab) => {
+    if (onNavigate) onNavigate(`employee-dashboard:${tab}`);
+  };
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -72,12 +75,14 @@ function EmployeeHome() {
                   label="Today's Attendance"
                   value={todayStatus}
                   variant={attendanceKpiVariant(todayStatus)}
+                  onClick={() => go('attendance')}
                 />
                 <HrKpiCard
                   icon="✅"
                   label="Tasks Today"
                   value={data?.tasksToday?.length || 0}
                   variant="info"
+                  onClick={() => go('tasks')}
                 />
                 <HrKpiCard
                   icon="💰"
@@ -86,12 +91,14 @@ function EmployeeHome() {
                     data?.latestPayroll ? formatCurrency(data.latestPayroll.netSalary) : '—'
                   }
                   variant="success"
+                  onClick={() => go('salary-slip')}
                 />
                 <HrKpiCard
                   icon="📅"
                   label="Present This Month"
                   value={summary.present || 0}
                   variant="success"
+                  onClick={() => go('attendance')}
                 />
               </div>
 

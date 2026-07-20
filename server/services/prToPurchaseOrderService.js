@@ -3,6 +3,7 @@ const Supplier = require('../models/Supplier');
 const CompanyProfile = require('../models/CompanyProfile');
 const { getDefaultCompanyProfile } = require('../utils/defaultCompanyProfile');
 const { resolveLineSupplier } = require('../utils/prSupplierUtils');
+const { linkPurchaseOrderProductsToSupplier } = require('../utils/productSuppliers');
 
 const UNASSIGNED_KEY = '__unassigned__';
 
@@ -196,6 +197,9 @@ async function createPurchaseOrdersFromPr(pr) {
 
     const po = new PurchaseOrder(poPayload);
     await po.save();
+    if (group.supplierId) {
+      await linkPurchaseOrderProductsToSupplier(po).catch(() => {});
+    }
 
     const populated = await PurchaseOrder.findById(po._id)
       .populate('supplier', 'name contactPerson email phone address gstin pan state')
@@ -389,6 +393,7 @@ async function assignVendorsToPurchaseOrder(poId, { supplierId, assignments } = 
       mergeItemsIntoPoDoc(existingPo, groupItems);
       await recalculatePoTotals(existingPo);
       await existingPo.save();
+      await linkPurchaseOrderProductsToSupplier(existingPo).catch(() => {});
 
       if (!resultPoIds.has(String(existingPo._id))) {
         resultPos.push(await populateAssignedPo(existingPo._id, supplier.name));
@@ -403,6 +408,7 @@ async function assignVendorsToPurchaseOrder(poId, { supplierId, assignments } = 
       await recalculatePoTotals(po);
       applySupplierTermsToPoDoc(po, supplier);
       await po.save();
+      await linkPurchaseOrderProductsToSupplier(po).catch(() => {});
       resultPos.push(await populateAssignedPo(po._id, supplier.name));
       resultPoIds.add(String(po._id));
       continue;
@@ -423,6 +429,7 @@ async function assignVendorsToPurchaseOrder(poId, { supplierId, assignments } = 
     await recalculatePoTotals(newPo);
     applySupplierTermsToPoDoc(newPo, supplier);
     await newPo.save();
+    await linkPurchaseOrderProductsToSupplier(newPo).catch(() => {});
     resultPos.push(await populateAssignedPo(newPo._id, supplier.name));
     resultPoIds.add(String(newPo._id));
   }

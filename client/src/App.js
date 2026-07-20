@@ -371,7 +371,7 @@ function App() {
     if (isHrActive) {
       return (
         <Suspense fallback={<ModuleLoadingFallback />}>
-          <HrModule subTab={activeHrSubTab} />
+          <HrModule subTab={activeHrSubTab} onNavigate={handleNavigate} />
         </Suspense>
       );
     }
@@ -385,7 +385,7 @@ function App() {
     if (isFinanceActive) {
       return (
         <Suspense fallback={<ModuleLoadingFallback />}>
-          <FinanceModule subTab={activeFinanceSubTab} />
+          <FinanceModule subTab={activeFinanceSubTab} onNavigate={handleNavigate} />
         </Suspense>
       );
     }
@@ -402,7 +402,7 @@ function App() {
     if (isEmployeeDashboardActive) {
       return (
         <Suspense fallback={<ModuleLoadingFallback />}>
-          <EmployeeDashboardModule subTab={activeEmployeeDashboardSubTab} />
+          <EmployeeDashboardModule subTab={activeEmployeeDashboardSubTab} onNavigate={handleNavigate} />
         </Suspense>
       );
     }

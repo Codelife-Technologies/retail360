@@ -243,6 +243,15 @@
   transition: transform 0.2s;
 }
 
+.fin-kpi-card.clickable {
+  cursor: pointer;
+}
+
+.fin-kpi-card.clickable:focus-visible {
+  outline: 2px solid #6B3894;
+  outline-offset: 2px;
+}
+
 .fin-kpi-card:hover { transform: translateY(-2px); }
 .fin-kpi-card.success { border-left-color: #10b981; }
 .fin-kpi-card.warning { border-left-color: #f59e0b; }

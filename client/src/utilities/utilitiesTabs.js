@@ -5,6 +5,12 @@ export const UTILITIES_TABS = [
     icon: '🎨',
     permission: 'gemini.view',
   },
+  {
+    id: 'location-settings',
+    label: 'Location Settings',
+    icon: '📍',
+    permission: 'hr.access',
+  },
 ];
 
 export const UTILITIES_TAB_IDS = UTILITIES_TABS.map((tab) => tab.id);

@@ -99,7 +99,10 @@ function resolvePeriodRange(period, customFrom, customTo) {
   };
 }
 
-function FinanceDashboard() {
+function FinanceDashboard({ onNavigate }) {
+  const go = (tab) => {
+    if (onNavigate) onNavigate(`finance:${tab}`);
+  };
   const {
     displayCurrency,
     convert,
@@ -223,13 +226,13 @@ function FinanceDashboard() {
       <FinanceToast message={toast} />
 
       <div className="fin-kpi-grid">
-        <FinanceKpiCard loading={loading} label="Total Revenue" value={<DualKpiValue amountInInr={kpis.totalRevenue} loading={loading} />} tone="success" />
-        <FinanceKpiCard loading={loading} label="Total Expenses" value={<DualKpiValue amountInInr={kpis.totalExpenses} loading={loading} />} tone="danger" />
-        <FinanceKpiCard loading={loading} label="Gross Profit" value={<DualKpiValue amountInInr={kpis.grossProfit} loading={loading} />} tone="info" />
-        <FinanceKpiCard loading={loading} label="Net Profit" value={<DualKpiValue amountInInr={kpis.netProfit} loading={loading} />} tone="success" />
-        <FinanceKpiCard loading={loading} label="Gross Margin %" value={formatPct(kpis.grossMarginPct)} tone="info" />
-        <FinanceKpiCard loading={loading} label="Net Margin %" value={formatPct(kpis.netMarginPct)} tone="warning" />
-        <FinanceKpiCard loading={loading} label="Total Purchase Cost" value={<DualKpiValue amountInInr={kpis.totalPurchaseCost} loading={loading} />} tone="warning" />
+        <FinanceKpiCard loading={loading} label="Total Revenue" value={<DualKpiValue amountInInr={kpis.totalRevenue} loading={loading} />} tone="success" onClick={() => go('sales-report')} />
+        <FinanceKpiCard loading={loading} label="Total Expenses" value={<DualKpiValue amountInInr={kpis.totalExpenses} loading={loading} />} tone="danger" onClick={() => go('expense-report')} />
+        <FinanceKpiCard loading={loading} label="Gross Profit" value={<DualKpiValue amountInInr={kpis.grossProfit} loading={loading} />} tone="info" onClick={() => go('profit-loss')} />
+        <FinanceKpiCard loading={loading} label="Net Profit" value={<DualKpiValue amountInInr={kpis.netProfit} loading={loading} />} tone="success" onClick={() => go('profit-loss')} />
+        <FinanceKpiCard loading={loading} label="Gross Margin %" value={formatPct(kpis.grossMarginPct)} tone="info" onClick={() => go('profit-loss')} />
+        <FinanceKpiCard loading={loading} label="Net Margin %" value={formatPct(kpis.netMarginPct)} tone="warning" onClick={() => go('profit-loss')} />
+        <FinanceKpiCard loading={loading} label="Total Purchase Cost" value={<DualKpiValue amountInInr={kpis.totalPurchaseCost} loading={loading} />} tone="warning" onClick={() => go('purchase-report')} />
       </div>
 
       <FinanceInsights insights={data?.insights} include={DASHBOARD_INSIGHTS} />
