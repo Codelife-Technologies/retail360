@@ -108,7 +108,8 @@ function FinanceDashboard({ onNavigate }) {
     convert,
     formatCurrencyAmount,
   } = useCurrency();
-  const [period, setPeriod] = useState('this_year');
+  // Default to the last 6 months as requested (so dashboard charts don't show full-year history by default).
+  const [period, setPeriod] = useState('last_6_months');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [data, setData] = useState(null);

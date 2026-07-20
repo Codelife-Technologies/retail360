@@ -44,6 +44,12 @@ function parseLocalDateInput(value, endOfDay = false) {
 function parseDateRange(query = {}) {
   let dateFrom = parseLocalDateInput(query.dateFrom, false);
   let dateTo = parseLocalDateInput(query.dateTo, true);
+  const hasExplicitRange = !!(
+    query.dateFrom ||
+    query.dateTo ||
+    query.financialYear ||
+    query.month
+  );
 
   if (query.financialYear) {
     const fy = String(query.financialYear);
@@ -60,6 +66,13 @@ function parseDateRange(query = {}) {
       dateFrom = new Date(y, m - 1, 1);
       dateTo = new Date(y, m, 0, 23, 59, 59, 999);
     }
+  }
+
+  // Default to last 6 months when the caller doesn't provide any range selector.
+  if (!hasExplicitRange) {
+    const last6 = getPastMonthsRange(6);
+    dateFrom = last6.dateFrom;
+    dateTo = last6.dateTo;
   }
 
   return { dateFrom, dateTo };
