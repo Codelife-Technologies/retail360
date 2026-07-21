@@ -148,9 +148,6 @@ function buildRecordParams(applied, currentRange, page, limit = 25) {
     page,
     limit,
   };
-  if (applied.period === 'allTime') {
-    return params;
-  }
   if (applied.period === 'custom') {
     const customDates = resolveCustomDates(applied.customStart, applied.customEnd);
     if (customDates) {
@@ -159,6 +156,7 @@ function buildRecordParams(applied, currentRange, page, limit = 25) {
     }
     return params;
   }
+  // Include This Year (allTime): Jan 1 → today — same range as dashboard KPIs
   if (currentRange?.start) params.startDate = currentRange.start;
   if (currentRange?.end) params.endDate = currentRange.end;
   return params;
@@ -261,14 +259,11 @@ function SalesDashboard({ onSelectReport }) {
       else if (c.includes('UAE') || c === 'AE' || c.includes('EMIRATE')) currency = 'AED';
     }
     const original = sale.originalAmount != null ? sale.originalAmount : sale.total;
-    const inr = sale.exchangeRateToInr > 0 && String(sale.currency || '').toUpperCase() === currency
-      ? Number(original) * Number(sale.exchangeRateToInr)
-      : fromOriginal(original, currency, 'INR');
-    const converted = displayCurrency === 'INR'
-      ? formatOverall(inr)
-      : `${formatDisplay(inr)} (${formatCurrencyAmount(inr, 'INR')})`;
-    return `${formatCurrencyAmount(original, currency)} → ${converted}`;
+    return formatCurrencyAmount(original, currency);
   };
+
+  const getSaleQuantity = (sale) =>
+    (sale.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
 
   const [filters, setFilters] = useState(defaultDashboardFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultDashboardFilters);
@@ -777,8 +772,8 @@ function SalesDashboard({ onSelectReport }) {
                         <th>Amazon Order ID</th>
                         <th>Sale Date</th>
                         <th>Channel</th>
-                        <th>Items</th>
-                        <th>Total</th>
+                        <th className="num">Quantity</th>
+                        <th className="num total-col">Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -792,8 +787,8 @@ function SalesDashboard({ onSelectReport }) {
                           <td className="mono">{sale.amazonOrderId || '—'}</td>
                           <td>{new Date(sale.salesDate).toLocaleDateString('en-IN')}</td>
                           <td>{sale.salesChannel?.name || '—'}</td>
-                          <td className="num">{sale.items?.length || 0}</td>
-                          <td className="num">{formatSaleLine(sale)}</td>
+                          <td className="num">{getSaleQuantity(sale)}</td>
+                          <td className="num total-col">{formatSaleLine(sale)}</td>
                         </tr>
                       ))}
                     </tbody>

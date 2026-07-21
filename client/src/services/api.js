@@ -285,26 +285,32 @@ export const subcategoriesAPI = {
   deleteImagePrompt: (id, promptId) => api.delete(`/subcategories/${id}/image-prompts/${promptId}`),
 };
 
+function createGeminiUploadClient() {
+  const uploadApi = axios.create({
+    baseURL: API_BASE_URL,
+  });
+  const token = localStorage.getItem('token');
+  if (token) {
+    uploadApi.defaults.headers.common.Authorization = `Bearer ${token}`;
+  }
+  return uploadApi;
+}
+
 // Gemini API
 export const geminiAPI = {
   generateImages: (formData) => {
-    const uploadApi = axios.create({
-      baseURL: API_BASE_URL,
-    });
-    return uploadApi.post('/gemini/generate-images', formData, {
+    return createGeminiUploadClient().post('/gemini/generate-images', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 300000, // 5 minutes timeout
     });
   },
   regenerateImage: (formData) => {
-    const uploadApi = axios.create({
-      baseURL: API_BASE_URL,
-    });
-    return uploadApi.post('/gemini/regenerate-image', formData, {
+    return createGeminiUploadClient().post('/gemini/regenerate-image', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 300000, // 5 minutes timeout
     });
   },
+  saveToProduct: (data) => api.post('/gemini/save-to-product', data),
 };
 
 // Reports API

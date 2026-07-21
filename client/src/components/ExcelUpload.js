@@ -44,6 +44,8 @@ const ExcelUpload = ({
 }) => {
   const [file, setFile] = useState(null);
   const [importMode, setImportMode] = useState('both');
+  /** Sales: Unit Price column holds line total (already × qty). Default on for Amazon sheets. */
+  const [priceIsLineTotal, setPriceIsLineTotal] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [processingOnServer, setProcessingOnServer] = useState(false);
@@ -154,6 +156,9 @@ const ExcelUpload = ({
       const formData = new FormData();
       formData.append('file', file);
       formData.append('mode', importMode);
+      if (moduleName === 'sales') {
+        formData.append('priceIsLineTotal', priceIsLineTotal ? 'true' : 'false');
+      }
 
       const response = await api.post(
         `/${moduleName}/import`,
@@ -265,6 +270,20 @@ const ExcelUpload = ({
               <p className="import-mode-hint">
                 Duplicates are matched by Amazon Order ID. Use Create Only to skip existing orders, or Create & Update to refresh them.
               </p>
+            )}
+            {moduleName === 'sales' && (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', margin: '0.75rem 0 0.25rem', fontSize: '0.9rem' }}>
+                <input
+                  type="checkbox"
+                  checked={priceIsLineTotal}
+                  onChange={(e) => setPriceIsLineTotal(e.target.checked)}
+                  style={{ marginTop: '0.2rem' }}
+                />
+                <span>
+                  <strong>Unit Price is already the line total</strong> (Quantity × price already multiplied in the Excel).
+                  Leave checked for Amazon export sheets. Uncheck only if Unit Price is the per-unit price.
+                </span>
+              </label>
             )}
             <div className="radio-group">
               <label>

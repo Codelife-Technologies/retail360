@@ -537,7 +537,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
     const allocatePoNumber = createPoNumberAllocator();
     for (const item of readyToSave) {
       try {
-        item.poData.poNumber = await allocatePoNumber();
+        item.poData.poNumber = await allocatePoNumber(); 
         const saved = await new PurchaseOrder(item.poData).save();
         await linkPurchaseOrderProductsToSupplier(saved).catch(() => {});
         imported++;

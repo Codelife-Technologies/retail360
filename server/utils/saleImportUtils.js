@@ -219,6 +219,9 @@ function mergeSaleItems(items) {
       const existing = merged.get(key);
       existing.quantity += item.quantity;
       existing.total += item.total;
+      existing.unitPrice = existing.quantity > 0
+        ? Math.round((existing.total / existing.quantity) * 10000) / 10000
+        : existing.unitPrice;
     } else {
       merged.set(key, { ...item });
     }

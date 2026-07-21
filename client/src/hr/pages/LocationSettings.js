@@ -200,19 +200,21 @@ function LocationSettings() {
   };
 
   return (
-    <div className="hr-page">
+    <div className="hr-page location-settings-page">
       <header className="hr-page-header">
-        <div>
+        <div className="hr-page-header-text">
           <h1>Location Settings</h1>
-          <p>
+          <p className="hr-page-subtitle">
             Configure office GPS coordinates and allowed attendance radius.
             Employee GPS is optional — when location is available and outside the radius,
             attendance is auto-marked Work From Home. Without GPS, employees can still mark Office or Home.
           </p>
         </div>
-        <button type="button" className="hr-btn hr-btn-primary" onClick={openCreate}>
-          + Add Office Location
-        </button>
+        <div className="hr-page-actions">
+          <button type="button" className="hr-btn hr-btn-primary" onClick={openCreate}>
+            + Add Office Location
+          </button>
+        </div>
       </header>
 
       <div className="hr-filters-row">

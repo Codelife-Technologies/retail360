@@ -137,6 +137,8 @@ try {
   const complianceRoutes = require('./compliance/routes');
   const financeRoutes = require('./finance/routes');
   logger.backend.info('HR routes loaded');
+  const documentsRoutes = require('./documents/routes');
+  logger.backend.info('Document Management routes loaded');
   const priceMastersRoutes = require('./routes/priceMasters');
   logger.backend.info('Price masters routes loaded');
   const unitsRoutes = require('./routes/units');
@@ -184,6 +186,7 @@ try {
   app.use('/api/hr', hrRoutes);
   app.use('/api/compliance', complianceRoutes);
   app.use('/api/finance', financeRoutes);
+  app.use('/api/documents', documentsRoutes);
   app.use('/api/currency', require('./currency/routes'));
   app.use('/api/gemini', geminiRoutes);
   app.use('/api/units', unitsRoutes);

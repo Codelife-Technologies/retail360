@@ -7,6 +7,8 @@ function buildLocationHaystack(locationLike) {
     locationLike.code,
     locationLike.address,
     locationLike.city,
+    locationLike.country,
+    locationLike.currency,
     warehouse.name,
     warehouse.code,
     warehouse.city,
@@ -20,17 +22,42 @@ function buildLocationHaystack(locationLike) {
     .replace(/\s+/g, ' ');
 }
 
-/** True when the sales location is in the UAE (no Indian GST applies). */
-function isUaeSalesLocation(locationLike) {
-  if (!locationLike) return false;
+function countryLooksUae(value) {
+  const country = String(value || '').trim().toLowerCase();
+  if (!country) return false;
+  return (
+    country === 'uae'
+    || country === 'ae'
+    || country.includes('emirates')
+    || country.includes('united arab')
+  );
+}
 
-  const country = String(locationLike.location?.country || '').trim().toLowerCase();
+function currencyLooksAed(value) {
+  return String(value || '').trim().toUpperCase() === 'AED';
+}
+
+/**
+ * True when the sales location / channel is in the UAE (no Indian GST applies).
+ * Checks SalesLocation.country/currency first — warehouse may still be in India.
+ */
+function isUaeSalesLocation(locationLike, channelLike = null) {
+  if (!locationLike && !channelLike) return false;
+
+  if (countryLooksUae(locationLike?.country) || currencyLooksAed(locationLike?.currency)) {
+    return true;
+  }
+
   if (
-    country === 'uae' ||
-    country === 'ae' ||
-    country.includes('emirates') ||
-    country.includes('united arab')
+    countryLooksUae(channelLike?.country)
+    || currencyLooksAed(channelLike?.defaultCurrency)
+    || currencyLooksAed(channelLike?.currency)
   ) {
+    return true;
+  }
+
+  // Warehouse country (legacy path)
+  if (countryLooksUae(locationLike?.location?.country)) {
     return true;
   }
 
@@ -57,6 +84,9 @@ function isUaeSalesLocation(locationLike) {
 function getCurrencyForLocation(locationLike) {
   if (!locationLike) return 'INR';
 
+  if (currencyLooksAed(locationLike.currency)) return 'AED';
+  if (countryLooksUae(locationLike.country)) return 'AED';
+
   const haystack = buildLocationHaystack(locationLike);
 
   if (isUaeSalesLocation(locationLike)) {
@@ -68,4 +98,8 @@ function getCurrencyForLocation(locationLike) {
   return 'INR';
 }
 
-module.exports = { getCurrencyForLocation, isUaeSalesLocation, buildLocationHaystack };
+module.exports = {
+  getCurrencyForLocation,
+  isUaeSalesLocation,
+  buildLocationHaystack,
+};

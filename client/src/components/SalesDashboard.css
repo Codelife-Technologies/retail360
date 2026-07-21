@@ -220,8 +220,21 @@
   font-size: 0.9125rem;
 }
 
+.sales-dash-records-table th.num,
 .sales-dash-records-table td.num {
   text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.sales-dash-records-table th.total-col,
+.sales-dash-records-table td.total-col {
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  min-width: 7.5rem;
 }
 
 .sales-dash-records-table tbody tr:hover {

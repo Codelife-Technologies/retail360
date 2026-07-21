@@ -4,6 +4,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const Subcategory = require('../models/Subcategory');
+const Product = require('../models/Product');
 const logger = require('../utils/logger');
 const { 
   generateMultipleImages: generateMultipleImagesGemini, 
@@ -382,6 +383,130 @@ router.post('/generate-images', requirePermission('gemini.generate'), upload.sin
     res.status(500).json({ 
       error: 'Failed to generate images',
       message: error.message 
+    });
+  }
+});
+
+function sanitizeSkuForFolderName(sku) {
+  if (!sku) return null;
+  return String(sku).replace(/[<>:"/\\|?*]/g, '_').trim();
+}
+
+function resolveUploadAbsolutePath(imageUrlOrPath) {
+  const raw = String(imageUrlOrPath || '').trim();
+  if (!raw) return null;
+
+  let relative = raw;
+  try {
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      relative = new URL(raw).pathname;
+    }
+  } catch (_e) {
+    // keep as-is
+  }
+
+  relative = relative.replace(/^\/+/, '');
+  if (relative.startsWith('uploads/')) {
+    relative = relative.slice('uploads/'.length);
+  }
+
+  // Only allow saving files already under the uploads directory
+  const uploadsRoot = path.resolve(path.join(__dirname, '..', 'uploads'));
+  const absolute = path.resolve(path.join(uploadsRoot, relative));
+  if (!absolute.startsWith(uploadsRoot + path.sep) && absolute !== uploadsRoot) {
+    return null;
+  }
+  return absolute;
+}
+
+// POST /api/gemini/save-to-product
+// Copy selected generated images onto a product's image gallery
+router.post('/save-to-product', requirePermission('gemini.generate'), async (req, res) => {
+  try {
+    const { productId, images } = req.body || {};
+
+    if (!productId) {
+      return res.status(400).json({ error: 'Product ID is required' });
+    }
+    if (!Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({ error: 'At least one image is required' });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    if (!product.sku || !String(product.sku).trim()) {
+      return res.status(400).json({ error: 'Selected product must have a SKU before images can be saved' });
+    }
+
+    const skuFolder = sanitizeSkuForFolderName(product.sku);
+    const productDir = path.join(__dirname, '..', 'uploads', 'products', skuFolder);
+    ensureDirectoryExists(productDir);
+
+    const savedPaths = [];
+    const errors = [];
+
+    for (let i = 0; i < images.length; i += 1) {
+      const entry = images[i];
+      const sourceRef = typeof entry === 'string' ? entry : (entry?.url || entry?.path);
+      const sourceAbs = resolveUploadAbsolutePath(sourceRef);
+
+      if (!sourceAbs || !fs.existsSync(sourceAbs)) {
+        errors.push({ index: i, error: 'Source image file not found', source: sourceRef });
+        continue;
+      }
+
+      const ext = path.extname(sourceAbs) || '.jpg';
+      const order = typeof entry === 'object' && entry?.order != null ? entry.order : i + 1;
+      const filename = `gemini_${Date.now()}_${order}${ext}`;
+      const destAbs = path.join(productDir, filename);
+      const relativePath = `products/${skuFolder}/${filename}`;
+
+      try {
+        fs.copyFileSync(sourceAbs, destAbs);
+        savedPaths.push(relativePath);
+      } catch (copyErr) {
+        errors.push({ index: i, error: copyErr.message, source: sourceRef });
+      }
+    }
+
+    if (savedPaths.length === 0) {
+      return res.status(400).json({
+        error: 'Could not save any images to the product',
+        details: errors,
+      });
+    }
+
+    if (!Array.isArray(product.images)) {
+      product.images = [];
+    }
+    product.images = [...product.images, ...savedPaths];
+    await product.save();
+
+    logger.backend.info('Saved generated images to product', {
+      productId: product._id,
+      sku: product.sku,
+      saved: savedPaths.length,
+      failed: errors.length,
+    });
+
+    res.json({
+      success: true,
+      productId: product._id,
+      sku: product.sku,
+      saved: savedPaths,
+      failed: errors,
+      message: `Saved ${savedPaths.length} image(s) to product ${product.sku}`,
+    });
+  } catch (error) {
+    logger.backend.error('Error saving generated images to product', {
+      error: error.message,
+      stack: error.stack,
+    });
+    res.status(500).json({
+      error: 'Failed to save images to product',
+      message: error.message,
     });
   }
 });

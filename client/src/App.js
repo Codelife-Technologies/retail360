@@ -39,6 +39,12 @@ import {
   filterFinanceTabs,
 } from './finance/financeTabs';
 import {
+  DOCUMENTS_TABS,
+  isDocumentsTab,
+  resolveDocumentsSubTab,
+  filterDocumentsTabs,
+} from './documents/documentsTabs';
+import {
   UTILITIES_TABS,
   isUtilitiesTab,
   resolveUtilitiesSubTab,
@@ -61,6 +67,7 @@ import './App.css';
 const HrModule = lazy(() => import('./hr/HrModule'));
 const ComplianceModule = lazy(() => import('./compliance/ComplianceModule'));
 const FinanceModule = lazy(() => import('./finance/FinanceModule'));
+const DocumentsModule = lazy(() => import('./documents/DocumentsModule'));
 const UtilitiesModule = lazy(() => import('./utilities/UtilitiesModule'));
 const EmployeeDashboardModule = lazy(() => import('./employeeDashboard/EmployeeDashboardModule'));
 const EmployeeChatNotifications = lazy(() => import('./employeeDashboard/components/EmployeeChatNotifications'));
@@ -90,6 +97,7 @@ function App() {
   const visibleHrTabs = filterTabs(hasPermission, user, HR_TABS);
   const visibleComplianceTabs = filterComplianceTabs(hasPermission, COMPLIANCE_TABS);
   const visibleFinanceTabs = filterFinanceTabs(hasPermission, FINANCE_TABS);
+  const visibleDocumentsTabs = filterDocumentsTabs(hasPermission, DOCUMENTS_TABS);
   const visibleUtilitiesTabs = filterUtilitiesTabs(hasPermission, UTILITIES_TABS);
   const canViewReports = hasPermission('admin.all') || hasPermission('reports.view');
 
@@ -106,6 +114,7 @@ function App() {
   const isHrActive = activeTab === 'hr' || activeTab.startsWith('hr:');
   const isComplianceActive = activeTab === 'compliance' || activeTab.startsWith('compliance:');
   const isFinanceActive = activeTab === 'finance' || activeTab.startsWith('finance:');
+  const isDocumentsActive = activeTab === 'documents' || activeTab.startsWith('documents:');
   const isUtilitiesActive = activeTab === 'utilities' || activeTab.startsWith('utilities:');
   const isUserManagementActive =
     activeTab === 'user-management' || activeTab.startsWith('user-management:');
@@ -117,6 +126,7 @@ function App() {
   const activeHrSubTab = resolveHrSubTab(activeTab);
   const activeComplianceSubTab = resolveComplianceSubTab(activeTab);
   const activeFinanceSubTab = resolveFinanceSubTab(activeTab);
+  const activeDocumentsSubTab = resolveDocumentsSubTab(activeTab);
   const activeUtilitiesSubTab = resolveUtilitiesSubTab(activeTab);
   const activeUserManagementSubTab = resolveUserManagementSubTab(activeTab);
   const activeEmployeeDashboardSubTab = resolveEmployeeDashboardSubTab(activeTab);
@@ -183,6 +193,13 @@ function App() {
       activeId: activeFinanceSubTab,
       prefix: 'finance',
     };
+  } else if (isDocumentsActive && visibleDocumentsTabs.length > 1) {
+    moduleSubNav = {
+      label: 'Document Management',
+      items: visibleDocumentsTabs,
+      activeId: activeDocumentsSubTab,
+      prefix: 'documents',
+    };
   } else if (isUtilitiesActive && visibleUtilitiesTabs.length > 1) {
     moduleSubNav = {
       label: 'Utilities',
@@ -236,6 +253,10 @@ function App() {
         setActiveTab(tab);
         return;
       }
+      if (tab.startsWith('documents:')) {
+        setActiveTab(tab);
+        return;
+      }
       if (tab.startsWith('utilities:')) {
         setActiveTab(tab);
         return;
@@ -274,6 +295,10 @@ function App() {
       }
       if (isFinanceTab(tab)) {
         setActiveTab(`finance:${tab}`);
+        return;
+      }
+      if (isDocumentsTab(tab)) {
+        setActiveTab(`documents:${tab}`);
         return;
       }
       if (isUtilitiesTab(tab)) {
@@ -326,6 +351,11 @@ function App() {
         setActiveTab(`finance:${firstTab}`);
         return;
       }
+      if (tab === 'documents' || tab === 'document-management') {
+        const firstTab = visibleDocumentsTabs[0]?.id || 'documents-dashboard';
+        setActiveTab(`documents:${firstTab}`);
+        return;
+      }
       if (tab === 'utilities') {
         const firstTab = visibleUtilitiesTabs[0]?.id || 'image-generator';
         setActiveTab(`utilities:${firstTab}`);
@@ -342,7 +372,7 @@ function App() {
       }
       setActiveTab(tab);
     },
-    [visibleUserManagementTabs, visibleInventoryGroups, visibleProcurementTabs, visibleSalesTabs, visibleHrTabs, visibleComplianceTabs, visibleFinanceTabs, visibleUtilitiesTabs]
+    [visibleUserManagementTabs, visibleInventoryGroups, visibleProcurementTabs, visibleSalesTabs, visibleHrTabs, visibleComplianceTabs, visibleFinanceTabs, visibleDocumentsTabs, visibleUtilitiesTabs]
   );
 
   if (loading) {
@@ -386,6 +416,13 @@ function App() {
       return (
         <Suspense fallback={<ModuleLoadingFallback />}>
           <FinanceModule subTab={activeFinanceSubTab} onNavigate={handleNavigate} />
+        </Suspense>
+      );
+    }
+    if (isDocumentsActive) {
+      return (
+        <Suspense fallback={<ModuleLoadingFallback />}>
+          <DocumentsModule subTab={activeDocumentsSubTab} onNavigate={handleNavigate} />
         </Suspense>
       );
     }
@@ -519,6 +556,15 @@ function App() {
               onClick={() => handleNavigate('finance')}
             >
               💼 Finance
+            </button>
+          )}
+          {visibleDocumentsTabs.length > 0 && (
+            <button
+              type="button"
+              className={`nav-item${isDocumentsActive ? ' active' : ''}`}
+              onClick={() => handleNavigate('documents')}
+            >
+              📂 Document Management
             </button>
           )}
           {visibleUtilitiesTabs.length > 0 && (

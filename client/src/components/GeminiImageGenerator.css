@@ -769,3 +769,125 @@
   cursor: not-allowed;
 }
 
+.sku-search-group {
+  position: relative;
+  max-width: 640px;
+}
+
+.sku-search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sku-search-input {
+  flex: 1;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1.05rem;
+}
+
+.sku-clear-btn {
+  white-space: nowrap;
+}
+
+.sku-search-dropdown {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% - 0.25rem);
+  margin: 0;
+  padding: 0.35rem 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.sku-search-option {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.65rem 0.9rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sku-search-option:hover {
+  background: #f5f3ff;
+}
+
+.sku-search-option strong {
+  color: #333;
+  font-size: 0.95rem;
+}
+
+.sku-search-option span {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.selected-product-chip {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.selected-product-chip strong {
+  display: block;
+  color: #1e293b;
+}
+
+.selected-product-chip span {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.save-product-hint {
+  margin: 0 0 1rem 0;
+}
+
+.btn-save-product:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-save-docs {
+  background: #6b3894 !important;
+  color: #fff !important;
+}
+
+.btn-save-docs:disabled {
+  background: #10b981 !important;
+  opacity: 1;
+  cursor: default;
+}
+
+.generated-image-card.image-saved-docs {
+  border-color: #10b981;
+}
+
+.btn-save-documents:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+
+

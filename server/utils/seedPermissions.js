@@ -167,6 +167,25 @@ const PERMISSION_DEFINITIONS = [
   { code: 'finance.expense.delete', name: 'Delete Expenses', module: 'finance', description: 'Delete expense records' },
   { code: 'finance.pnl.view', name: 'View Profit & Loss', module: 'finance', description: 'View profit and loss statements' },
   { code: 'finance.reports.view', name: 'View Finance Reports', module: 'finance', description: 'View and export finance reports' },
+
+  // Document Management module
+  { code: 'documents.access', name: 'Access Document Management', module: 'documents', description: 'Access Document Management navigation' },
+  { code: 'documents.full', name: 'Full Document Management Access', module: 'documents', description: 'Full access across Document Management' },
+  { code: 'documents.view', name: 'View Documents', module: 'documents', description: 'View documents' },
+  { code: 'documents.create', name: 'Create Documents', module: 'documents', description: 'Upload and save documents' },
+  { code: 'documents.upload', name: 'Upload Documents', module: 'documents', description: 'Upload employee documents' },
+  { code: 'documents.update', name: 'Update Documents', module: 'documents', description: 'Update document metadata' },
+  { code: 'documents.delete', name: 'Delete Documents', module: 'documents', description: 'Soft or permanent delete documents' },
+  { code: 'documents.download', name: 'Download Documents', module: 'documents', description: 'Download documents' },
+  { code: 'documents.manage', name: 'Manage Document Storage', module: 'documents', description: 'Manage storage settings and permanent deletes' },
+  { code: 'documents.dashboard.view', name: 'View Documents Dashboard', module: 'documents', description: 'View document management dashboard' },
+  { code: 'documents.ai.view', name: 'View AI Generated Images', module: 'documents', description: 'View AI-generated images' },
+  { code: 'documents.manual.view', name: 'View Employee Documents', module: 'documents', description: 'View employee uploaded documents' },
+  { code: 'documents.analytics.view', name: 'View Storage Analytics', module: 'documents', description: 'View storage analytics' },
+  { code: 'documents.trash.view', name: 'View Document Trash', module: 'documents', description: 'View soft-deleted documents' },
+  { code: 'documents.settings.view', name: 'View Document Settings', module: 'documents', description: 'View document settings' },
+  { code: 'documents.settings.update', name: 'Update Document Settings', module: 'documents', description: 'Update document settings' },
+  { code: 'documents.department.view', name: 'View Department Documents', module: 'documents', description: 'Manager view of department documents' },
 ];
 
 async function seedPermissions() {

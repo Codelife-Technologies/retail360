@@ -67,8 +67,10 @@ async function loadProductsForItems(items) {
   return Product.find({ _id: { $in: ids } }).populate('category', 'name');
 }
 
-function computeSaleTax(salesLocation, items, productDocs, { defaultTaxRate = 0, taxOverride } = {}) {
-  if (isUaeSalesLocation(salesLocation)) return 0;
+function computeSaleTax(salesLocation, items, productDocs, { defaultTaxRate = 0, taxOverride, salesChannel } = {}) {
+  if (isUaeSalesLocation(salesLocation, salesChannel)) return 0;
+  const currency = resolveSaleCurrency({ salesChannel, salesLocation });
+  if (String(currency).toUpperCase() === 'AED') return 0;
   if (taxOverride !== undefined && taxOverride !== null && String(taxOverride).trim() !== '') {
     return parseFloat(taxOverride) || 0;
   }
@@ -204,11 +206,22 @@ async function buildSalePayloadFromImportGroup(entries, importContext = {}) {
     }
 
     productDocs.push(product);
+
+    // Amazon-style sheets often put the already-multiplied line amount in "Unit Price".
+    // When priceIsLineTotal is true: total = priceCol, unitPrice = priceCol / qty.
+    const priceIsLineTotal = importContext.priceIsLineTotal !== false;
+    const lineTotal = priceIsLineTotal
+      ? unitPrice
+      : quantity * unitPrice;
+    const resolvedUnitPrice = priceIsLineTotal
+      ? Math.round((unitPrice / quantity) * 10000) / 10000
+      : unitPrice;
+
     items.push({
       product: product._id,
       quantity,
-      unitPrice,
-      total: quantity * unitPrice,
+      unitPrice: resolvedUnitPrice,
+      total: Math.round(lineTotal * 100) / 100,
     });
   }
 
@@ -230,14 +243,20 @@ async function buildSalePayloadFromImportGroup(entries, importContext = {}) {
   const taxCell = first['Tax (optional — auto if blank)'] ?? first['Tax'];
   const taxProvided =
     taxCell !== undefined && taxCell !== null && String(taxCell).trim() !== '';
-  const tax = taxProvided
-    ? parseExcelNumber(taxCell) || 0
-    : computeSaleTax(salesLocation, mergedItems, mergedProductDocs, { defaultTaxRate });
-  const taxFinal = isUaeSalesLocation(salesLocation) ? 0 : tax;
   const currency = resolveSaleCurrency({
     salesChannel: channel,
     salesLocation,
   });
+  const isUae = isUaeSalesLocation(salesLocation, channel) || String(currency).toUpperCase() === 'AED';
+  const tax = isUae
+    ? 0
+    : taxProvided
+      ? parseExcelNumber(taxCell) || 0
+      : computeSaleTax(salesLocation, mergedItems, mergedProductDocs, {
+          defaultTaxRate,
+          salesChannel: channel,
+        });
+  const taxFinal = tax;
   const salesDate = parseImportSaleDate(first['Sales Date (YYYY-MM-DD)'] || first['Sales Date']);
 
   return {
@@ -429,7 +448,7 @@ router.get('/template', (req, res) => {
         locationCode: 'WEB-01',
         sku: 'PROD-001',
         quantity: 2,
-        unitPrice: 499,
+        unitPrice: 998,
         customerName: 'John Doe',
         customerEmail: 'john@example.com',
         customerPhone: '9999999999',
@@ -441,7 +460,7 @@ router.get('/template', (req, res) => {
         tax: '',
         paymentStatus: 'pending',
         orderStatus: 'pending',
-        notes: 'Rows with the same Sale Reference become one sale. Tax auto-calculates from category if Tax is blank (Brass/Copper 12%, Gemstone 5%). Currency follows the sales channel country (e.g. INR for India, AED for UAE).'
+        notes: 'Unit Price = LINE TOTAL (already × quantity). Same Amazon Order ID / Sale Reference rows become one sale. UAE tax = 0.'
       },
       {
         saleRef: 'ORDER-1',
@@ -482,6 +501,11 @@ router.post('/import', upload.single('file'), async (req, res) => {
     }
 
     const mode = req.body.mode || 'both';
+    // Default true: Unit Price column is treated as line total (already × quantity),
+    // matching Amazon export sheets. Pass priceIsLineTotal=false for true per-unit prices.
+    const priceIsLineTotal = !['false', '0', 'no'].includes(
+      String(req.body.priceIsLineTotal == null ? 'true' : req.body.priceIsLineTotal).toLowerCase()
+    );
 
     const rows = parseExcel(req.file.buffer);
     if (rows.length === 0) {
@@ -534,7 +558,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
     for (const [ref, entries] of groups) {
       try {
         const { payload, rowErrors, productsCreated: groupProductsCreated } =
-          await buildSalePayloadFromImportGroup(entries, { createdSkus });
+          await buildSalePayloadFromImportGroup(entries, { createdSkus, priceIsLineTotal });
         productsCreated += groupProductsCreated;
         if (rowErrors.length > 0) {
           lineItemsSkipped += rowErrors.length;
@@ -686,6 +710,7 @@ router.post('/', async (req, res) => {
     const tax = computeSaleTax(salesLocation, items, productDocs, {
       defaultTaxRate,
       taxOverride: req.body.tax,
+      salesChannel: req.body.salesChannel,
     });
     const total = subtotal - discount + tax;
     const currency = await resolveCurrencyForSaleRefs(req.body.salesChannel, salesLocation);
@@ -780,6 +805,7 @@ router.put('/:id', async (req, res) => {
     const tax = computeSaleTax(salesLocation, items, productDocs, {
       defaultTaxRate,
       taxOverride: req.body.tax,
+      salesChannel: channelId,
     });
     const total = subtotal - discount + tax;
     const currency = await resolveCurrencyForSaleRefs(channelId, salesLocation);
@@ -868,6 +894,78 @@ router.post('/remove-amazon-order-duplicates', async (req, res) => {
     });
   } catch (error) {
     logger.backend.error('Error removing duplicate Amazon order sales', {
+      error: error.message,
+      stack: error.stack,
+    });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST repair AED/UAE sales that incorrectly had Indian GST applied.
+ * Sets tax=0 and total = subtotal - discount for currency AED (or AE channel/location).
+ */
+router.post('/repair-uae-tax', async (req, res) => {
+  try {
+    const SalesChannel = require('../models/SalesChannel');
+    const SalesLocation = require('../models/SalesLocation');
+
+    const [aeChannels, aeLocations] = await Promise.all([
+      SalesChannel.find({
+        $or: [
+          { country: { $in: ['AE', 'ae', 'UAE', 'uae'] } },
+          { defaultCurrency: { $in: ['AED', 'aed'] } },
+        ],
+      }).select('_id').lean(),
+      SalesLocation.find({
+        $or: [
+          { country: { $in: ['AE', 'ae', 'UAE', 'uae'] } },
+          { currency: { $in: ['AED', 'aed'] } },
+        ],
+      }).select('_id').lean(),
+    ]);
+
+    const channelIds = aeChannels.map((c) => c._id);
+    const locationIds = aeLocations.map((l) => l._id);
+
+    const match = {
+      tax: { $gt: 0 },
+      $or: [
+        { currency: { $in: ['AED', 'aed'] } },
+        ...(channelIds.length ? [{ salesChannel: { $in: channelIds } }] : []),
+        ...(locationIds.length ? [{ salesLocation: { $in: locationIds } }] : []),
+      ],
+    };
+
+    const sales = await Sale.find(match);
+    let repaired = 0;
+    let amountReduced = 0;
+
+    for (const sale of sales) {
+      const subtotal = Number(sale.subtotal) || 0;
+      const discount = Number(sale.discount) || 0;
+      const oldTotal = Number(sale.total) || 0;
+      const newTotal = Math.round((subtotal - discount) * 100) / 100;
+      amountReduced += oldTotal - newTotal;
+      sale.tax = 0;
+      sale.total = newTotal;
+      if (!sale.currency || String(sale.currency).toUpperCase() === 'INR') {
+        sale.currency = 'AED';
+      }
+      await sale.save();
+      repaired += 1;
+    }
+
+    res.json({
+      matched: sales.length,
+      repaired,
+      amountReduced: Math.round(amountReduced * 100) / 100,
+      message: repaired
+        ? `Removed incorrect GST from ${repaired} UAE/AED sale(s). Totals reduced by ${Math.round(amountReduced * 100) / 100}.`
+        : 'No UAE/AED sales with tax > 0 found.',
+    });
+  } catch (error) {
+    logger.backend.error('Error repairing UAE tax on sales', {
       error: error.message,
       stack: error.stack,
     });
