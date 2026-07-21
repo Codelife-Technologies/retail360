@@ -1,49 +1,89 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  computeAutoScale,
+  clampUserZoom,
+  readStoredUserZoom,
+  writeStoredUserZoom,
+  formatScalePercent,
+  DESIGN_WIDTH,
+  MIN_WIDTH,
+} from '../utils/displayScale';
 import './PageZoomShell.css';
 
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 2;
-const ZOOM_STEP = 0.1;
-
-function clampZoom(value) {
-  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(value * 100) / 100));
-}
-
-function formatZoomLabel(zoom) {
-  return `${Math.round(zoom * 100)}%`;
-}
+const USER_ZOOM_STEP = 0.05;
 
 function PageZoomShell({ contentKey, children }) {
-  const [zoom, setZoom] = useState(1);
+  const viewportRef = useRef(null);
+  const [autoScale, setAutoScale] = useState(1);
+  const [userZoom, setUserZoom] = useState(1);
 
-  const handleZoomIn = () => {
-    setZoom((current) => clampZoom(current + ZOOM_STEP));
-  };
+  const measure = useCallback(() => {
+    const el = viewportRef.current;
+    const width = el?.clientWidth || window.innerWidth || DESIGN_WIDTH;
+    setAutoScale(computeAutoScale(width));
+  }, []);
 
-  const handleZoomOut = () => {
-    setZoom((current) => clampZoom(current - ZOOM_STEP));
-  };
-
-  const handleZoomReset = () => {
-    setZoom(1);
-  };
+  useLayoutEffect(() => {
+    setUserZoom(readStoredUserZoom());
+    measure();
+  }, [measure]);
 
   useEffect(() => {
-    setZoom(1);
-  }, [contentKey]);
+    measure();
+    const el = viewportRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure]);
+
+  // Keep user zoom across pages; only remeasure on navigation
+  useEffect(() => {
+    measure();
+  }, [contentKey, measure]);
+
+  const setAndPersistUserZoom = (next) => {
+    const clamped = clampUserZoom(next);
+    setUserZoom(clamped);
+    writeStoredUserZoom(clamped);
+  };
+
+  const effectiveZoom = Math.round(autoScale * userZoom * 1000) / 1000;
+  // Avoid applying CSS zoom at exactly 1 — it traps position:fixed modals
+  const applyZoom = Math.abs(effectiveZoom - 1) > 0.001;
+  const scalerWidth = applyZoom ? `${100 / effectiveZoom}%` : '100%';
+
+  const handleZoomIn = () => setAndPersistUserZoom(userZoom + USER_ZOOM_STEP);
+  const handleZoomOut = () => setAndPersistUserZoom(userZoom - USER_ZOOM_STEP);
+  const handleZoomReset = () => setAndPersistUserZoom(1);
+
+  const autoLabel = formatScalePercent(autoScale);
+  const effectiveLabel = formatScalePercent(effectiveZoom);
 
   return (
     <div
       className="page-zoom-shell"
-      style={zoom === 1 ? undefined : { zIndex: 150 }}
+      style={applyZoom ? { zIndex: 150 } : undefined}
+      data-design-width={DESIGN_WIDTH}
+      data-min-width={MIN_WIDTH}
     >
-      <div className="page-zoom-toolbar" aria-label="Page zoom controls">
+      <div className="page-zoom-toolbar" aria-label="Display size controls">
+        <div className="page-zoom-hint" title={`Designed for ${DESIGN_WIDTH}×1080. Minimum supported ${MIN_WIDTH}×768.`}>
+          <span className="page-zoom-hint-label">Display</span>
+          <span className="page-zoom-hint-value">
+            {autoScale < 1 ? `Auto ${autoLabel}` : 'Full HD'}
+            {userZoom !== 1 ? ` · ${effectiveLabel}` : ''}
+          </span>
+        </div>
         <div className="page-zoom-controls">
           <button
             type="button"
             className="page-zoom-btn-icon"
             onClick={handleZoomOut}
-            disabled={zoom <= ZOOM_MIN}
+            disabled={userZoom <= 0.75}
             title="Zoom out"
             aria-label="Zoom out"
           >
@@ -53,15 +93,15 @@ function PageZoomShell({ contentKey, children }) {
             type="button"
             className="page-zoom-label"
             onClick={handleZoomReset}
-            title="Reset zoom to 100%"
+            title="Reset personal zoom to match screen size"
           >
-            {formatZoomLabel(zoom)}
+            {effectiveLabel}
           </button>
           <button
             type="button"
             className="page-zoom-btn-icon"
             onClick={handleZoomIn}
-            disabled={zoom >= ZOOM_MAX}
+            disabled={userZoom >= 1.5}
             title="Zoom in"
             aria-label="Zoom in"
           >
@@ -70,12 +110,14 @@ function PageZoomShell({ contentKey, children }) {
         </div>
       </div>
 
-      <div className="page-zoom-viewport">
-        {/* Avoid applying `zoom` at 100% — it creates a containing block that
-            traps position:fixed modals under the app header. */}
+      <div className="page-zoom-viewport" ref={viewportRef}>
         <div
           className="page-zoom-scaler"
-          style={zoom === 1 ? undefined : { zoom }}
+          style={
+            applyZoom
+              ? { zoom: effectiveZoom, width: scalerWidth, minWidth: scalerWidth }
+              : undefined
+          }
         >
           {children}
         </div>

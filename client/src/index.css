@@ -16,14 +16,19 @@
   --border-soft: #e7e7e7;
   --shadow: rgba(15, 17, 17, 0.15);
   --app-font-family: 'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  --app-font-size: 17px;
-  --app-font-size-sm: 15px;
-  --app-font-size-lg: 19px;
-  --app-font-size-xl: 21px;
-  --app-font-size-2xl: 24px;
+  /* Tuned for Full HD (1920×1080); PageZoomShell scales down to 1366×768 */
+  --app-font-size: 16px;
+  --app-font-size-sm: 14px;
+  --app-font-size-lg: 18px;
+  --app-font-size-xl: 20px;
+  --app-font-size-2xl: 22px;
   --app-line-height: 1.5;
   --app-font-weight-normal: 400;
   --app-font-weight-bold: 700;
+  --design-width: 1920px;
+  --design-height: 1080px;
+  --min-viewport-width: 1366px;
+  --min-viewport-height: 768px;
 }
 
 html {
@@ -46,7 +51,8 @@ html, body {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  overflow-x: hidden;
+  overflow-x: auto;
+  min-width: var(--min-viewport-width, 1366px);
 }
 
 body {

@@ -62,8 +62,16 @@ function saleAmountInr(sale, rates) {
   return original * rateToInr(currency, rates);
 }
 
+/** Count every line/SKU row so multi-item Amazon orders are fully included. */
+function countSaleLineItems(sale) {
+  const items = Array.isArray(sale?.items) ? sale.items : [];
+  return items.length > 0 ? items.length : 1;
+}
+
 function computeSaleStats(sales = [], rates = null) {
-  const totalSales = sales.length;
+  // Number of Orders = line items (e.g. April 3 multi-SKU orders → all lines counted)
+  const totalSales = sales.reduce((sum, s) => sum + countSaleLineItems(s), 0);
+  const orderCount = sales.length;
   const totalRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
   const totalRevenueInr = rates
     ? sales.reduce((sum, s) => sum + saleAmountInr(s, rates), 0)
@@ -72,7 +80,8 @@ function computeSaleStats(sales = [], rates = null) {
     (sum, s) => sum + s.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0),
     0
   );
-  const averageOrderValue = totalSales > 0 ? totalRevenueInr / totalSales : 0;
+  // AOV stays revenue ÷ unique orders (Sale documents), not line rows
+  const averageOrderValue = orderCount > 0 ? totalRevenueInr / orderCount : 0;
   const totalRevenueUsd = rates
     ? convertAmount(totalRevenueInr, BASE_CURRENCY, 'USD', rates)
     : totalRevenueInr;
@@ -109,7 +118,7 @@ function buildCountrySalesBreakdown(sales = [], rates = null) {
       });
     }
     const row = map.get(key);
-    row.orders += 1;
+    row.orders += countSaleLineItems(s);
     const inr = saleAmountInr(s, rates);
     row.amountInr += inr;
     const original =
@@ -375,7 +384,7 @@ function salesTotalsByDateKey(sales, rates = null) {
     const key = toDateInputStr(startOfDay(new Date(sale.salesDate)));
     if (!map[key]) map[key] = { revenue: 0, orders: 0 };
     map[key].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
-    map[key].orders += 1;
+    map[key].orders += countSaleLineItems(sale);
   });
   return map;
 }
@@ -389,7 +398,7 @@ function salesTotalsByHourKey(sales, dayStart, rates = null) {
     const hour = saleDate.getHours();
     if (!map[hour]) map[hour] = { revenue: 0, orders: 0 };
     map[hour].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
-    map[hour].orders += 1;
+    map[hour].orders += countSaleLineItems(sale);
   });
   return map;
 }
@@ -592,14 +601,14 @@ function buildIndexedComparison(
     const idx = bucketIndexForDate(sale.salesDate, currentRange.start, timeline);
     if (!currentAgg[idx]) currentAgg[idx] = { revenue: 0, orders: 0 };
     currentAgg[idx].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
-    currentAgg[idx].orders += 1;
+    currentAgg[idx].orders += countSaleLineItems(sale);
   });
 
   previousSales.forEach((sale) => {
     const idx = bucketIndexForDate(sale.salesDate, previousRange.start, timeline);
     if (!previousAgg[idx]) previousAgg[idx] = { revenue: 0, orders: 0 };
     previousAgg[idx].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
-    previousAgg[idx].orders += 1;
+    previousAgg[idx].orders += countSaleLineItems(sale);
   });
 
   const maxIndex = maxBucketIndex(currentRange.start, currentRange.end, timeline);
@@ -641,7 +650,7 @@ function buildChannelBreakdown(sales, rates = null) {
     channelMap[channelId].revenue += rates
       ? saleAmountInr(sale, rates)
       : (sale.total || 0);
-    channelMap[channelId].orders += 1;
+    channelMap[channelId].orders += countSaleLineItems(sale);
   });
 
   return Object.values(channelMap)
@@ -901,7 +910,7 @@ function groupData(data, groupBy, dateField = 'salesDate', isSales = true) {
           itemsSold: 0
         };
       }
-      grouped[key].count += 1;
+      grouped[key].count += isSales ? countSaleLineItems(item) : 1;
       grouped[key].revenue += (item.total || 0);
       grouped[key].itemsSold += item.items.reduce((sum, i) => sum + (i.quantity || 0), 0);
     }
@@ -1076,7 +1085,7 @@ async function fetchSalesDetailedReport(filters = {}) {
   sales = sortSalesRecords(sales, sortBy, sortDir);
 
   const summary = {
-    totalSales: sales.length,
+    totalSales: sales.reduce((sum, s) => sum + countSaleLineItems(s), 0),
     totalRevenue: Math.round(sales.reduce((sum, s) => sum + (s.total || 0), 0) * 100) / 100,
     totalItemsSold: sales.reduce(
       (sum, s) => sum + s.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0),
@@ -1205,10 +1214,9 @@ const SALES_ORDER_EXPORT_HEADERS = [
   { key: 'amazonOrderId', label: 'Amazon Order ID' },
   { key: 'saleDate', label: 'Sale Date' },
   { key: 'channel', label: 'Channel' },
-  { key: 'items', label: 'Line Items' },
-  { key: 'qtyOrdered', label: 'Qty Ordered' },
-  { key: 'subtotal', label: 'Subtotal' },
-  { key: 'total', label: 'Total' },
+  { key: 'qtyOrdered', label: 'Quantity' },
+  { key: 'subtotal', label: 'Line Subtotal' },
+  { key: 'total', label: 'Line Total' },
   { key: 'paymentStatus', label: 'Payment Status' },
   { key: 'orderStatus', label: 'Order Status' },
 ];
@@ -1248,27 +1256,30 @@ function mapBusinessReportToExportRows(rows = []) {
 }
 
 function mapSalesToExportRows(sales) {
-  return sales.map((sale) => {
-    const skus = (sale.items || [])
-      .map((item) => item.product?.sku || item.sku || '')
-      .filter(Boolean);
-    const qtyOrdered = (sale.items || []).reduce(
-      (sum, item) => sum + (item.quantity || 0),
-      0
-    );
-    return {
-      productSkus: [...new Set(skus)].join(', '),
-      amazonOrderId: sale.amazonOrderId || '',
-      saleDate: sale.salesDate ? new Date(sale.salesDate).toISOString().slice(0, 10) : '',
-      channel: sale.salesChannel?.name || '',
-      items: sale.items?.length || 0,
-      qtyOrdered,
-      subtotal: sale.subtotal ?? '',
-      total: sale.total ?? '',
-      paymentStatus: sale.paymentStatus || '',
-      orderStatus: sale.orderStatus || '',
-    };
-  });
+  const rows = [];
+  for (const sale of sales) {
+    const items = Array.isArray(sale.items) && sale.items.length > 0 ? sale.items : [null];
+    items.forEach((item) => {
+      const qty = item
+        ? Number(item.quantity) || 0
+        : (sale.items || []).reduce((sum, line) => sum + (line.quantity || 0), 0);
+      const lineTotal = item
+        ? Number(item.total != null ? item.total : qty * (Number(item.unitPrice) || 0))
+        : Number(sale.subtotal) || 0;
+      rows.push({
+        productSkus: item ? (item.product?.sku || item.sku || '') : '',
+        amazonOrderId: sale.amazonOrderId || '',
+        saleDate: sale.salesDate ? new Date(sale.salesDate).toISOString().slice(0, 10) : '',
+        channel: sale.salesChannel?.name || '',
+        qtyOrdered: qty,
+        subtotal: lineTotal,
+        total: lineTotal,
+        paymentStatus: sale.paymentStatus || '',
+        orderStatus: sale.orderStatus || '',
+      });
+    });
+  }
+  return rows;
 }
 
 async function aggregateSalesBySku(filters = {}) {
@@ -1422,6 +1433,7 @@ async function aggregateSalesBySku(filters = {}) {
               _id: '$_id',
               orderTotal: { $first: '$total' },
               lineQuantity: { $sum: '$items.quantity' },
+              lineItemCount: { $sum: 1 },
             },
           },
         ]
@@ -1436,6 +1448,12 @@ async function aggregateSalesBySku(filters = {}) {
                   in: { $add: ['$$value', { $ifNull: ['$$this.quantity', 0] }] },
                 },
               },
+              lineItemCount: {
+                $let: {
+                  vars: { n: { $size: { $ifNull: ['$items', []] } } },
+                  in: { $cond: [{ $gt: ['$$n', 0] }, '$$n', 1] },
+                },
+              },
             },
           },
         ]),
@@ -1443,7 +1461,7 @@ async function aggregateSalesBySku(filters = {}) {
       $group: {
         _id: null,
         totalRevenue: { $sum: search ? '$orderTotal' : '$total' },
-        totalOrders: { $sum: 1 },
+        totalOrders: { $sum: '$lineItemCount' },
         totalQuantitySold: { $sum: '$lineQuantity' },
       },
     },
@@ -1682,9 +1700,10 @@ router.get('/sales/summary', async (req, res) => {
       .populate('items.product', 'name title sku images parentSkuOrAsin variation')
       .sort({ salesDate: -1 });
     
-    const totalSales = sales.length;
+    const orderCount = sales.length;
+    const totalSales = sales.reduce((sum, s) => sum + countSaleLineItems(s), 0);
     const totalRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
-    const averageOrderValue = totalSales > 0 ? totalRevenue / totalSales : 0;
+    const averageOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
     const totalItemsSold = sales.reduce((sum, s) => 
       sum + s.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0), 0
     );
@@ -1796,8 +1815,9 @@ router.get('/sales/statistics', async (req, res) => {
       .populate('items.product', 'name title sku images parentSkuOrAsin variation');
 
     const totalRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
-    const totalSales = sales.length;
-    const averageOrderValue = totalSales > 0 ? totalRevenue / totalSales : 0;
+    const orderCount = sales.length;
+    const totalSales = sales.reduce((sum, s) => sum + countSaleLineItems(s), 0);
+    const averageOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
 
     res.json({
       totalRevenue,

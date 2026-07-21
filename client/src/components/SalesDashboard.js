@@ -249,7 +249,7 @@ function SalesDashboard({ onSelectReport }) {
     if (displayCurrency === 'INR') return formatOverall(inr);
     return `${formatDisplay(inr)} (${formatCurrencyAmount(inr, 'INR')})`;
   };
-  const formatSaleLine = (sale) => {
+  const formatSaleLine = (sale, amountOverride) => {
     const channelCur = sale.salesChannel?.defaultCurrency;
     const country = sale.salesChannel?.country || sale.salesLocation?.location?.country;
     let currency = (channelCur || sale.currency || 'AED').toUpperCase();
@@ -258,7 +258,9 @@ function SalesDashboard({ onSelectReport }) {
       if (c.includes('INDIA') || c === 'IN') currency = 'INR';
       else if (c.includes('UAE') || c === 'AE' || c.includes('EMIRATE')) currency = 'AED';
     }
-    const original = sale.originalAmount != null ? sale.originalAmount : sale.total;
+    const original = amountOverride != null
+      ? amountOverride
+      : (sale.originalAmount != null ? sale.originalAmount : sale.total);
     return formatCurrencyAmount(original, currency);
   };
 
@@ -452,6 +454,32 @@ function SalesDashboard({ onSelectReport }) {
     return [...new Set(skus)].join(', ') || '—';
   };
 
+  /** One row per line item — Amazon Order ID repeats for multi-SKU orders. */
+  const recordLineRows = useMemo(() => {
+    const rows = [];
+    records.forEach((sale) => {
+      const items = Array.isArray(sale.items) && sale.items.length > 0 ? sale.items : [null];
+      items.forEach((item, index) => {
+        const qty = item ? Number(item.quantity) || 0 : getSaleQuantity(sale);
+        const lineTotal = item
+          ? Number(item.total != null ? item.total : qty * (Number(item.unitPrice) || 0))
+          : Number(sale.originalAmount != null ? sale.originalAmount : sale.total) || 0;
+        const sku = item
+          ? (getCatalogSku(item.product) || item.sku || '—')
+          : getSaleProductSkus(sale);
+        rows.push({
+          key: `${sale._id}-${index}`,
+          sale,
+          item,
+          sku,
+          qty,
+          lineTotal,
+        });
+      });
+    });
+    return rows;
+  }, [records]);
+
   const isAllTimeView = appliedFilters.period === 'allTime';
   const {
     overview, currentPeriod, previousPeriod, change, comparisonChart, channelBreakdown, countryBreakdown = [],
@@ -493,8 +521,8 @@ function SalesDashboard({ onSelectReport }) {
     true
   );
 
-  const currentOrdersLegend = `${currentLegendLabel} — orders`;
-  const previousOrdersLegend = `${previousLegendLabel} — orders`;
+  const currentOrdersLegend = `${currentLegendLabel} — number of orders`;
+  const previousOrdersLegend = `${previousLegendLabel} — number of orders`;
   const currentRevenueLegend = `${currentLegendLabel} — revenue`;
   const previousRevenueLegend = `${previousLegendLabel} — revenue`;
 
@@ -670,7 +698,7 @@ function SalesDashboard({ onSelectReport }) {
                 title="Open Sales Report"
               />
               <KpiCard
-                label="Orders"
+                label="Number of Orders"
                 value={currentPeriod.totalSales}
                 subValue={isAllTimeView ? `${currentPeriod.totalItemsSold} units sold` : `${previousLegendLabel}: ${previousPeriod.totalSales}`}
                 change={isAllTimeView ? null : change.totalSales}
@@ -733,7 +761,7 @@ function SalesDashboard({ onSelectReport }) {
                 </div>
 
                 <div className="sales-dash-chart-card">
-                  <h3>Orders Comparison</h3>
+                  <h3>Number of Orders Comparison</h3>
                   <ResponsiveContainer width="100%" height={COMPARISON_CHART_HEIGHT}>
                     <LineChart data={displayComparisonChart}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -777,18 +805,18 @@ function SalesDashboard({ onSelectReport }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {records.map((sale) => (
+                      {recordLineRows.map((row) => (
                         <tr
-                          key={sale._id}
+                          key={row.key}
                           className="sales-dash-record-row"
-                          onClick={() => openSaleDetail(sale)}
+                          onClick={() => openSaleDetail(row.sale)}
                         >
-                          <td className="mono">{getSaleProductSkus(sale)}</td>
-                          <td className="mono">{sale.amazonOrderId || '—'}</td>
-                          <td>{new Date(sale.salesDate).toLocaleDateString('en-IN')}</td>
-                          <td>{sale.salesChannel?.name || '—'}</td>
-                          <td className="num">{getSaleQuantity(sale)}</td>
-                          <td className="num total-col">{formatSaleLine(sale)}</td>
+                          <td className="mono">{row.sku}</td>
+                          <td className="mono">{row.sale.amazonOrderId || '—'}</td>
+                          <td>{new Date(row.sale.salesDate).toLocaleDateString('en-IN')}</td>
+                          <td>{row.sale.salesChannel?.name || '—'}</td>
+                          <td className="num">{row.qty}</td>
+                          <td className="num total-col">{formatSaleLine(row.sale, row.lineTotal)}</td>
                         </tr>
                       ))}
                     </tbody>

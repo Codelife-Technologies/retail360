@@ -347,9 +347,13 @@ function SalesSkuReport({ onClose }) {
         setOrderRows(orders);
         setSkuRows([]);
         setMonthlyTrend(trendRes.data?.groupedData || []);
+        const lineItemCount = orders.reduce((sum, sale) => {
+          const n = Array.isArray(sale.items) ? sale.items.length : 0;
+          return sum + (n > 0 ? n : 1);
+        }, 0);
         setSummary({
           totalSkus: skuSummary.totalSkus ?? null,
-          totalSales: orders.length,
+          totalSales: lineItemCount,
           totalQuantitySold:
             skuSummary.totalQuantitySold ??
             orders.reduce(
@@ -360,7 +364,7 @@ function SalesSkuReport({ onClose }) {
           totalRevenue:
             skuSummary.totalRevenue ??
             Math.round(orders.reduce((sum, sale) => sum + (sale.total || 0), 0) * 100) / 100,
-          totalOrders: skuSummary.totalOrders ?? orders.length,
+          totalOrders: skuSummary.totalOrders ?? lineItemCount,
           lineItemRevenue: skuSummary.lineItemRevenue,
           topSellingProducts: skuSummary.topSellingProducts || [],
           leastSellingProducts: skuSummary.leastSellingProducts || [],
@@ -564,19 +568,35 @@ function SalesSkuReport({ onClose }) {
   const canExport = isSkuView ? hasSkuRows : hasOrderRows;
 
   const getProductSku = (item) => {
+    if (!item) return '—';
     const sku = getCatalogSku(item.product) || item.sku;
     return sku || '—';
   };
 
-  const getSaleProductSkus = (sale) => {
-    const skus = (sale.items || [])
-      .map((item) => getProductSku(item))
-      .filter((sku) => sku && sku !== '—');
-    return [...new Set(skus)].join(', ') || '—';
-  };
-
-  const getSaleQuantityOrdered = (sale) =>
-    (sale.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0);
+  /** One table row per line item so repeating Amazon Order IDs stay visible. */
+  const orderLineRows = useMemo(() => {
+    const rows = [];
+    orderRows.forEach((sale) => {
+      const items = Array.isArray(sale.items) && sale.items.length > 0 ? sale.items : [null];
+      items.forEach((item, index) => {
+        const qty = item
+          ? Number(item.quantity) || 0
+          : (sale.items || []).reduce((sum, line) => sum + (line.quantity || 0), 0);
+        const lineTotal = item
+          ? Number(item.total != null ? item.total : qty * (Number(item.unitPrice) || 0))
+          : Number(sale.subtotal) || 0;
+        rows.push({
+          key: `${sale._id}-${index}`,
+          sale,
+          item,
+          sku: getProductSku(item),
+          qty,
+          lineTotal,
+        });
+      });
+    });
+    return rows;
+  }, [orderRows]);
 
   const openSaleDetail = async (sale) => {
     setViewingSale(sale);
@@ -660,7 +680,6 @@ function SalesSkuReport({ onClose }) {
                 <col className="sales-by-sale-col-date" />
                 <col className="sales-by-sale-col-channel" />
                 <col className="sales-by-sale-col-num" />
-                <col className="sales-by-sale-col-num" />
                 <col className="sales-by-sale-col-money" />
               </colgroup>
               <thead>
@@ -669,35 +688,29 @@ function SalesSkuReport({ onClose }) {
                   <th className="sales-by-sale-col-order">Amazon Order ID</th>
                   <th className="sales-by-sale-col-date">Sale Date</th>
                   <th className="sales-by-sale-col-channel">Channel</th>
-                  <th className="sales-by-sale-col-num">Items</th>
-                  <th className="sales-by-sale-col-num">Qty</th>
+                  <th className="sales-by-sale-col-num">Quantity</th>
                   <th className="sales-by-sale-col-money">Subtotal</th>
                 </tr>
               </thead>
               <tbody>
-                {orderRows.map((sale) => {
-                  const itemCount = sale.items?.length || 0;
-                  const qtyOrdered = getSaleQuantityOrdered(sale);
-                  return (
-                    <tr
-                      key={sale._id}
-                      className="sales-detail-row"
-                      onClick={() => openSaleDetail(sale)}
-                    >
-                      <td className="mono sales-by-sale-col-sku">{getSaleProductSkus(sale)}</td>
-                      <td className="mono sales-by-sale-col-order">{sale.amazonOrderId || '—'}</td>
-                      <td className="sales-by-sale-col-date">
-                        {new Date(sale.salesDate).toLocaleDateString('en-IN')}
-                      </td>
-                      <td className="sales-by-sale-col-channel">{sale.salesChannel?.name || '—'}</td>
-                      <td className="num sales-by-sale-col-num">{itemCount}</td>
-                      <td className="num sales-by-sale-col-num">{qtyOrdered}</td>
-                      <td className="num sales-by-sale-col-money">
-                        {formatSaleMoney(sale, sale.subtotal, reportCurrency)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {orderLineRows.map((row) => (
+                  <tr
+                    key={row.key}
+                    className="sales-detail-row"
+                    onClick={() => openSaleDetail(row.sale)}
+                  >
+                    <td className="mono sales-by-sale-col-sku">{row.sku}</td>
+                    <td className="mono sales-by-sale-col-order">{row.sale.amazonOrderId || '—'}</td>
+                    <td className="sales-by-sale-col-date">
+                      {new Date(row.sale.salesDate).toLocaleDateString('en-IN')}
+                    </td>
+                    <td className="sales-by-sale-col-channel">{row.sale.salesChannel?.name || '—'}</td>
+                    <td className="num sales-by-sale-col-num">{row.qty}</td>
+                    <td className="num sales-by-sale-col-money">
+                      {formatSaleMoney(row.sale, row.lineTotal, reportCurrency)}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
             </div>
@@ -717,7 +730,7 @@ function SalesSkuReport({ onClose }) {
               ? 'Ordered product sales by day, week, or month'
               : isSkuView
               ? 'SKU performance for the selected date range'
-              : 'Sales orders for the selected date range — click a row for details'}
+              : 'Sales line items for the selected date range — Amazon Order ID repeats when an order has multiple products'}
           </p>
         </div>
         <div className="sales-sku-report-header-actions">
