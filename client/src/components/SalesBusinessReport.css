@@ -19,6 +19,61 @@
   background: var(--asc-bg);
 }
 
+.sales-br-fx-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--asc-card);
+  border: 1px solid var(--asc-border);
+  border-radius: 8px;
+}
+
+.sales-br-fx-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--asc-text-muted);
+  max-width: 36rem;
+}
+
+.sales-br-compare-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--asc-text-muted);
+}
+
+.sales-business-report .sales-period-match-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 0.5rem;
+}
+
+.sales-business-report .sales-period-match-kpi {
+  background: var(--asc-card);
+  border: 1px solid var(--asc-border);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.sales-business-report .sales-period-match-label {
+  font-size: 0.75rem;
+  color: var(--asc-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sales-business-report .sales-period-match-kpi strong {
+  font-size: 1rem;
+  color: var(--asc-text);
+}
+
 .sales-business-report .sales-dash-topbar {
   background: var(--asc-header);
   color: var(--asc-header-text);

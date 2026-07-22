@@ -6,6 +6,7 @@ const Product = require('../models/Product');
 const Supplier = require('../models/Supplier');
 const PurchaseOrder = require('../models/PurchaseOrder');
 const Purchase = require('../models/Purchase');
+const { requirePermission } = require('../middleware/auth');
 
 const PRODUCT_POPULATE = { path: 'product', select: 'name title sku brandName' };
 const SUPPLIER_POPULATE = { path: 'supplier', select: 'name supplierCode contactPerson' };
@@ -96,7 +97,7 @@ const upload = multer({
 });
 
 // GET all prices with filters (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('prices.view'), async (req, res) => {
   try {
     const { product, supplier, isActive, page, limit } = req.query;
     const query = {};
@@ -134,7 +135,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET vendor catalog — every product–vendor link with quoted price
-router.get('/vendor-catalog', async (req, res) => {
+router.get('/vendor-catalog', requirePermission('prices.view'), async (req, res) => {
   try {
     const { supplier: supplierFilter, search } = req.query;
     const searchTerm = search?.trim().toLowerCase() || '';
@@ -253,7 +254,7 @@ router.get('/vendor-catalog', async (req, res) => {
 });
 
 // GET current active price for a product
-router.get('/product/:productId', async (req, res) => {
+router.get('/product/:productId', requirePermission('prices.view'), async (req, res) => {
   try {
     const price = await Price.findOne({
       product: req.params.productId,
@@ -272,7 +273,7 @@ router.get('/product/:productId', async (req, res) => {
 });
 
 // GET price history for a product
-router.get('/product/:productId/history', async (req, res) => {
+router.get('/product/:productId/history', requirePermission('prices.view'), async (req, res) => {
   try {
     const prices = await Price.find({ product: req.params.productId })
       .populate(PRODUCT_POPULATE)
@@ -285,7 +286,7 @@ router.get('/product/:productId/history', async (req, res) => {
 });
 
 // GET current prices for multiple products
-router.post('/bulk-current', async (req, res) => {
+router.post('/bulk-current', requirePermission('prices.view'), async (req, res) => {
   try {
     const { productIds, currency } = req.body;
     if (!Array.isArray(productIds)) {
@@ -311,7 +312,7 @@ router.post('/bulk-current', async (req, res) => {
 });
 
 // POST create new price (deactivates old active price)
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('prices.create'), async (req, res) => {
   try {
     const { product, supplier, purchasePrice, salesPrice, currency, effectiveDate, notes, isActive } = req.body;
     
@@ -354,7 +355,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update price
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('prices.update'), async (req, res) => {
   try {
     const { purchasePrice, salesPrice, currency, effectiveDate, isActive, notes, supplier } = req.body;
     
@@ -407,7 +408,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE price (soft delete by setting isActive to false)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('prices.delete'), async (req, res) => {
   try {
     const price = await Price.findByIdAndUpdate(
       req.params.id,
@@ -432,7 +433,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST bulk update prices
-router.post('/bulk', async (req, res) => {
+router.post('/bulk', requirePermission('prices.update'), async (req, res) => {
   try {
     const { prices } = req.body; // Array of { product, purchasePrice, salesPrice, ... }
     
@@ -482,7 +483,7 @@ router.post('/bulk', async (req, res) => {
 });
 
 // GET Excel template
-router.get('/template', (req, res) => {
+router.get('/template', requirePermission('prices.view'), (req, res) => {
   try {
     const headers = [
       { key: 'product', label: 'Product SKU/Name *' },
@@ -502,7 +503,7 @@ router.get('/template', (req, res) => {
 });
 
 // POST import prices from Excel
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', requirePermission('prices.create'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });

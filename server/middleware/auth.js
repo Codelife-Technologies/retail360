@@ -3,6 +3,24 @@ const User = require('../models/User');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'retailos-jwt-secret-change-in-production';
 
+/** Modules unlocked by master.full (Master folder pages). */
+const MASTER_PERMISSION_MODULES = new Set([
+  'products',
+  'stock',
+  'categories',
+  'subcategories',
+  'prices',
+  'priceMasters',
+  'units',
+  'suppliers',
+  'companyProfile',
+  'shipmentVendors',
+  'locations',
+  'salesChannels',
+  'salesLocations',
+  'master',
+]);
+
 const SKIP_AUTH_PATHS = [
   '/api/auth/login',
   '/api/auth/seed',
@@ -76,6 +94,12 @@ function requirePermission(permissionCode) {
     const permissions = await getEffectivePermissions(req.user.id);
     if (permissions.has('admin.all') || permissions.has(permissionCode)) {
       return next();
+    }
+    if (permissions.has('master.full')) {
+      const moduleKey = String(permissionCode || '').split('.')[0];
+      if (MASTER_PERMISSION_MODULES.has(moduleKey)) {
+        return next();
+      }
     }
     return res.status(403).json({ error: 'Insufficient permissions' });
   };

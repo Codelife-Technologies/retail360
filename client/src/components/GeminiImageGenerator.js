@@ -1013,7 +1013,9 @@ function GeminiImageGenerator() {
                       >
                         <option value="">Unfiled</option>
                         {aiFolders.map((f) => (
-                          <option key={f._id} value={f._id}>{f.name}</option>
+                          <option key={f._id} value={f._id}>
+                            {f.name}{(f.visibility || 'Shared') === 'Personal' ? ' (Personal)' : ''}
+                          </option>
                         ))}
                       </select>
                     </label>

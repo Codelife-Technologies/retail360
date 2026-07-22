@@ -3,7 +3,6 @@ import { reportsAPI, salesAPI } from '../../services/api';
 import SaleDetailsModal from '../../components/SaleDetailsModal';
 import { getCatalogSku } from '../../utils/productDisplayUtils';
 import {
-  formatCurrency,
   formatDate,
   financialYearOptions,
   resolveSalesQueryParams,
@@ -17,7 +16,10 @@ import {
   FinancePeriodToggle,
 } from '../components/FinanceShared';
 import { financeAPI } from '../services/financeApi';
-import { formatSaleMoney, getCurrencyForSalesChannelId } from '../../utils/locationCurrency';
+import { getCurrencyForSalesChannelId } from '../../utils/locationCurrency';
+import { useCurrency } from '../../currency/CurrencyContext';
+import { CurrencySelector, OriginalAndConverted } from '../../currency/CurrencyUI';
+import '../../currency/currency.css';
 
 const PAYMENT_STATUSES = ['pending', 'paid', 'partial'];
 const ORDER_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
@@ -67,6 +69,13 @@ function downloadBlob(blob, filename) {
 }
 
 function FinanceSales() {
+  const {
+    displayCurrency,
+    fromOriginal,
+    formatOverall,
+    formatDisplay,
+    formatCurrencyAmount,
+  } = useCurrency();
   const [filters, setFilters] = useState(defaultFilters);
   const [salesChannels, setSalesChannels] = useState([]);
   const [rows, setRows] = useState([]);
@@ -84,6 +93,18 @@ function FinanceSales() {
   const reportCurrency = useMemo(
     () => getCurrencyForSalesChannelId(filters.salesChannel, salesChannels),
     [filters.salesChannel, salesChannels]
+  );
+
+  const formatKpiMoney = useCallback(
+    (amountInInr, fallbackAmount) => {
+      const inr =
+        amountInInr != null
+          ? Number(amountInInr) || 0
+          : fromOriginal(fallbackAmount, reportCurrency, 'INR');
+      if (displayCurrency === 'INR') return formatOverall(inr);
+      return `${formatDisplay(inr)} (${formatCurrencyAmount(inr, 'INR')})`;
+    },
+    [displayCurrency, fromOriginal, reportCurrency, formatOverall, formatDisplay, formatCurrencyAmount]
   );
 
   useEffect(() => {
@@ -238,9 +259,11 @@ function FinanceSales() {
           <h1>Sales</h1>
           <p className="fin-subtitle">
             Sales records for the selected period — click a row to view full details.
+            {' '}Amounts follow display currency ({displayCurrency}).
           </p>
         </div>
         <div className="fin-actions">
+          <CurrencySelector />
           <button
             type="button"
             className={`fin-btn${hasActiveFilters ? ' fin-btn-active' : ''}`}
@@ -297,13 +320,13 @@ function FinanceSales() {
         <FinanceKpiCard
           loading={loading}
           label="Total Revenue"
-          value={formatCurrency(stats?.totalRevenue || 0)}
+          value={formatKpiMoney(stats?.totalRevenueInr, stats?.totalRevenue || 0)}
           tone="success"
         />
         <FinanceKpiCard
           loading={loading}
           label="Avg Order Value"
-          value={formatCurrency(stats?.averageOrderValue || 0)}
+          value={formatKpiMoney(stats?.averageOrderValue, stats?.averageOrderValue || 0)}
           tone="info"
         />
       </div>
@@ -358,8 +381,33 @@ function FinanceSales() {
                       <td data-label="SKU" className="mono fin-sales-sku">{getSaleProductSkus(sale)}</td>
                       <td data-label="Items">{itemCount}</td>
                       <td data-label="Qty">{qty}</td>
-                      <td data-label="Subtotal">{formatSaleMoney(sale, sale.subtotal, reportCurrency)}</td>
-                      <td data-label="Total">{formatSaleMoney(sale, sale.total, reportCurrency)}</td>
+                      <td data-label="Subtotal">
+                        <OriginalAndConverted
+                          originalAmount={sale.subtotal}
+                          originalCurrency={sale.currency || reportCurrency}
+                          amountInInr={
+                            Number(sale.exchangeRateToInr) > 0
+                              ? (Number(sale.subtotal) || 0) * Number(sale.exchangeRateToInr)
+                              : fromOriginal(sale.subtotal, sale.currency || reportCurrency, 'INR')
+                          }
+                        />
+                      </td>
+                      <td data-label="Total">
+                        <OriginalAndConverted
+                          originalAmount={sale.originalAmount != null ? sale.originalAmount : sale.total}
+                          originalCurrency={sale.currency || reportCurrency}
+                          amountInInr={
+                            Number(sale.exchangeRateToInr) > 0
+                              ? (Number(sale.originalAmount != null ? sale.originalAmount : sale.total) || 0) *
+                                Number(sale.exchangeRateToInr)
+                              : fromOriginal(
+                                  sale.originalAmount != null ? sale.originalAmount : sale.total,
+                                  sale.currency || reportCurrency,
+                                  'INR'
+                                )
+                          }
+                        />
+                      </td>
                       <td data-label="Payment">{sale.paymentStatus || '—'}</td>
                       <td data-label="Order Status">{sale.orderStatus || '—'}</td>
                     </tr>

@@ -8,7 +8,12 @@ import SalesModule from './sales/SalesModule';
 import UserManagementModule from './userManagement/UserManagementModule';
 import InventoryModule from './inventory/InventoryModule';
 import Login from './components/Login';
-import { MASTER_GROUPS, isMasterTab, resolveMasterSubTab } from './master/masterTabs';
+import {
+  MASTER_GROUPS,
+  isMasterTab,
+  resolveMasterSubTab,
+  filterMasterGroups,
+} from './master/masterTabs';
 import {
   INVENTORY_GROUPS,
   isInventoryTab,
@@ -90,6 +95,9 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
 
   const showMasterNav = canViewMaster(hasPermission);
+  const visibleMasterGroups = filterMasterGroups(hasPermission, MASTER_GROUPS);
+  const visibleMasterTabs = visibleMasterGroups.flatMap((group) => group.tabs);
+  const defaultMasterTabId = visibleMasterTabs[0]?.id || 'products';
   const showInventoryNav = !showMasterNav && filterTabGroups(hasPermission, user, INVENTORY_GROUPS).length > 0;
   const visibleInventoryGroups = filterTabGroups(hasPermission, user, INVENTORY_GROUPS);
   const visibleProcurementTabs = filterTabs(hasPermission, user, PROCUREMENT_TABS);
@@ -120,7 +128,10 @@ function App() {
     activeTab === 'user-management' || activeTab.startsWith('user-management:');
   const isEmployeeDashboardActive =
     activeTab === 'employee-dashboard' || activeTab.startsWith('employee-dashboard:');
-  const activeMasterSubTab = resolveMasterSubTab(activeTab);
+  const resolvedMasterSubTab = resolveMasterSubTab(activeTab, defaultMasterTabId);
+  const activeMasterSubTab = visibleMasterTabs.some((t) => t.id === resolvedMasterSubTab)
+    ? resolvedMasterSubTab
+    : defaultMasterTabId;
   const activeProcurementSubTab = resolveProcurementSubTab(activeTab);
   const activeSalesSubTab = resolveSalesSubTab(activeTab);
   const activeHrSubTab = resolveHrSubTab(activeTab);
@@ -137,13 +148,11 @@ function App() {
   /** Secondary sub-header: only when an active folder has multiple pages. */
   let moduleSubNav = null;
   if (isMasterActive && showMasterNav) {
-    const items = MASTER_GROUPS.flatMap((group) =>
-      group.tabs.map((tab) => ({ ...tab, group: group.label }))
-    );
-    if (items.length > 1) {
+    if (visibleMasterTabs.length > 1) {
       moduleSubNav = {
         label: 'Master',
-        items,
+        items: visibleMasterTabs,
+        groups: visibleMasterGroups,
         activeId: activeMasterSubTab,
         prefix: 'master',
         grouped: true,
@@ -319,7 +328,7 @@ function App() {
         return;
       }
       if (tab === 'master') {
-        setActiveTab('master:products');
+        setActiveTab(`master:${defaultMasterTabId}`);
         return;
       }
       if (tab === 'procurement') {
@@ -372,7 +381,7 @@ function App() {
       }
       setActiveTab(tab);
     },
-    [visibleUserManagementTabs, visibleInventoryGroups, visibleProcurementTabs, visibleSalesTabs, visibleHrTabs, visibleComplianceTabs, visibleFinanceTabs, visibleDocumentsTabs, visibleUtilitiesTabs]
+    [visibleUserManagementTabs, visibleInventoryGroups, visibleProcurementTabs, visibleSalesTabs, visibleHrTabs, visibleComplianceTabs, visibleFinanceTabs, visibleDocumentsTabs, visibleUtilitiesTabs, defaultMasterTabId]
   );
 
   if (loading) {
@@ -434,7 +443,12 @@ function App() {
       );
     }
     if (isUserManagementActive) {
-      return <UserManagementModule subTab={activeUserManagementSubTab} />;
+      return (
+        <UserManagementModule
+          subTab={activeUserManagementSubTab}
+          onNavigateSubTab={(tabId) => setActiveTab(`user-management:${tabId}`)}
+        />
+      );
     }
     if (isEmployeeDashboardActive) {
       return (
@@ -601,7 +615,7 @@ function App() {
             <span className="app-subnav-module">{moduleSubNav.label}</span>
             <div className="app-subnav-items">
               {moduleSubNav.grouped
-                ? MASTER_GROUPS.map((group) => (
+                ? (moduleSubNav.groups || []).map((group) => (
                     <div key={group.label} className="app-subnav-group">
                       <span className="app-subnav-group-label">{group.label}</span>
                       {group.tabs.map((tab) => (

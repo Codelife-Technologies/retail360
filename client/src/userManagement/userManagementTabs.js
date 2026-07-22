@@ -1,8 +1,8 @@
 export const USER_MANAGEMENT_TABS = [
-  { id: 'users', label: 'User', icon: '👤', permission: 'users.view' },
-  { id: 'roles', label: 'Role', icon: '🔐', permission: 'roles.view' },
-  { id: 'permissions', label: 'Permission', icon: '✅', permission: 'permissions.view' },
-  { id: 'groups', label: 'Group', icon: '👥', permission: 'groups.view' },
+  { id: 'users', label: 'Users & Access', icon: '👤', permission: 'users.view' },
+  { id: 'roles', label: 'Roles & Permissions', icon: '🔐', permission: 'roles.view' },
+  { id: 'permissions', label: 'Permission Catalog', icon: '✅', permission: 'permissions.view' },
+  { id: 'groups', label: 'Groups', icon: '👥', permission: 'groups.view' },
   { id: 'logs', label: 'Logs', icon: '📋', permission: 'logs.view' },
 ];
 

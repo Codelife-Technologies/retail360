@@ -60,16 +60,57 @@ async function assertFolderExists(folderId) {
   return folder;
 }
 
+/** Personal folders are visible only to the owning employee and documents admins. */
+function canAccessFolder(folder, scope = {}) {
+  if (!folder) return true;
+  const visibility = folder.visibility || 'Shared';
+  if (visibility !== 'Personal') return true;
+  if (scope.admin) return true;
+  return String(folder.createdByUserId || '') === String(scope.userId || '');
+}
+
+async function assertFolderAccess(folderId, scope = {}) {
+  const folder = await assertFolderExists(folderId);
+  if (folder && !canAccessFolder(folder, scope)) {
+    throw new Error('Access denied to personal folder');
+  }
+  return folder;
+}
+
+async function getInaccessiblePersonalFolderIds(scope = {}) {
+  if (scope.admin) return [];
+  const query = {
+    status: 'Active',
+    visibility: 'Personal',
+  };
+  if (scope.userId) {
+    query.createdByUserId = { $ne: scope.userId };
+  }
+  const folders = await DocumentFolder.find(query).select('_id').lean();
+  return folders.map((f) => f._id);
+}
+
 async function listFolders(scope = {}, filters = {}) {
   const sourceScope = filters.sourceScope || 'Manual Upload';
 
-  // Backfill folders created before sourceScope existed
+  // Backfill folders created before sourceScope / visibility existed
   await DocumentFolder.updateMany(
     { $or: [{ sourceScope: { $exists: false } }, { sourceScope: null }, { sourceScope: '' }] },
     { $set: { sourceScope: 'Manual Upload' } }
   );
+  await DocumentFolder.updateMany(
+    { $or: [{ visibility: { $exists: false } }, { visibility: null }, { visibility: '' }] },
+    { $set: { visibility: 'Shared' } }
+  );
 
   const query = { status: 'Active', sourceScope };
+  if (!scope.admin) {
+    query.$or = [
+      { visibility: { $ne: 'Personal' } },
+      { visibility: 'Personal', createdByUserId: scope.userId },
+      { visibility: { $exists: false } },
+    ];
+  }
 
   const folders = await DocumentFolder.find(query)
     .sort({ sortOrder: 1, name: 1 })
@@ -106,6 +147,7 @@ async function listFolders(scope = {}, filters = {}) {
   return {
     folders: folders.map((f) => ({
       ...f,
+      visibility: f.visibility || 'Shared',
       documentCount: countMap[String(f._id)] || 0,
     })),
     unfiledCount,
@@ -113,18 +155,37 @@ async function listFolders(scope = {}, filters = {}) {
   };
 }
 
-async function createFolder({ name, description, parentId, department, user, sortOrder, sourceScope }) {
+async function createFolder({
+  name,
+  description,
+  parentId,
+  department,
+  user,
+  sortOrder,
+  sourceScope,
+  visibility,
+  scope = {},
+}) {
   const trimmed = String(name || '').trim();
   if (!trimmed) throw new Error('Folder name is required');
 
   const scopeValue = sourceScope === 'AI Generator' ? 'AI Generator' : 'Manual Upload';
+  const visibilityValue = String(visibility || '').toLowerCase() === 'personal' ? 'Personal' : 'Shared';
+  const ownerId = user?.id || user?.userId || user?._id || null;
+
+  if (visibilityValue === 'Personal' && !ownerId) {
+    throw new Error('You must be signed in to create a personal folder');
+  }
 
   let parent = null;
   const parentObjectId = toObjectId(parentId);
   if (parentObjectId) {
-    parent = await assertFolderExists(parentObjectId);
+    parent = await assertFolderAccess(parentObjectId, scope.admin != null ? scope : { admin: false, userId: ownerId });
     if (parent.sourceScope && parent.sourceScope !== scopeValue) {
       throw new Error('Parent folder belongs to a different source');
+    }
+    if ((parent.visibility || 'Shared') === 'Personal' && visibilityValue !== 'Personal') {
+      throw new Error('Shared folders cannot be nested under a personal folder');
     }
   }
 
@@ -146,10 +207,11 @@ async function createFolder({ name, description, parentId, department, user, sor
       name: trimmed,
       description: description ? String(description).trim() : '',
       sourceScope: scopeValue,
+      visibility: visibilityValue,
       parentId: parent?._id || null,
       sortOrder: Number(order) || 0,
       createdBy: actorLabel(user),
-      createdByUserId: user?.id || user?.userId || user?._id || null,
+      createdByUserId: ownerId,
       department: department || '',
       status: 'Active',
     });
@@ -274,10 +336,13 @@ async function moveDocumentToFolder(documentId, folderId, scope = {}) {
 
   const nextFolderId = toObjectId(folderId);
   if (nextFolderId) {
-    const folder = await assertFolderExists(nextFolderId);
+    const folder = await assertFolderAccess(nextFolderId, scope);
     if (folder.sourceScope && folder.sourceScope !== doc.source) {
       throw new Error('Folder does not match this document type');
     }
+  } else if (doc.folderId) {
+    // Leaving a personal folder also requires access to that folder
+    await assertFolderAccess(doc.folderId, scope);
   }
   doc.folderId = nextFolderId;
   await doc.save();
@@ -348,6 +413,7 @@ async function saveAiGeneratedImage({
   description,
   tags = [],
   folderId,
+  scope = {},
 }) {
   ensureDocumentFolders();
 
@@ -363,7 +429,7 @@ async function saveAiGeneratedImage({
 
   const resolvedFolderId = toObjectId(folderId);
   if (resolvedFolderId) {
-    const folder = await assertFolderExists(resolvedFolderId);
+    const folder = await assertFolderAccess(resolvedFolderId, scope);
     if (folder.sourceScope && folder.sourceScope !== 'AI Generator') {
       throw new Error('Selected folder is not an AI images folder');
     }
@@ -453,6 +519,7 @@ async function createManualUpload({
   sku,
   productId,
   folderId,
+  scope = {},
 }) {
   ensureDocumentFolders();
   if (!file) throw new Error('File is required');
@@ -468,7 +535,7 @@ async function createManualUpload({
 
   const resolvedFolderId = toObjectId(folderId);
   if (resolvedFolderId) {
-    const folder = await assertFolderExists(resolvedFolderId);
+    const folder = await assertFolderAccess(resolvedFolderId, scope);
     if (folder.sourceScope && folder.sourceScope !== 'Manual Upload') {
       throw new Error('Selected folder is not an employee documents folder');
     }
@@ -503,6 +570,82 @@ async function createManualUpload({
     status: 'Active',
     version: 1,
     sourceFileKey: `manual:${storageRelative}`,
+  });
+
+  return document;
+}
+
+/**
+ * Upload a desktop image file into AI Generated Images (source: AI Generator).
+ */
+async function createAiDesktopUpload({
+  file,
+  user,
+  title,
+  description,
+  tags,
+  sku,
+  productId,
+  folderId,
+  scope = {},
+}) {
+  ensureDocumentFolders();
+  if (!file) throw new Error('File is required');
+
+  const mimeType = file.mimetype || '';
+  if (!isImageMime(mimeType)) {
+    throw new Error('Only image files can be added to AI Generated Images');
+  }
+
+  const settings = await getSettings();
+  const ext = extensionOf(file.originalname || file.filename).toLowerCase() || '.jpg';
+  const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+  if (!imageExts.includes(ext)) {
+    throw new Error(`Image type ${ext} is not allowed`);
+  }
+  if (file.size > settings.maxUploadBytes) {
+    throw new Error(`File exceeds maximum size of ${Math.round(settings.maxUploadBytes / (1024 * 1024))} MB`);
+  }
+
+  const resolvedFolderId = toObjectId(folderId);
+  if (resolvedFolderId) {
+    const folder = await assertFolderAccess(resolvedFolderId, scope);
+    if (folder.sourceScope && folder.sourceScope !== 'AI Generator') {
+      throw new Error('Selected folder is not an AI images folder');
+    }
+  }
+
+  const productMeta = await resolveProductMeta({ productId, sku });
+  const version = await nextAiVersion(productMeta.sku);
+  const destName = file.filename;
+  const destAbs = path.join(AI_DIR, destName);
+  const storageRelative = relativeFromUploads(file.path || destAbs).replace(/\\/g, '/');
+  const thumb = await generateThumbnail(file.path || destAbs, mimeType);
+
+  const document = await Document.create({
+    documentType: 'Image',
+    source: 'AI Generator',
+    ...productMeta,
+    title: title || file.originalname || `${productMeta.productName || productMeta.sku || 'AI Image'} (v${version})`,
+    description: description || '',
+    tags: Array.isArray(tags) ? tags : (tags ? String(tags).split(',').map((t) => t.trim()).filter(Boolean) : []),
+    fileName: file.originalname || destName,
+    fileExtension: ext,
+    mimeType,
+    fileSize: file.size || 0,
+    fileUrl: toPublicUrl(storageRelative),
+    thumbnailUrl: thumb.thumbnailUrl || toPublicUrl(storageRelative),
+    storagePath: storageRelative,
+    thumbnailPath: thumb.thumbnailPath || '',
+    uploadedBy: actorLabel(user),
+    uploadedByUserId: user?.id || user?.userId || user?._id || null,
+    department: '',
+    folderId: resolvedFolderId,
+    status: 'Active',
+    version,
+    promptOrder: null,
+    promptText: '',
+    sourceFileKey: `ai-desktop:${storageRelative}`,
   });
 
   return document;
@@ -591,6 +734,37 @@ function buildListQuery(filters = {}, scope = {}) {
 
 async function listDocuments(filters, scope, { page = 1, limit = 24 } = {}) {
   const query = buildListQuery(filters, scope);
+
+  // Hide documents that live in other users' personal folders (admins see all)
+  const hiddenFolderIds = await getInaccessiblePersonalFolderIds(scope);
+  if (hiddenFolderIds.length) {
+    const requestedFolderId = filters.folderId && filters.folderId !== 'unfiled'
+      ? toObjectId(filters.folderId)
+      : null;
+    if (requestedFolderId && hiddenFolderIds.some((id) => String(id) === String(requestedFolderId))) {
+      return {
+        data: [],
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total: 0,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: false,
+        },
+      };
+    }
+    query.$and = (query.$and || []).concat([
+      {
+        $or: [
+          { folderId: null },
+          { folderId: { $exists: false } },
+          { folderId: { $nin: hiddenFolderIds } },
+        ],
+      },
+    ]);
+  }
+
   const skip = (Math.max(1, page) - 1) * Math.max(1, limit);
   const [data, total] = await Promise.all([
     Document.find(query).sort({ createdAt: -1 }).skip(skip).limit(Math.max(1, Math.min(100, limit))).lean(),
@@ -698,6 +872,7 @@ module.exports = {
   saveAiGeneratedImage,
   saveAiFromUploadUrl,
   createManualUpload,
+  createAiDesktopUpload,
   listDocuments,
   getAnalytics,
   softDelete,
@@ -712,4 +887,5 @@ module.exports = {
   deleteFolder,
   reorderFolders,
   moveDocumentToFolder,
+  canAccessFolder,
 };

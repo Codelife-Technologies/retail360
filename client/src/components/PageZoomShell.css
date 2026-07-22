@@ -98,6 +98,8 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  /* Prevent scrollbar show/hide from changing layout width and feeding zoom loop */
+  scrollbar-gutter: stable;
 }
 
 .page-zoom-scaler {

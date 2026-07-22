@@ -11,17 +11,32 @@ import {
 import './PageZoomShell.css';
 
 const USER_ZOOM_STEP = 0.05;
+/** Ignore tiny width noise (e.g. scrollbar appearing) to prevent zoom feedback shake. */
+const SCALE_EPSILON = 0.008;
 
 function PageZoomShell({ contentKey, children }) {
   const viewportRef = useRef(null);
   const [autoScale, setAutoScale] = useState(1);
   const [userZoom, setUserZoom] = useState(1);
+  const lastScaleRef = useRef(1);
+  const rafRef = useRef(0);
 
   const measure = useCallback(() => {
-    const el = viewportRef.current;
-    const width = el?.clientWidth || window.innerWidth || DESIGN_WIDTH;
-    setAutoScale(computeAutoScale(width));
+    // Prefer window width — never measure the zoomed scaler (that causes a resize loop / shake).
+    const width = window.innerWidth || DESIGN_WIDTH;
+    const next = computeAutoScale(width);
+    if (Math.abs(next - lastScaleRef.current) < SCALE_EPSILON) return;
+    lastScaleRef.current = next;
+    setAutoScale(next);
   }, []);
+
+  const scheduleMeasure = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      measure();
+    });
+  }, [measure]);
 
   useLayoutEffect(() => {
     setUserZoom(readStoredUserZoom());
@@ -30,17 +45,13 @@ function PageZoomShell({ contentKey, children }) {
 
   useEffect(() => {
     measure();
-    const el = viewportRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', measure);
-      return () => window.removeEventListener('resize', measure);
-    }
-    const ro = new ResizeObserver(() => measure());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [measure]);
+    window.addEventListener('resize', scheduleMeasure);
+    return () => {
+      window.removeEventListener('resize', scheduleMeasure);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [measure, scheduleMeasure]);
 
-  // Keep user zoom across pages; only remeasure on navigation
   useEffect(() => {
     measure();
   }, [contentKey, measure]);
@@ -52,7 +63,7 @@ function PageZoomShell({ contentKey, children }) {
   };
 
   const effectiveZoom = Math.round(autoScale * userZoom * 1000) / 1000;
-  // Avoid applying CSS zoom at exactly 1 — it traps position:fixed modals
+  // Avoid CSS zoom at exactly 1 — it traps position:fixed modals inside the scaler
   const applyZoom = Math.abs(effectiveZoom - 1) > 0.001;
   const scalerWidth = applyZoom ? `${100 / effectiveZoom}%` : '100%';
 
@@ -71,7 +82,10 @@ function PageZoomShell({ contentKey, children }) {
       data-min-width={MIN_WIDTH}
     >
       <div className="page-zoom-toolbar" aria-label="Display size controls">
-        <div className="page-zoom-hint" title={`Designed for ${DESIGN_WIDTH}×1080. Minimum supported ${MIN_WIDTH}×768.`}>
+        <div
+          className="page-zoom-hint"
+          title={`Designed for ${DESIGN_WIDTH}×1080. Minimum supported ${MIN_WIDTH}×768.`}
+        >
           <span className="page-zoom-hint-label">Display</span>
           <span className="page-zoom-hint-value">
             {autoScale < 1 ? `Auto ${autoLabel}` : 'Full HD'}

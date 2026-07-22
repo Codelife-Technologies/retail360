@@ -221,20 +221,20 @@
   color: #333;
 }
 
-.form-group {
+.sales-container .form-group {
   margin-bottom: 1rem;
 }
 
-.form-group label {
+.sales-container .form-group label {
   display: block;
   margin-bottom: 0.5rem;
   color: #333;
   font-weight: 500;
 }
 
-.form-group input,
-.form-group select,
-.form-group textarea {
+.sales-container .form-group input,
+.sales-container .form-group select,
+.sales-container .form-group textarea {
   width: 100%;
   padding: 0.75rem;
   border: 1px solid #ddd;
@@ -243,7 +243,7 @@
   font-family: inherit;
 }
 
-.form-group textarea {
+.sales-container .form-group textarea {
   resize: vertical;
 }
 

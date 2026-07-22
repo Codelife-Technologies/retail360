@@ -37,7 +37,7 @@ function toChartData(groupedData = []) {
     }));
 }
 
-function SalesMonthlyTrendCharts({ groupedData, formatCurrency }) {
+function SalesMonthlyTrendCharts({ groupedData, formatCurrency, periodLabel }) {
   const chartData = toChartData(groupedData);
 
   if (chartData.length === 0) {
@@ -62,10 +62,16 @@ function SalesMonthlyTrendCharts({ groupedData, formatCurrency }) {
     <div className="sales-trend-charts">
       <h3>Monthly Sales Trend</h3>
       <p className="sales-trend-totals">
-        Total revenue: <strong>{formatValue(totalRevenue)}</strong>
+        Total for selected period{periodLabel ? ` (${periodLabel})` : ''}:{' '}
+        <strong>{formatValue(totalRevenue)}</strong>
         {' · '}
         Total quantity sold: <strong>{totalQuantity.toLocaleString()}</strong>
       </p>
+      {chartData.length > 1 && (
+        <p className="sales-trend-totals sales-trend-totals-hint">
+          Chart total sums every month in the range — compare a single month row to Business Report’s month row.
+        </p>
+      )}
       <div className="sales-trend-chart-grid">
         <div className="sales-trend-chart-card">
           <h4>Revenue &amp; Quantity Sold by Month</h4>

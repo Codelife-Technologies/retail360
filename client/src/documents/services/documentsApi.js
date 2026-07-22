@@ -21,6 +21,11 @@ export const documentsAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 300000,
     }),
+  uploadAi: (formData) =>
+    api.post('/documents/upload-ai', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000,
+    }),
   aiSave: (data) => api.post('/documents/ai-save', data),
   update: (id, data) => api.put(`/documents/${id}`, data),
   softDelete: (id) => api.delete(`/documents/${id}`),

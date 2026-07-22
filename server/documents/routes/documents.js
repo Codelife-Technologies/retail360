@@ -9,11 +9,16 @@ const {
   isDocumentsAdmin,
   isDocumentsManager,
 } = require('../utils/auth');
-const { MANUAL_DIR, ensureDocumentFolders } = require('../utils/storage');
+const { MANUAL_DIR, AI_DIR, ensureDocumentFolders } = require('../utils/storage');
 const documentService = require('../services/documentService');
+const DocumentFolder = require('../models/DocumentFolder');
 
 const router = express.Router();
 ensureDocumentFolders();
+
+// Drop obsolete unique index (pre-personal-folders) if present
+DocumentFolder.collection.dropIndex('name_1_parentId_1_sourceScope_1_status_1').catch(() => {});
+DocumentFolder.syncIndexes().catch(() => {});
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -26,10 +31,35 @@ const storage = multer.diskStorage({
   },
 });
 
+const aiStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    ensureDocumentFolders();
+    cb(null, AI_DIR);
+  },
+  filename: (_req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${safe}`);
+  },
+});
+
 function createUploadMiddleware() {
   return multer({
     storage,
     limits: { fileSize: 100 * 1024 * 1024 },
+  });
+}
+
+function createAiUploadMiddleware() {
+  return multer({
+    storage: aiStorage,
+    limits: { fileSize: 100 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (String(file.mimetype || '').startsWith('image/')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only image files are allowed'));
+      }
+    },
   });
 }
 
@@ -136,6 +166,7 @@ router.post(
   requireDocuments('documents.create', 'documents.upload', 'documents.update'),
   async (req, res) => {
     try {
+      const scope = await resolveScope(req);
       const folder = await documentService.createFolder({
         name: req.body?.name,
         description: req.body?.description,
@@ -143,7 +174,9 @@ router.post(
         department: req.body?.department,
         sortOrder: req.body?.sortOrder,
         sourceScope: req.body?.sourceScope || 'Manual Upload',
+        visibility: req.body?.visibility || 'Shared',
         user: req.user,
+        scope,
       });
       res.status(201).json(folder);
     } catch (error) {
@@ -271,6 +304,7 @@ router.post(
     try {
       const files = req.files || [];
       if (!files.length) return res.status(400).json({ error: 'No files uploaded' });
+      const scope = await resolveScope(req);
 
       const created = [];
       const errors = [];
@@ -286,6 +320,7 @@ router.post(
             sku: req.body.sku,
             productId: req.body.productId,
             folderId: req.body.folderId,
+            scope,
           });
           created.push(doc);
         } catch (err) {
@@ -306,6 +341,56 @@ router.post(
   }
 );
 
+// POST /documents/upload-ai — desktop images into AI Generated Images
+router.post(
+  '/upload-ai',
+  requireDocuments('documents.create', 'documents.upload', 'documents.ai.view'),
+  (req, res, next) => {
+    createAiUploadMiddleware().array('files', 20)(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      return next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const files = req.files || [];
+      if (!files.length) return res.status(400).json({ error: 'No image files uploaded' });
+      const scope = await resolveScope(req);
+
+      const created = [];
+      const errors = [];
+      for (const file of files) {
+        try {
+          const doc = await documentService.createAiDesktopUpload({
+            file,
+            user: req.user,
+            title: req.body.title,
+            description: req.body.description,
+            tags: req.body.tags,
+            sku: req.body.sku,
+            productId: req.body.productId,
+            folderId: req.body.folderId,
+            scope,
+          });
+          created.push(doc);
+        } catch (err) {
+          errors.push({ file: file.originalname, error: err.message });
+          try { fs.unlinkSync(file.path); } catch (_e) { /* ignore */ }
+        }
+      }
+
+      res.status(201).json({
+        success: true,
+        created,
+        errors,
+        message: `Added ${created.length} image(s)${errors.length ? `, ${errors.length} failed` : ''}`,
+      });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
 // POST /documents/ai-save
 router.post(
   '/ai-save',
@@ -314,6 +399,7 @@ router.post(
     try {
       const body = req.body || {};
       const images = Array.isArray(body.images) ? body.images : [body];
+      const scope = await resolveScope(req);
 
       const saved = [];
       const skipped = [];
@@ -334,6 +420,7 @@ router.post(
             tags: image.tags || body.tags,
             mimeType: image.mimeType,
             folderId: body.folderId || image.folderId,
+            scope,
           });
           if (result.duplicate) skipped.push(result.document);
           else saved.push(result.document);

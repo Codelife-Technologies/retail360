@@ -16,7 +16,24 @@ export function hasRole(user, roleCode) {
 }
 
 export function canViewMaster(hasPermission) {
-  return hasPermission('admin.all');
+  if (hasPermission('admin.all') || hasPermission('master.full')) {
+    return true;
+  }
+  // Any single Master page .view unlocks the Master folder (tabs still filtered)
+  const masterViewCodes = [
+    'products.view',
+    'stock.view',
+    'categories.view',
+    'subcategories.view',
+    'prices.view',
+    'suppliers.view',
+    'companyProfile.view',
+    'shipmentVendors.view',
+    'locations.view',
+    'salesChannels.view',
+    'salesLocations.view',
+  ];
+  return masterViewCodes.some((code) => hasPermission(code));
 }
 
 export function canEditStockProduct(hasPermission, user) {

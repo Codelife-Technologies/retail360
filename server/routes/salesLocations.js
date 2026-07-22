@@ -5,6 +5,7 @@ const SalesLocation = require('../models/SalesLocation');
 const { paginate } = require('../utils/pagination');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
+const { requirePermission } = require('../middleware/auth');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -45,7 +46,7 @@ function normalizeSalesLocationBody(body = {}) {
 }
 
 // GET all sales locations (with pagination)
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('salesLocations.view'), async (req, res) => {
   try {
     const { salesChannel, location, isActive, search, page, limit } = req.query;
     const query = {};
@@ -93,7 +94,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET sales locations by channel
-router.get('/channel/:channelId', async (req, res) => {
+router.get('/channel/:channelId', requirePermission('salesLocations.view'), async (req, res) => {
   try {
     const salesLocations = await SalesLocation.find({ salesChannels: req.params.channelId })
       .populate('salesChannels', CHANNEL_POPULATE)
@@ -106,7 +107,7 @@ router.get('/channel/:channelId', async (req, res) => {
 });
 
 // GET sales location import template
-router.get('/template', (req, res) => {
+router.get('/template', requirePermission('salesLocations.view'), (req, res) => {
   try {
     const sampleData = [
       {
@@ -133,7 +134,7 @@ router.get('/template', (req, res) => {
 });
 
 // POST import sales locations from Excel
-router.post('/import', upload.single('file'), async (req, res) => {
+router.post('/import', requirePermission('salesLocations.create'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -255,7 +256,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
 });
 
 // GET single sales location
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('salesLocations.view'), async (req, res) => {
   if (req.params.id === 'template' || req.params.id === 'import') {
     return res.status(404).json({ error: 'Route not found' });
   }
@@ -273,7 +274,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create sales location
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('salesLocations.create'), async (req, res) => {
   try {
     const data = normalizeSalesLocationBody(req.body);
     const salesLocation = new SalesLocation(data);
@@ -300,7 +301,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT update sales location
-router.put('/:id', async (req, res) => {
+router.put('/:id', requirePermission('salesLocations.update'), async (req, res) => {
   try {
     const data = normalizeSalesLocationBody(req.body);
     const salesLocation = await SalesLocation.findByIdAndUpdate(
@@ -332,7 +333,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE sales location (soft delete)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('salesLocations.delete'), async (req, res) => {
   try {
     const salesLocation = await SalesLocation.findByIdAndUpdate(
       req.params.id,

@@ -2,11 +2,12 @@ const express = require('express');
 const router = express.Router();
 const CompanyProfile = require('../models/CompanyProfile');
 const { getDefaultCompanyProfile } = require('../utils/defaultCompanyProfile');
+const { requirePermission } = require('../middleware/auth');
 
 const SINGLETON_KEY = 'master';
 
 /** GET company master — returns saved profile or sensible defaults. */
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('companyProfile.view'), async (req, res) => {
   try {
     let profile = await CompanyProfile.findOne({ singletonKey: SINGLETON_KEY }).lean();
     if (!profile) {
@@ -19,7 +20,7 @@ router.get('/', async (req, res) => {
 });
 
 /** PUT upsert company master (single record for the organisation). */
-router.put('/', async (req, res) => {
+router.put('/', requirePermission('companyProfile.update'), async (req, res) => {
   try {
     const payload = { ...req.body };
     delete payload._id;

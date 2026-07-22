@@ -35,6 +35,35 @@
   max-width: 100%;
 }
 
+.sales-period-match-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.sales-period-match-kpi {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.sales-period-match-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sales-period-match-kpi strong {
+  font-size: 1rem;
+  color: #111827;
+}
+
 .sales-sku-report .sales-business-report {
   height: auto;
   overflow: visible;
@@ -70,12 +99,16 @@
 
 .sales-sku-report-header-actions {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  align-items: flex-start;
+  gap: 0.65rem;
   flex-wrap: wrap;
   justify-content: flex-end;
   max-width: 100%;
   min-width: 0;
+}
+
+.sales-sku-report-header-actions .fx-selector {
+  margin-right: 0.15rem;
 }
 
 .sales-sku-report-header h2 {
@@ -240,6 +273,141 @@
 
 .btn-close-report:hover {
   background: #e5e7eb;
+}
+
+.sales-sku-period-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.sales-sku-period-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  background: #f1f5f9;
+  padding: 0.2rem;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  width: fit-content;
+  align-self: center;
+}
+
+.sales-sku-period-toggle button {
+  border: none;
+  background: transparent;
+  padding: 0.4rem 0.85rem;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sales-sku-period-toggle button:hover {
+  color: #1e293b;
+}
+
+.sales-sku-period-toggle button.active {
+  background: #fff;
+  color: #4f46e5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.sales-sku-period-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.sales-sku-period-custom label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.sales-sku-period-custom input[type='date'] {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.sales-sku-period-apply {
+  padding: 0.4rem 0.9rem !important;
+  font-size: 0.875rem !important;
+  height: fit-content;
+}
+
+.sales-sku-period-range-label {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+  align-self: center;
+}
+
+.sales-sku-period-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.sales-sku-period-filter-field select {
+  min-width: 10.5rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #1e293b;
+  background: #fff;
+}
+
+.sales-sku-period-filter-currency {
+  display: flex;
+  align-items: flex-end;
+}
+
+.sales-sku-period-filter-currency .fx-selector {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  gap: 0.65rem;
+  align-items: flex-end;
+}
+
+.sales-sku-period-filter-currency .fx-selector-field {
+  gap: 0.2rem;
+}
+
+.sales-sku-period-filter-currency .fx-selector-field span {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.sales-sku-period-filter-currency .fx-select {
+  min-width: 10.5rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.sales-sku-period-filter-currency .fx-rate-badge {
+  align-self: center;
+  margin-bottom: 0.15rem;
 }
 
 .sales-sku-view-toggle {

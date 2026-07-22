@@ -2,30 +2,78 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspens
 import { reportsAPI, salesAPI, salesChannelsAPI, productsAPI, pricesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
-  formatMoney,
-  formatSaleMoney,
   getCurrencyForSalesChannelId,
 } from '../utils/locationCurrency';
+import { useCurrency } from '../currency/CurrencyContext';
+import { CurrencySelector, DualKpiValue, OriginalAndConverted } from '../currency/CurrencyUI';
 import { getCatalogSku, getProductDisplayName, getProductThumbnail, PRODUCT_IMAGE_PLACEHOLDER } from '../utils/productDisplayUtils';
 import SalesMonthlyTrendCharts from './SalesMonthlyTrendCharts';
 import SaleDetailsModal from './SaleDetailsModal';
 import ProductDetailsModal from './ProductDetailsModal';
 import ExcelUpload from './ExcelUpload';
 import './SalesSkuReport.css';
+import '../currency/currency.css';
 
 const SalesBusinessReport = lazy(() => import('./SalesBusinessReport'));
 
-const defaultFilters = () => ({
-  startDate: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0],
-  endDate: new Date().toISOString().split('T')[0],
-  salesChannel: '',
-  paymentStatus: '',
-  orderStatus: '',
-  search: '',
-  view: 'business',
-  sortBy: 'salesDate',
-  sortDir: 'desc',
-});
+const ZOOM_OPTIONS = [
+  { id: '7D', label: '7D' },
+  { id: '1M', label: '1M' },
+  { id: '3M', label: '3M' },
+  { id: '6M', label: '6M' },
+  { id: '1Y', label: '1Y' },
+  { id: 'custom', label: 'Custom' },
+];
+
+function toDateInput(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** Rolling date ranges for Sales Report zoom chips (7D / 1M / …). */
+function getZoomDateRange(zoomId) {
+  const now = new Date();
+  const end = toDateInput(now);
+  const start = new Date(now);
+  switch (zoomId) {
+    case '7D':
+      start.setDate(now.getDate() - 6);
+      break;
+    case '1M':
+      start.setMonth(now.getMonth() - 1);
+      break;
+    case '3M':
+      start.setMonth(now.getMonth() - 3);
+      break;
+    case '6M':
+      start.setMonth(now.getMonth() - 6);
+      break;
+    case '1Y':
+      start.setFullYear(now.getFullYear() - 1);
+      break;
+    default:
+      return null;
+  }
+  return { startDate: toDateInput(start), endDate: end };
+}
+
+const defaultFilters = () => {
+  const range = getZoomDateRange('1M');
+  return {
+    period: '1M',
+    startDate: range.startDate,
+    endDate: range.endDate,
+    salesChannel: '',
+    paymentStatus: '',
+    orderStatus: '',
+    search: '',
+    view: 'business',
+    sortBy: 'salesDate',
+    sortDir: 'desc',
+  };
+};
 
 function resolveDateRange(start, end) {
   if (!start) return null;
@@ -74,16 +122,67 @@ const ORDER_SORT_OPTIONS = [
 ];
 
 function countActiveAppliedFilters(applied) {
-  const defaults = defaultFilters();
   let count = 0;
-  if (applied.salesChannel) count += 1;
   if (applied.paymentStatus) count += 1;
   if (applied.orderStatus) count += 1;
   if (applied.search?.trim()) count += 1;
-  if (applied.startDate !== defaults.startDate || applied.endDate !== defaults.endDate) {
-    count += 1;
-  }
   return count;
+}
+
+function getAppMonthKey(dateValue, timeZone = 'Asia/Kolkata') {
+  const d = new Date(dateValue);
+  if (Number.isNaN(d.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(d);
+  const map = {};
+  parts.forEach((p) => {
+    if (p.type !== 'literal') map[p.type] = p.value;
+  });
+  return `${map.year}-${map.month}`;
+}
+
+function saleAmountInrClient(sale, fromOriginal) {
+  const original =
+    sale?.originalAmount != null ? Number(sale.originalAmount) : Number(sale?.total) || 0;
+  const storedRate = Number(sale?.exchangeRateToInr);
+  const currency = String(
+    sale?.salesChannel?.defaultCurrency || sale?.currency || 'INR'
+  ).toUpperCase();
+  const storedCurrency = String(sale?.currency || '').toUpperCase();
+  // Match server saleAmountInr: only trust stored rate when currency agrees
+  if (Number.isFinite(storedRate) && storedRate > 0 && storedCurrency === currency) {
+    return original * storedRate;
+  }
+  return fromOriginal(original, currency, 'INR');
+}
+
+/** Build monthly trend from the same sales rows shown in By Sale (keeps totals aligned). */
+function buildMonthlyTrendFromSales(sales, fromOriginal) {
+  const map = {};
+  (sales || []).forEach((sale) => {
+    const key = getAppMonthKey(sale.salesDate);
+    if (!key) return;
+    if (!map[key]) {
+      map[key] = { group: key, count: 0, revenue: 0, revenueInr: 0, itemsSold: 0 };
+    }
+    const items = Array.isArray(sale.items) ? sale.items : [];
+    const lineCount = items.length > 0 ? items.length : 1;
+    const qty = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    map[key].count += lineCount;
+    map[key].revenue += Number(sale.total) || 0;
+    map[key].revenueInr += saleAmountInrClient(sale, fromOriginal);
+    map[key].itemsSold += qty;
+  });
+  return Object.values(map)
+    .map((row) => ({
+      ...row,
+      revenue: Math.round(row.revenue * 100) / 100,
+      revenueInr: Math.round(row.revenueInr * 100) / 100,
+    }))
+    .sort((a, b) => String(a.group).localeCompare(String(b.group)));
 }
 
 function truncateWords(text, maxWords = 5) {
@@ -145,7 +244,7 @@ function ProductSkuSummary({ product, compact = false, onClick, maxNameWords }) 
 
 function ProductExtremeCarousel({ label, products, variant, onOpenProduct, formatCurrency }) {
   const [index, setIndex] = useState(0);
-  const money = formatCurrency || ((amount) => formatMoney(amount, 'INR'));
+  const money = formatCurrency || ((amount) => String(amount ?? 0));
 
   useEffect(() => {
     setIndex(0);
@@ -210,7 +309,7 @@ function ProductExtremeCarousel({ label, products, variant, onOpenProduct, forma
         >
           <ProductSkuSummary product={product} compact />
           <span className="product-extreme-stats">
-            {product.totalQuantity} units · {money(product.totalRevenue)}
+            {product.totalQuantity} units · {money(product.totalRevenue, product)}
           </span>
         </div>
 
@@ -248,6 +347,14 @@ function ProductExtremeCarousel({ label, products, variant, onOpenProduct, forma
 function SalesSkuReport({ onClose }) {
   const { hasPermission } = useAuth();
   const isAdmin = hasPermission('admin.all');
+  const {
+    displayCurrency,
+    fromOriginal,
+    formatOverall,
+    formatDisplay,
+    formatCurrencyAmount,
+    convert,
+  } = useCurrency();
   const [filters, setFilters] = useState(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [showFilters, setShowFilters] = useState(false);
@@ -278,10 +385,105 @@ function SalesSkuReport({ onClose }) {
     () => getCurrencyForSalesChannelId(appliedFilters.salesChannel, salesChannels),
     [appliedFilters.salesChannel, salesChannels]
   );
-  const formatReportMoney = useCallback(
-    (amount) => formatMoney(amount, reportCurrency),
-    [reportCurrency]
+
+  /** Format an INR amount in the selected display currency (with secondary INR/USD). */
+  const formatInrMoney = useCallback(
+    (amountInInr) => {
+      const inr = Number(amountInInr) || 0;
+      if (displayCurrency === 'INR') return formatOverall(inr);
+      return `${formatDisplay(inr)} (${formatCurrencyAmount(inr, 'INR')})`;
+    },
+    [displayCurrency, formatOverall, formatDisplay, formatCurrencyAmount]
   );
+
+  /** Format a channel-local amount by converting through INR first. */
+  const formatReportMoney = useCallback(
+    (amount, amountInInr) => {
+      const inr =
+        amountInInr != null
+          ? Number(amountInInr) || 0
+          : fromOriginal(amount, reportCurrency, 'INR');
+      return formatInrMoney(inr);
+    },
+    [fromOriginal, reportCurrency, formatInrMoney]
+  );
+
+  const formatSaleLineMoney = useCallback(
+    (sale, amount) => {
+      const channelCur =
+        sale?.salesChannel?.defaultCurrency ||
+        sale?.currency ||
+        reportCurrency;
+      const original =
+        amount != null
+          ? amount
+          : sale?.originalAmount != null
+            ? sale.originalAmount
+            : sale?.total;
+      const storedRate = Number(sale?.exchangeRateToInr);
+      const inr =
+        Number.isFinite(storedRate) && storedRate > 0
+          ? (Number(original) || 0) * storedRate
+          : fromOriginal(original, channelCur, 'INR');
+      return (
+        <OriginalAndConverted
+          originalAmount={original}
+          originalCurrency={channelCur}
+          amountInInr={inr}
+        />
+      );
+    },
+    [fromOriginal, reportCurrency]
+  );
+
+  const trendChartData = useMemo(() => {
+    // By Sale: derive trend from the same rows as the table so totals cannot diverge
+    const source =
+      isOrdersView && orderRows.length > 0
+        ? buildMonthlyTrendFromSales(orderRows, fromOriginal)
+        : monthlyTrend || [];
+
+    return source.map((row) => {
+      const inr = row.revenueInr != null ? Number(row.revenueInr) : fromOriginal(row.revenue, reportCurrency, 'INR');
+      return {
+        ...row,
+        revenue: Math.round(convert(inr, displayCurrency) * 100) / 100,
+        revenueInr: Math.round(inr * 100) / 100,
+        itemsSold: row.itemsSold || 0,
+        count: row.count || 0,
+      };
+    });
+  }, [
+    isOrdersView,
+    orderRows,
+    monthlyTrend,
+    convert,
+    displayCurrency,
+    fromOriginal,
+    reportCurrency,
+  ]);
+
+  const periodStats = useMemo(() => {
+    if (!isOrdersView || orderRows.length === 0) return null;
+    let unitsOrdered = 0;
+    let totalOrderItems = 0;
+    let orderedProductSales = 0;
+    let orderedProductSalesInr = 0;
+    orderRows.forEach((sale) => {
+      orderedProductSales += Number(sale.total) || 0;
+      orderedProductSalesInr += saleAmountInrClient(sale, fromOriginal);
+      const items = Array.isArray(sale.items) ? sale.items : [];
+      totalOrderItems += items.length > 0 ? items.length : 1;
+      unitsOrdered += items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    });
+    return {
+      orderedProductSales: Math.round(orderedProductSales * 100) / 100,
+      orderedProductSalesInr: Math.round(orderedProductSalesInr * 100) / 100,
+      unitsOrdered,
+      totalOrderItems,
+      orderCount: orderRows.length,
+    };
+  }, [isOrdersView, orderRows, fromOriginal]);
 
   useEffect(() => {
     salesChannelsAPI.getAll({ isActive: 'true' }).then((res) => {
@@ -336,9 +538,9 @@ function SalesSkuReport({ onClose }) {
         };
         const skuParams = { ...orderTrendParams, sortBy: 'quantity', sortDir: 'desc' };
 
-        const [ordersRes, trendRes, skuRes] = await Promise.all([
+        // Trend is built client-side from these same order rows (avoids summary/API mismatch)
+        const [ordersRes, skuRes] = await Promise.all([
           reportsAPI.getSalesDetailed(orderParams),
-          reportsAPI.getSalesSummary({ ...orderTrendParams, groupBy: 'month' }),
           reportsAPI.getSalesBySku(skuParams),
         ]);
         const orders = Array.isArray(ordersRes.data) ? ordersRes.data : ordersRes.data?.data || [];
@@ -346,7 +548,7 @@ function SalesSkuReport({ onClose }) {
 
         setOrderRows(orders);
         setSkuRows([]);
-        setMonthlyTrend(trendRes.data?.groupedData || []);
+        setMonthlyTrend([]);
         const lineItemCount = orders.reduce((sum, sale) => {
           const n = Array.isArray(sale.items) ? sale.items.length : 0;
           return sum + (n > 0 ? n : 1);
@@ -397,7 +599,29 @@ function SalesSkuReport({ onClose }) {
     setFilters((prev) => ({
       ...prev,
       [name]: value,
+      ...((name === 'startDate' || name === 'endDate') ? { period: 'custom' } : {}),
     }));
+  };
+
+  const handlePeriodChange = (periodId) => {
+    if (periodId === 'custom') {
+      const next = { ...filters, period: 'custom' };
+      setFilters(next);
+      if (next.startDate && next.endDate && next.startDate <= next.endDate) {
+        setAppliedFilters(next);
+      }
+      return;
+    }
+    const range = getZoomDateRange(periodId);
+    if (!range) return;
+    const next = {
+      ...filters,
+      period: periodId,
+      startDate: range.startDate,
+      endDate: range.endDate,
+    };
+    setFilters(next);
+    setAppliedFilters(next);
   };
 
   const handleApplyFilters = () => {
@@ -409,7 +633,7 @@ function SalesSkuReport({ onClose }) {
       alert('Select a start date for the sales report.');
       return;
     }
-    setAppliedFilters({ ...filters });
+    setAppliedFilters({ ...filters, period: filters.period || 'custom' });
   };
 
   const handleViewChange = (view) => {
@@ -707,7 +931,7 @@ function SalesSkuReport({ onClose }) {
                     <td className="sales-by-sale-col-channel">{row.sale.salesChannel?.name || '—'}</td>
                     <td className="num sales-by-sale-col-num">{row.qty}</td>
                     <td className="num sales-by-sale-col-money">
-                      {formatSaleMoney(row.sale, row.lineTotal, reportCurrency)}
+                      {formatSaleLineMoney(row.sale, row.lineTotal)}
                     </td>
                   </tr>
                 ))}
@@ -731,6 +955,7 @@ function SalesSkuReport({ onClose }) {
               : isSkuView
               ? 'SKU performance for the selected date range'
               : 'Sales line items for the selected date range — Amazon Order ID repeats when an order has multiple products'}
+            {' · '}Amounts follow display currency ({displayCurrency}).
           </p>
         </div>
         <div className="sales-sku-report-header-actions">
@@ -802,6 +1027,78 @@ function SalesSkuReport({ onClose }) {
       </div>
 
       <div className="sales-sku-report-body">
+      <div className="sales-sku-period-bar">
+        <div className="sales-sku-period-toggle" role="group" aria-label="Report period">
+          {ZOOM_OPTIONS.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              className={(appliedFilters.period || 'custom') === opt.id ? 'active' : ''}
+              onClick={() => handlePeriodChange(opt.id)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <label className="sales-sku-period-filter-field">
+          <span>Channel</span>
+          <select
+            value={filters.salesChannel}
+            onChange={(e) => {
+              const salesChannel = e.target.value;
+              const next = { ...filters, salesChannel };
+              setFilters(next);
+              setAppliedFilters((prev) => ({ ...prev, salesChannel }));
+            }}
+          >
+            <option value="">All channels</option>
+            {salesChannels.map((channel) => (
+              <option key={channel._id} value={channel._id}>
+                {channel.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="sales-sku-period-filter-currency">
+          <CurrencySelector />
+        </div>
+        {(filters.period === 'custom' || appliedFilters.period === 'custom') && (
+          <div className="sales-sku-period-custom">
+            <label>
+              <span>From</span>
+              <input
+                type="date"
+                name="startDate"
+                value={filters.startDate}
+                max={filters.endDate || undefined}
+                onChange={handleFilterChange}
+              />
+            </label>
+            <label>
+              <span>To</span>
+              <input
+                type="date"
+                name="endDate"
+                value={filters.endDate}
+                min={filters.startDate || undefined}
+                onChange={handleFilterChange}
+              />
+            </label>
+            <button type="button" className="btn-primary sales-sku-period-apply" onClick={handleApplyFilters}>
+              Apply
+            </button>
+          </div>
+        )}
+        {appliedFilters.period !== 'custom' && appliedDateRange && (
+          <p className="sales-sku-period-range-label">
+            {formatDateLabel(appliedDateRange.startDate)}
+            {appliedDateRange.startDate !== appliedDateRange.endDate
+              ? ` → ${formatDateLabel(appliedDateRange.endDate)}`
+              : ''}
+          </p>
+        )}
+      </div>
+
       <div className="sales-sku-view-toggle">
         <button
           type="button"
@@ -830,6 +1127,9 @@ function SalesSkuReport({ onClose }) {
         <Suspense fallback={<div className="sales-sku-loading">Loading business report…</div>}>
           <SalesBusinessReport
             ref={businessReportRef}
+            sharedStartDate={appliedFilters.startDate}
+            sharedEndDate={appliedFilters.endDate}
+            sharedSalesChannel={appliedFilters.salesChannel}
             onViewSkuPerformance={() => handleViewChange('sku')}
           />
         </Suspense>
@@ -839,25 +1139,6 @@ function SalesSkuReport({ onClose }) {
       <div className="sales-sku-filters">
         <h3 className="sales-sku-filters-title">Filters</h3>
         <div className="sales-sku-filters-grid">
-        <div className="filter-group">
-          <label>Start Date</label>
-          <input type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} />
-        </div>
-        <div className="filter-group">
-          <label>End Date</label>
-          <input type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} />
-        </div>
-        <div className="filter-group">
-          <label>Channel</label>
-          <select name="salesChannel" value={filters.salesChannel} onChange={handleFilterChange}>
-            <option value="">All Channels</option>
-            {salesChannels.map((channel) => (
-              <option key={channel._id} value={channel._id}>
-                {channel.name}
-              </option>
-            ))}
-          </select>
-        </div>
         <div className="filter-group">
           <label>Payment Status</label>
           <select name="paymentStatus" value={filters.paymentStatus} onChange={handleFilterChange}>
@@ -939,7 +1220,36 @@ function SalesSkuReport({ onClose }) {
         </p>
       )}
 
+      {(isOrdersView || isSkuView) && (appliedFilters.paymentStatus || appliedFilters.orderStatus) && (
+        <p className="sales-sku-sort-hint">
+          Payment/Order status filters apply only here — clear them to match Business Report totals for the same dates.
+        </p>
+      )}
+
       <div className="sales-report-overview sales-report-aligned">
+        {isOrdersView && periodStats && (
+          <div className="sales-period-match-kpis">
+            <div className="sales-period-match-kpi">
+              <span className="sales-period-match-label">Ordered Product Sales</span>
+              <strong>
+                <DualKpiValue amountInInr={periodStats.orderedProductSalesInr} loading={false} />
+              </strong>
+            </div>
+            <div className="sales-period-match-kpi">
+              <span className="sales-period-match-label">Units Ordered</span>
+              <strong>{periodStats.unitsOrdered.toLocaleString()}</strong>
+            </div>
+            <div className="sales-period-match-kpi">
+              <span className="sales-period-match-label">Total Order Items</span>
+              <strong>{periodStats.totalOrderItems.toLocaleString()}</strong>
+            </div>
+            <div className="sales-period-match-kpi">
+              <span className="sales-period-match-label">Unique Orders</span>
+              <strong>{periodStats.orderCount.toLocaleString()}</strong>
+            </div>
+          </div>
+        )}
+
         {summary && (summary.topSellingProducts?.length > 0 || summary.leastSellingProducts?.length > 0) && (
           <div className="sales-product-extremes">
             <ProductExtremeCarousel
@@ -947,19 +1257,32 @@ function SalesSkuReport({ onClose }) {
               products={summary.topSellingProducts}
               variant="top"
               onOpenProduct={handleOpenProductDetail}
-              formatCurrency={formatReportMoney}
+              formatCurrency={(amount, product) =>
+                formatReportMoney(amount, product?.totalRevenueInr)
+              }
             />
             <ProductExtremeCarousel
               label="Least Selling Product"
               products={summary.leastSellingProducts}
               variant="least"
               onOpenProduct={handleOpenProductDetail}
-              formatCurrency={formatReportMoney}
+              formatCurrency={(amount, product) =>
+                formatReportMoney(amount, product?.totalRevenueInr)
+              }
             />
           </div>
         )}
 
-        <SalesMonthlyTrendCharts groupedData={monthlyTrend} formatCurrency={formatReportMoney} />
+        <SalesMonthlyTrendCharts
+          groupedData={trendChartData}
+          formatCurrency={(amount) => formatCurrencyAmount(amount, displayCurrency)}
+          displayCurrency={displayCurrency}
+          periodLabel={
+            appliedFilters.startDate && appliedFilters.endDate
+              ? `${appliedFilters.startDate} → ${appliedFilters.endDate}`
+              : null
+          }
+        />
       </div>
 
       {isSkuView && loading ? (
@@ -1007,8 +1330,12 @@ function SalesSkuReport({ onClose }) {
                       <td className="sku-col-subcategory">{row.subCategory}</td>
                       <td className="sku-col-hsn">{row.hsnCode}</td>
                       <td className="num sku-col-qty">{row.totalQuantity}</td>
-                      <td className="num sku-col-price">{formatReportMoney(row.averageUnitPrice)}</td>
-                      <td className="num sku-col-revenue">{formatReportMoney(row.totalRevenue)}</td>
+                      <td className="num sku-col-price">
+                        <DualKpiValue amountInInr={row.averageUnitPriceInr ?? fromOriginal(row.averageUnitPrice, reportCurrency, 'INR')} loading={false} />
+                      </td>
+                      <td className="num sku-col-revenue">
+                        <DualKpiValue amountInInr={row.totalRevenueInr ?? fromOriginal(row.totalRevenue, reportCurrency, 'INR')} loading={false} />
+                      </td>
                       <td className="num sku-col-orders">{row.orderCount}</td>
                     </tr>
                   ))}

@@ -1,21 +1,15 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { reportsAPI, salesChannelsAPI } from '../services/api';
 import { formatMoney, getCurrencyForSalesChannelId } from '../utils/locationCurrency';
+import { useCurrency } from '../currency/CurrencyContext';
+import { DualKpiValue } from '../currency/CurrencyUI';
 import './SalesBusinessReport.css';
+import '../currency/currency.css';
 
 const GROUP_BY_OPTIONS = [
   { id: 'day', label: 'By Day' },
   { id: 'week', label: 'By Week' },
   { id: 'month', label: 'By Month' },
-];
-
-const ZOOM_OPTIONS = [
-  { id: '7D', label: '7D', days: 6 },
-  { id: '1M', label: '1M', months: 1 },
-  { id: '3M', label: '3M', months: 3 },
-  { id: '6M', label: '6M', months: 6 },
-  { id: '1Y', label: '1Y', years: 1 },
-  { id: '2Y', label: '2Y', years: 2 },
 ];
 
 const REPORT_COLUMNS = [
@@ -28,6 +22,12 @@ const REPORT_COLUMNS = [
   { key: 'avgSellingPrice', label: 'Average Selling Price', type: 'currency' },
 ];
 
+const CURRENCY_INR_KEYS = {
+  orderedProductSales: 'orderedProductSalesInr',
+  avgSalesPerOrderItem: 'avgSalesPerOrderItemInr',
+  avgSellingPrice: 'avgSellingPriceInr',
+};
+
 function toDateInput(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -35,39 +35,20 @@ function toDateInput(date) {
   return `${y}-${m}-${d}`;
 }
 
-function getZoomDateRange(zoomId) {
-  const option = ZOOM_OPTIONS.find((opt) => opt.id === zoomId);
-  if (!option) return null;
-
-  const end = new Date();
-  const start = new Date(end);
-
-  if (option.days != null) {
-    start.setDate(end.getDate() - option.days);
-  } else if (option.months != null) {
-    start.setMonth(end.getMonth() - option.months);
-  } else if (option.years != null) {
-    start.setFullYear(end.getFullYear() - option.years);
-  }
-
-  return { start: toDateInput(start), end: toDateInput(end) };
-}
-
-function defaultReportFilters() {
-  const range = getZoomDateRange('7D');
+function defaultReportFilters(shared = {}) {
+  const today = toDateInput(new Date());
+  const monthStart = toDateInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   return {
-    groupBy: 'day',
-    zoom: '7D',
-    customStart: range.start,
-    customEnd: range.end,
-    salesChannel: '',
+    groupBy: 'month',
+    customStart: shared.startDate || monthStart,
+    customEnd: shared.endDate || today,
+    salesChannel: shared.salesChannel || '',
     dashboardView: 'default',
   };
 }
 
 function buildReportParams(applied) {
   return {
-    period: 'custom',
     startDate: applied.customStart,
     endDate: applied.customEnd,
     salesChannel: applied.salesChannel || undefined,
@@ -82,9 +63,14 @@ function formatDisplayDate(isoDate) {
   return date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
 }
 
-function formatCellValue(value, type, currency = 'INR') {
+function formatCellValue(value, type, currency = 'INR', amountInInr) {
   if (value == null || value === '') return '—';
-  if (type === 'currency') return formatMoney(value, currency);
+  if (type === 'currency') {
+    if (amountInInr != null) {
+      return <DualKpiValue amountInInr={amountInInr} loading={false} />;
+    }
+    return formatMoney(value, currency);
+  }
   if (type === 'percent') return `${Number(value).toFixed(2)}%`;
   if (type === 'number') return Number(value).toLocaleString();
   return value;
@@ -130,11 +116,24 @@ function downloadBusinessReportCsv(rows) {
   URL.revokeObjectURL(url);
 }
 
-const SalesBusinessReport = forwardRef(function SalesBusinessReport({ onViewSkuPerformance }, ref) {
-  const [filters, setFilters] = useState(defaultReportFilters);
-  const [appliedFilters, setAppliedFilters] = useState(defaultReportFilters);
+const SalesBusinessReport = forwardRef(function SalesBusinessReport({
+  onViewSkuPerformance,
+  sharedStartDate,
+  sharedEndDate,
+  sharedSalesChannel,
+}, ref) {
+  const { fromOriginal } = useCurrency();
+  const [appliedFilters, setAppliedFilters] = useState(() =>
+    defaultReportFilters({
+      startDate: sharedStartDate,
+      endDate: sharedEndDate,
+      salesChannel: sharedSalesChannel,
+    })
+  );
   const [channels, setChannels] = useState([]);
   const [reportRows, setReportRows] = useState([]);
+  const [periodTotals, setPeriodTotals] = useState(null);
+  const [orderCount, setOrderCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedRows, setSelectedRows] = useState({});
   const [sortKey, setSortKey] = useState('date');
@@ -146,9 +145,41 @@ const SalesBusinessReport = forwardRef(function SalesBusinessReport({ onViewSkuP
     }).catch(() => setChannels([]));
   }, []);
 
+  // Keep in sync when parent period bar changes shared date or channel
+  useEffect(() => {
+    if (!sharedStartDate || !sharedEndDate) return;
+    setAppliedFilters((prev) => {
+      if (
+        prev.customStart === sharedStartDate &&
+        prev.customEnd === sharedEndDate &&
+        prev.salesChannel === (sharedSalesChannel || '')
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        customStart: sharedStartDate,
+        customEnd: sharedEndDate,
+        salesChannel: sharedSalesChannel || '',
+      };
+    });
+  }, [sharedStartDate, sharedEndDate, sharedSalesChannel]);
+
   const reportCurrency = useMemo(
     () => getCurrencyForSalesChannelId(appliedFilters.salesChannel, channels),
     [appliedFilters.salesChannel, channels]
+  );
+
+  const resolveCellInr = useCallback(
+    (row, col) => {
+      const inrKey = CURRENCY_INR_KEYS[col.key];
+      if (inrKey && row[inrKey] != null) return row[inrKey];
+      if (col.type === 'currency') {
+        return fromOriginal(row[col.key], reportCurrency, 'INR');
+      }
+      return null;
+    },
+    [fromOriginal, reportCurrency]
   );
 
   const loadReport = useCallback(async () => {
@@ -156,12 +187,16 @@ const SalesBusinessReport = forwardRef(function SalesBusinessReport({ onViewSkuP
 
     try {
       setLoading(true);
-      const response = await reportsAPI.getSalesDashboard(buildReportParams(appliedFilters));
-      setReportRows(response.data?.businessReport || []);
+      const response = await reportsAPI.getSalesBusinessReport(buildReportParams(appliedFilters));
+      setReportRows(response.data?.rows || []);
+      setPeriodTotals(response.data?.periodTotals || null);
+      setOrderCount(response.data?.orderCount || 0);
       setSelectedRows({});
     } catch (error) {
       console.error('Error fetching sales business report:', error);
       setReportRows([]);
+      setPeriodTotals(null);
+      setOrderCount(0);
     } finally {
       setLoading(false);
     }
@@ -171,36 +206,8 @@ const SalesBusinessReport = forwardRef(function SalesBusinessReport({ onViewSkuP
     loadReport();
   }, [loadReport]);
 
-  const applyFilters = useCallback((next) => {
-    setAppliedFilters(next);
-    setFilters(next);
-  }, []);
-
   const handleGroupByChange = (groupBy) => {
-    applyFilters({ ...appliedFilters, groupBy });
-  };
-
-  const handleZoomChange = (zoom) => {
-    const range = getZoomDateRange(zoom);
-    if (!range) return;
-    applyFilters({
-      ...appliedFilters,
-      zoom,
-      customStart: range.start,
-      customEnd: range.end,
-    });
-  };
-
-  const handleDateChange = (field, value) => {
-    const next = {
-      ...filters,
-      [field]: value,
-      zoom: 'custom',
-    };
-    setFilters(next);
-    if (next.customStart && next.customEnd) {
-      applyFilters(next);
-    }
+    setAppliedFilters((prev) => ({ ...prev, groupBy }));
   };
 
   const handleSort = (key) => {
@@ -249,7 +256,7 @@ const SalesBusinessReport = forwardRef(function SalesBusinessReport({ onViewSkuP
   return (
     <div className="sales-business-report">
       <section className="sales-br-controls">
-        <div className="sales-br-controls-row">
+        <div className="sales-br-controls-row sales-br-controls-main">
           <div className="sales-br-group-toggle">
             {GROUP_BY_OPTIONS.map((opt) => (
               <button
@@ -261,76 +268,6 @@ const SalesBusinessReport = forwardRef(function SalesBusinessReport({ onViewSkuP
                 {opt.label}
               </button>
             ))}
-          </div>
-
-          <div className="sales-br-zoom-toggle">
-            {ZOOM_OPTIONS.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                className={appliedFilters.zoom === opt.id ? 'active' : ''}
-                onClick={() => handleZoomChange(opt.id)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="sales-br-controls-row sales-br-filters-row">
-          <div className="sales-br-filter-block">
-            <span className="sales-br-filter-label">Date</span>
-            <select className="sales-br-select" value="custom" disabled aria-label="Date preset">
-              <option value="custom">Custom</option>
-            </select>
-            <div className="sales-br-date-range">
-              <input
-                type="date"
-                value={filters.customStart}
-                onChange={(e) => handleDateChange('customStart', e.target.value)}
-                aria-label="Start date"
-              />
-              <span className="sales-br-date-sep">to</span>
-              <input
-                type="date"
-                value={filters.customEnd}
-                onChange={(e) => handleDateChange('customEnd', e.target.value)}
-                aria-label="End date"
-              />
-            </div>
-          </div>
-
-          <div className="sales-br-filter-block">
-            <span className="sales-br-filter-label">Dashboard Views</span>
-            <select
-              className="sales-br-select"
-              value={filters.dashboardView}
-              onChange={(e) => {
-                const next = { ...filters, dashboardView: e.target.value };
-                setFilters(next);
-                applyFilters(next);
-              }}
-            >
-              <option value="default">Default</option>
-            </select>
-          </div>
-
-          <div className="sales-br-filter-block">
-            <span className="sales-br-filter-label">Channel</span>
-            <select
-              className="sales-br-select"
-              value={filters.salesChannel}
-              onChange={(e) => {
-                const next = { ...filters, salesChannel: e.target.value };
-                setFilters(next);
-                applyFilters(next);
-              }}
-            >
-              <option value="">All channels</option>
-              {channels.map((ch) => (
-                <option key={ch._id} value={ch._id}>{ch.name}</option>
-              ))}
-            </select>
           </div>
 
           {showDataNotice && (
@@ -349,6 +286,34 @@ const SalesBusinessReport = forwardRef(function SalesBusinessReport({ onViewSkuP
           </button>
         )}
       </section>
+
+      {!loading && periodTotals && (
+        <div className="sales-period-match-kpis">
+          <div className="sales-period-match-kpi">
+            <span className="sales-period-match-label">Ordered Product Sales</span>
+            <strong>
+              <DualKpiValue amountInInr={periodTotals.orderedProductSalesInr} loading={false} />
+            </strong>
+          </div>
+          <div className="sales-period-match-kpi">
+            <span className="sales-period-match-label">Units Ordered</span>
+            <strong>{Number(periodTotals.unitsOrdered || 0).toLocaleString()}</strong>
+          </div>
+          <div className="sales-period-match-kpi">
+            <span className="sales-period-match-label">Total Order Items</span>
+            <strong>{Number(periodTotals.totalOrderItems || 0).toLocaleString()}</strong>
+          </div>
+          <div className="sales-period-match-kpi">
+            <span className="sales-period-match-label">Unique Orders</span>
+            <strong>{Number(orderCount || 0).toLocaleString()}</strong>
+          </div>
+        </div>
+      )}
+
+      <p className="sales-br-compare-hint">
+        Period totals above match By Sale for the same dates/channel. Table rows are that period split by{' '}
+        {appliedFilters.groupBy === 'month' ? 'month' : appliedFilters.groupBy === 'week' ? 'week' : 'day'}.
+      </p>
 
       <section className="sales-br-table-section">
         {loading ? (
@@ -407,7 +372,12 @@ const SalesBusinessReport = forwardRef(function SalesBusinessReport({ onViewSkuP
                           col.type === 'currency' || col.type === 'number' || col.type === 'percent' ? 'num' : '',
                         ].filter(Boolean).join(' ')}
                       >
-                        {formatCellValue(row[col.key], col.type, reportCurrency)}
+                        {formatCellValue(
+                          row[col.key],
+                          col.type,
+                          reportCurrency,
+                          resolveCellInr(row, col)
+                        )}
                       </td>
                     ))}
                   </tr>

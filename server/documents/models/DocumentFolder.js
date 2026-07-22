@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const FOLDER_SCOPES = ['AI Generator', 'Manual Upload'];
+const FOLDER_VISIBILITIES = ['Shared', 'Personal'];
 
 const folderSchema = new mongoose.Schema(
   {
@@ -22,6 +23,15 @@ const folderSchema = new mongoose.Schema(
       enum: FOLDER_SCOPES,
       required: true,
       default: 'Manual Upload',
+    },
+    /**
+     * Shared = visible to everyone with document access.
+     * Personal = visible only to the owning employee and documents admins.
+     */
+    visibility: {
+      type: String,
+      enum: FOLDER_VISIBILITIES,
+      default: 'Shared',
     },
     /** null = top-level folder */
     parentId: {
@@ -52,15 +62,30 @@ const folderSchema = new mongoose.Schema(
 );
 
 folderSchema.index({ status: 1, sourceScope: 1, parentId: 1, sortOrder: 1, name: 1 });
-folderSchema.index({ createdByUserId: 1, status: 1 });
+folderSchema.index({ createdByUserId: 1, status: 1, visibility: 1 });
+
+// Shared folder names are unique within a parent + source
 folderSchema.index(
   { name: 1, parentId: 1, sourceScope: 1, status: 1 },
   {
     unique: true,
-    partialFilterExpression: { status: 'Active' },
+    name: 'unique_shared_folder_name',
+    partialFilterExpression: { status: 'Active', visibility: 'Shared' },
+    collation: { locale: 'en', strength: 2 },
+  }
+);
+
+// Personal folder names are unique per owner within a parent + source
+folderSchema.index(
+  { name: 1, parentId: 1, sourceScope: 1, createdByUserId: 1, status: 1 },
+  {
+    unique: true,
+    name: 'unique_personal_folder_name',
+    partialFilterExpression: { status: 'Active', visibility: 'Personal' },
     collation: { locale: 'en', strength: 2 },
   }
 );
 
 module.exports = mongoose.model('DocumentFolder', folderSchema);
 module.exports.FOLDER_SCOPES = FOLDER_SCOPES;
+module.exports.FOLDER_VISIBILITIES = FOLDER_VISIBILITIES;

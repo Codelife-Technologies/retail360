@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { usersAPI, rolesAPI, groupsAPI } from '../services/api';
+import { createPortal } from 'react-dom';
+import { usersAPI, rolesAPI, groupsAPI, permissionsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
   getShortRoleLabel,
@@ -7,6 +8,7 @@ import {
   getRoleTitle,
   getGroupTitle,
 } from '../utils/roleLabels';
+import { ACCESS_PACKS, permissionIdsForCodes } from '../userManagement/accessPacks';
 import './UserManagement.css';
 
 const PAGE_SIZE = 10;
@@ -20,6 +22,10 @@ const ROLE_BADGE_TONES = {
   employee: 'amber',
   manager: 'amber',
   auditor: 'green',
+  docs_employee: 'teal',
+  ai_images_user: 'amber',
+  ai_images_creator: 'navy',
+  docs_admin: 'green',
 };
 
 function getRoleBadgeTone(role) {
@@ -38,17 +44,19 @@ function getInitials(name = '') {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
-function Users() {
+function Users({ onOpenRoles } = {}) {
   const { hasPermission } = useAuth();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [allPermissions, setAllPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [page, setPage] = useState(1);
+  const [packBusy, setPackBusy] = useState('');
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -83,11 +91,12 @@ function Users() {
   useEffect(() => {
     if (!showModal) return undefined;
     let cancelled = false;
-    Promise.all([rolesAPI.getAll(), groupsAPI.getAll()])
-      .then(([rolesRes, groupsRes]) => {
+    Promise.all([rolesAPI.getAll(), groupsAPI.getAll(), permissionsAPI.getAll()])
+      .then(([rolesRes, groupsRes, permsRes]) => {
         if (cancelled) return;
         setRoles(Array.isArray(rolesRes.data) ? rolesRes.data : rolesRes.data?.data || []);
         setGroups(Array.isArray(groupsRes.data) ? groupsRes.data : groupsRes.data?.data || []);
+        setAllPermissions(Array.isArray(permsRes.data) ? permsRes.data : permsRes.data?.data || []);
       })
       .catch((error) => console.error('Failed to load roles/groups:', error));
     return () => {
@@ -105,6 +114,11 @@ function Users() {
   const allPageSelected =
     pageUsers.length > 0 && pageUsers.every((u) => selectedIds.includes(u._id));
 
+  const selectedRolesPreview = useMemo(() => {
+    const selected = new Set((formData.roles || []).map(String));
+    return roles.filter((r) => selected.has(String(r._id)));
+  }, [roles, formData.roles]);
+
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData((prev) => ({
@@ -116,7 +130,10 @@ function Users() {
   const handleRoleToggle = (roleId) => {
     setFormData((prev) => {
       const arr = prev.roles || [];
-      const next = arr.includes(roleId) ? arr.filter((id) => id !== roleId) : [...arr, roleId];
+      const id = String(roleId);
+      const next = arr.map(String).includes(id)
+        ? arr.filter((x) => String(x) !== id)
+        : [...arr, roleId];
       return { ...prev, roles: next };
     });
   };
@@ -124,9 +141,54 @@ function Users() {
   const handleGroupToggle = (groupId) => {
     setFormData((prev) => {
       const arr = prev.groups || [];
-      const next = arr.includes(groupId) ? arr.filter((id) => id !== groupId) : [...arr, groupId];
+      const id = String(groupId);
+      const next = arr.map(String).includes(id)
+        ? arr.filter((x) => String(x) !== id)
+        : [...arr, groupId];
       return { ...prev, groups: next };
     });
+  };
+
+  const ensurePackRole = async (pack) => {
+    let role = roles.find((r) => String(r.code).toLowerCase() === String(pack.roleCode).toLowerCase());
+    if (role) return role;
+
+    if (!hasPermission('roles.create') && !hasPermission('admin.all')) {
+      throw new Error(
+        `Role "${pack.roleName}" is not set up yet. Open Roles & Permissions (as admin) once to seed it, or create it manually.`
+      );
+    }
+
+    const permissionIds = permissionIdsForCodes(allPermissions, pack.permissionCodes);
+    if (!permissionIds.length) {
+      throw new Error('Permission catalog is incomplete. Restart the server to seed permissions.');
+    }
+
+    const created = await rolesAPI.create({
+      name: pack.roleName,
+      code: pack.roleCode,
+      description: pack.description,
+      permissions: permissionIds,
+    });
+    role = created.data;
+    setRoles((prev) => [...prev, role]);
+    return role;
+  };
+
+  const applyAccessPack = async (pack) => {
+    try {
+      setPackBusy(pack.id);
+      const role = await ensurePackRole(pack);
+      setFormData((prev) => {
+        const ids = (prev.roles || []).map(String);
+        if (ids.includes(String(role._id))) return prev;
+        return { ...prev, roles: [...(prev.roles || []), role._id] };
+      });
+    } catch (error) {
+      alert(error.response?.data?.error || error.message || 'Failed to apply access pack');
+    } finally {
+      setPackBusy('');
+    }
   };
 
   const resetForm = () => {
@@ -235,7 +297,7 @@ function Users() {
     ];
 
     if (badges.length === 0) {
-      return <span className="um-users-empty-role">No roles</span>;
+      return <span className="um-users-empty-role">No access</span>;
     }
 
     return (
@@ -268,9 +330,20 @@ function Users() {
       <div className="um-users-card">
         <div className="um-users-card-top">
           <div className="um-users-heading">
-            <h1>User Management</h1>
+            <h1>Users &amp; Access</h1>
             <p className="um-users-breadcrumb">
-              Home <span>›</span> Permissions &amp; Accounts <span>›</span> User Management
+              Home <span>›</span> User Management <span>›</span> Users
+            </p>
+            <p className="um-mgmt-hint">
+              Assign access with roles. Use <strong>Manage access</strong> for quick packs (Employee Documents, AI Images, etc.).
+              {typeof onOpenRoles === 'function' ? (
+                <>
+                  {' '}
+                  <button type="button" className="um-inline-link" onClick={onOpenRoles}>
+                    Customize role permissions →
+                  </button>
+                </>
+              ) : null}
             </p>
           </div>
           <div className="um-users-toolbar">
@@ -315,7 +388,7 @@ function Users() {
                   Name
                 </div>
                 <div className="um-users-cell roles" role="columnheader">
-                  User Role
+                  Access
                 </div>
                 <div className="um-users-cell actions" role="columnheader">
                   Actions
@@ -370,7 +443,7 @@ function Users() {
                             onClick={() => handleEdit(u)}
                           >
                             <span aria-hidden="true">⚙</span>
-                            Modify Roles
+                            Manage access
                           </button>
                         )}
                         {hasPermission('users.delete') && (
@@ -439,10 +512,10 @@ function Users() {
         )}
       </div>
 
-      {showModal && (
+      {showModal && createPortal(
         <div className="modal-overlay um-users-modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal-content um-users-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>{editingUser ? 'Modify User Roles' : 'Add User'}</h2>
+          <div className="modal-content um-users-modal um-users-modal-wide" onClick={(e) => e.stopPropagation()}>
+            <h2>{editingUser ? 'Manage user access' : 'Add User'}</h2>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Username *</label>
@@ -482,30 +555,76 @@ function Users() {
                   placeholder={editingUser ? 'Leave blank to keep' : 'Required for new user'}
                 />
               </div>
+
               <div className="form-group">
-                <label>Roles</label>
-                <div className="multiselect-box um-multiselect-roles">
-                  {roles.map((r) => (
-                    <label key={r._id}>
-                      <input
-                        type="checkbox"
-                        checked={(formData.roles || []).includes(r._id)}
-                        onChange={() => handleRoleToggle(r._id)}
-                      />
-                      {getShortRoleLabel(r, 20)}
-                    </label>
-                  ))}
-                  {roles.length === 0 && <span>No roles defined</span>}
+                <label>Quick access packs</label>
+                <p className="um-form-hint" style={{ marginTop: 0 }}>
+                  One click adds the right role for documents / AI images / generator.
+                </p>
+                <div className="um-access-packs-row">
+                  {ACCESS_PACKS.map((pack) => {
+                    const existing = roles.find(
+                      (r) => String(r.code).toLowerCase() === String(pack.roleCode).toLowerCase()
+                    );
+                    const alreadyOn = existing
+                      && (formData.roles || []).map(String).includes(String(existing._id));
+                    return (
+                      <button
+                        key={pack.id}
+                        type="button"
+                        className={`um-access-pack-btn${alreadyOn ? ' active' : ''}`}
+                        title={pack.description}
+                        disabled={!!packBusy}
+                        onClick={() => applyAccessPack(pack)}
+                      >
+                        {packBusy === pack.id ? '…' : alreadyOn ? '✓ ' : '+ '}
+                        {pack.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+
               <div className="form-group">
-                <label>Groups</label>
+                <label>Roles</label>
+                <div className="um-role-card-list">
+                  {roles.map((r) => {
+                    const checked = (formData.roles || []).map(String).includes(String(r._id));
+                    const permCount = Array.isArray(r.permissions) ? r.permissions.length : 0;
+                    return (
+                      <label key={r._id} className={`um-role-card${checked ? ' selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => handleRoleToggle(r._id)}
+                        />
+                        <span className="um-role-card-body">
+                          <span className="um-role-card-name">{r.name}</span>
+                          <span className="um-role-card-desc">{r.description || r.code}</span>
+                          <span className="um-role-card-meta">{permCount} permissions · {r.code}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                  {roles.length === 0 && <span>No roles defined</span>}
+                </div>
+                {selectedRolesPreview.length > 0 ? (
+                  <p className="um-form-hint">
+                    Selected: {selectedRolesPreview.map((r) => r.name).join(', ')}
+                  </p>
+                ) : (
+                  <p className="um-form-hint">No roles selected — user will have no module access.</p>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label>Groups (optional)</label>
                 <div className="multiselect-box um-multiselect-groups">
                   {groups.map((g) => (
                     <label key={g._id}>
                       <input
                         type="checkbox"
-                        checked={(formData.groups || []).includes(g._id)}
+                        checked={(formData.groups || []).map(String).includes(String(g._id))}
                         onChange={() => handleGroupToggle(g._id)}
                       />
                       {getShortGroupLabel(g, 20)}
@@ -529,13 +648,26 @@ function Users() {
                 <button type="button" onClick={() => setShowModal(false)}>
                   Cancel
                 </button>
+                {typeof onOpenRoles === 'function' ? (
+                  <button
+                    type="button"
+                    className="um-secondary-btn"
+                    onClick={() => {
+                      setShowModal(false);
+                      onOpenRoles();
+                    }}
+                  >
+                    Edit role permissions
+                  </button>
+                ) : null}
                 <button type="submit" className="btn-primary um-users-modal-submit">
-                  {editingUser ? 'Update' : 'Create'}
+                  {editingUser ? 'Save access' : 'Create user'}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

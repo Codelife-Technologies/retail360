@@ -23,5 +23,10 @@ export function filterDocumentsTabs(hasPermission, tabs = DOCUMENTS_TABS) {
   if (hasPermission('admin.all') || hasPermission('documents.full')) {
     return tabs;
   }
-  return tabs.filter((tab) => hasPermission(tab.permission) || hasPermission('documents.view'));
+  const matched = tabs.filter((tab) => hasPermission(tab.permission));
+  // Legacy: documents.view still unlocks all document tabs
+  if (matched.length === 0 && hasPermission('documents.view')) {
+    return tabs;
+  }
+  return matched;
 }

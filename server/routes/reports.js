@@ -13,38 +13,70 @@ const {
 const { getRates, rateToInr, convertAmount } = require('../currency/services/exchangeRateService');
 const { currencyForCountry, BASE_CURRENCY } = require('../currency/constants');
 const { resolveSaleCurrency } = require('../currency/utils/saleCurrency');
+const {
+  zonedDateTimeToUtc,
+  getDateKeyInAppTz,
+  getZonedParts,
+} = require('../utils/appTimezone');
 
 /** Calendar month grouping for sales reports (aligns with dashboard date ranges). */
 const SALES_REPORT_TIMEZONE = process.env.SALES_REPORT_TIMEZONE || 'Asia/Kolkata';
 
-// Helper function to build date query
-function buildDateQuery(startDate, endDate) {
-  const query = {};
-  if (startDate || endDate) {
-    query.$gte = startDate ? new Date(startDate) : new Date(0);
-    query.$lte = endDate ? new Date(endDate + 'T23:59:59.999Z') : new Date();
+/**
+ * Parse a report date input as a calendar day in SALES_REPORT_TIMEZONE.
+ * YYYY-MM-DD (and Date values) become start/end of that local day — same bounds
+ * for Business Report and By Sale / By SKU filters.
+ */
+function parseReportDateInput(value, asEndOfDay = false) {
+  if (value == null || value === '') return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const key = getDateKeyInAppTz(value, SALES_REPORT_TIMEZONE);
+    if (!key) return null;
+    return asEndOfDay
+      ? zonedDateTimeToUtc(key, '23:59:59.999', SALES_REPORT_TIMEZONE)
+      : zonedDateTimeToUtc(key, '00:00:00', SALES_REPORT_TIMEZONE);
   }
-  return Object.keys(query).length > 0 ? query : null;
+
+  const raw = String(value).trim();
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const key = `${iso[1]}-${iso[2]}-${iso[3]}`;
+    return asEndOfDay
+      ? zonedDateTimeToUtc(key, '23:59:59.999', SALES_REPORT_TIMEZONE)
+      : zonedDateTimeToUtc(key, '00:00:00', SALES_REPORT_TIMEZONE);
+  }
+
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  const key = getDateKeyInAppTz(d, SALES_REPORT_TIMEZONE);
+  if (!key) return null;
+  return asEndOfDay
+    ? zonedDateTimeToUtc(key, '23:59:59.999', SALES_REPORT_TIMEZONE)
+    : zonedDateTimeToUtc(key, '00:00:00', SALES_REPORT_TIMEZONE);
+}
+
+// Helper function to build date query (shared by By Sale / By SKU / summary)
+function buildDateQuery(startDate, endDate) {
+  if (!startDate && !endDate) return null;
+  const start = startDate ? parseReportDateInput(startDate, false) : new Date(0);
+  const end = endDate
+    ? parseReportDateInput(endDate, true)
+    : parseReportDateInput(getDateKeyInAppTz(new Date(), SALES_REPORT_TIMEZONE), true);
+  if (!start || !end) return null;
+  return { $gte: start, $lte: end };
 }
 
 function toDateInputStr(date) {
-  const d = new Date(date);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return getDateKeyInAppTz(date, SALES_REPORT_TIMEZONE) || '';
 }
 
 function startOfDay(date = new Date()) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return parseReportDateInput(date, false) || new Date(date);
 }
 
 function endOfDay(date = new Date()) {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
+  return parseReportDateInput(date, true) || new Date(date);
 }
 
 function saleAmountInr(sale, rates) {
@@ -143,22 +175,29 @@ function buildCountrySalesBreakdown(sales = [], rates = null) {
     .sort((a, b) => b.amountInr - a.amountInr);
 }
 
-function computeBusinessReportStats(sales = []) {
+function computeBusinessReportStats(sales = [], rates = null) {
   let unitsOrdered = 0;
   let totalOrderItems = 0;
   let orderedProductSales = 0;
+  let orderedProductSalesInr = 0;
 
   sales.forEach((sale) => {
     orderedProductSales += sale.total || 0;
+    orderedProductSalesInr += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
+    // Match By Sale row counting (countSaleLineItems): empty items → 1 row
+    totalOrderItems += countSaleLineItems(sale);
     (sale.items || []).forEach((item) => {
       unitsOrdered += item.quantity || 0;
-      totalOrderItems += 1;
     });
   });
 
   orderedProductSales = Math.round(orderedProductSales * 100) / 100;
+  orderedProductSalesInr = Math.round(orderedProductSalesInr * 100) / 100;
   const avgSalesPerOrderItem = totalOrderItems > 0
     ? Math.round((orderedProductSales / totalOrderItems) * 100) / 100
+    : 0;
+  const avgSalesPerOrderItemInr = totalOrderItems > 0
+    ? Math.round((orderedProductSalesInr / totalOrderItems) * 100) / 100
     : 0;
   const avgUnitsPerOrderItem = totalOrderItems > 0
     ? Math.round((unitsOrdered / totalOrderItems) * 100) / 100
@@ -166,82 +205,121 @@ function computeBusinessReportStats(sales = []) {
   const avgSellingPrice = unitsOrdered > 0
     ? Math.round((orderedProductSales / unitsOrdered) * 100) / 100
     : 0;
+  const avgSellingPriceInr = unitsOrdered > 0
+    ? Math.round((orderedProductSalesInr / unitsOrdered) * 100) / 100
+    : 0;
 
   return {
     orderedProductSales,
+    orderedProductSalesInr,
     unitsOrdered,
     totalOrderItems,
     avgSalesPerOrderItem,
+    avgSalesPerOrderItemInr,
     avgUnitsPerOrderItem,
     avgSellingPrice,
+    avgSellingPriceInr,
   };
 }
 
 function getBusinessReportBucketKey(dateValue, groupBy) {
   const date = new Date(dateValue);
+  const parts = getZonedParts(date, SALES_REPORT_TIMEZONE);
+  if (!parts) {
+    return toDateInputStr(date);
+  }
   if (groupBy === 'week') {
-    const weekStart = new Date(date);
-    weekStart.setDate(date.getDate() - date.getDay());
-    return toDateInputStr(startOfDay(weekStart));
+    const dayKey = `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+    const anchor = zonedDateTimeToUtc(dayKey, '12:00:00', SALES_REPORT_TIMEZONE);
+    const zoned = getZonedParts(anchor, SALES_REPORT_TIMEZONE);
+    const utcNoon = Date.UTC(zoned.year, zoned.month - 1, zoned.day, 12, 0, 0);
+    const weekday = new Date(utcNoon).getUTCDay();
+    const weekStart = new Date(utcNoon);
+    weekStart.setUTCDate(weekStart.getUTCDate() - weekday);
+    return `${weekStart.getUTCFullYear()}-${String(weekStart.getUTCMonth() + 1).padStart(2, '0')}-${String(weekStart.getUTCDate()).padStart(2, '0')}`;
   }
   if (groupBy === 'month') {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    return `${parts.year}-${String(parts.month).padStart(2, '0')}`;
   }
-  return toDateInputStr(startOfDay(date));
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 }
 
 function formatBusinessReportLabel(bucketKey, groupBy) {
   if (groupBy === 'month') {
     const [year, month] = bucketKey.split('-').map(Number);
-    const date = new Date(year, month - 1, 1);
-    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    const date = new Date(Date.UTC(year, month - 1, 1));
+    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
   }
   const [y, m, d] = bucketKey.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
+  const date = new Date(Date.UTC(y, m - 1, d));
   if (groupBy === 'week') {
-    return `Week of ${date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}`;
+    return `Week of ${date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}`;
   }
-  return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+  return date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
 function buildBusinessReportBucketKeys(rangeStart, rangeEnd, groupBy) {
   const keys = [];
-  const cursor = startOfDay(new Date(rangeStart));
-  const end = startOfDay(new Date(rangeEnd));
+  const startKey = getDateKeyInAppTz(rangeStart, SALES_REPORT_TIMEZONE);
+  const endKey = getDateKeyInAppTz(rangeEnd, SALES_REPORT_TIMEZONE);
+  if (!startKey || !endKey) return keys;
 
   if (groupBy === 'month') {
-    cursor.setDate(1);
-    while (cursor <= end) {
-      keys.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`);
-      cursor.setMonth(cursor.getMonth() + 1);
+    let [y, m] = startKey.split('-').map(Number);
+    const [endY, endM] = endKey.split('-').map(Number);
+    while (y < endY || (y === endY && m <= endM)) {
+      keys.push(`${y}-${String(m).padStart(2, '0')}`);
+      m += 1;
+      if (m > 12) {
+        m = 1;
+        y += 1;
+      }
     }
     return keys;
   }
 
   if (groupBy === 'week') {
-    cursor.setDate(cursor.getDate() - cursor.getDay());
-    while (cursor <= end) {
-      keys.push(toDateInputStr(cursor));
-      cursor.setDate(cursor.getDate() + 7);
+    let cursorKey = startKey;
+    // Align to Sunday of start week
+    const startParts = getZonedParts(zonedDateTimeToUtc(startKey, '12:00:00', SALES_REPORT_TIMEZONE), SALES_REPORT_TIMEZONE);
+    const startNoon = Date.UTC(startParts.year, startParts.month - 1, startParts.day, 12, 0, 0);
+    const startWeekday = new Date(startNoon).getUTCDay();
+    const weekStartUtc = new Date(startNoon);
+    weekStartUtc.setUTCDate(weekStartUtc.getUTCDate() - startWeekday);
+    cursorKey = `${weekStartUtc.getUTCFullYear()}-${String(weekStartUtc.getUTCMonth() + 1).padStart(2, '0')}-${String(weekStartUtc.getUTCDate()).padStart(2, '0')}`;
+
+    while (cursorKey <= endKey) {
+      keys.push(cursorKey);
+      const [cy, cm, cd] = cursorKey.split('-').map(Number);
+      const next = new Date(Date.UTC(cy, cm - 1, cd + 7));
+      cursorKey = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`;
     }
     return keys;
   }
 
-  while (cursor <= end) {
-    keys.push(toDateInputStr(cursor));
-    cursor.setDate(cursor.getDate() + 1);
+  // day
+  let dayCursor = startKey;
+  while (dayCursor <= endKey) {
+    keys.push(dayCursor);
+    const [cy, cm, cd] = dayCursor.split('-').map(Number);
+    const next = new Date(Date.UTC(cy, cm - 1, cd + 1));
+    dayCursor = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`;
   }
   return keys;
 }
 
-function buildBusinessReport(sales, rangeStart, rangeEnd, groupBy = 'day') {
+function buildBusinessReport(sales, rangeStart, rangeEnd, groupBy = 'day', rates = null) {
   const normalizedGroupBy = ['day', 'week', 'month'].includes(groupBy) ? groupBy : 'day';
   const bucketKeys = buildBusinessReportBucketKeys(rangeStart, rangeEnd, normalizedGroupBy);
   const buckets = Object.fromEntries(bucketKeys.map((key) => [key, []]));
 
   filterSalesInRange(sales, rangeStart, rangeEnd).forEach((sale) => {
     const key = getBusinessReportBucketKey(sale.salesDate, normalizedGroupBy);
-    if (!buckets[key]) buckets[key] = [];
+    if (!buckets[key]) {
+      // Keep sales even if outside generated keys (should be rare after timezone fix)
+      buckets[key] = [];
+      if (!bucketKeys.includes(key)) bucketKeys.push(key);
+    }
     buckets[key].push(sale);
   });
 
@@ -251,7 +329,7 @@ function buildBusinessReport(sales, rangeStart, rangeEnd, groupBy = 'day') {
     .map((key) => ({
       periodKey: key,
       date: formatBusinessReportLabel(key, normalizedGroupBy),
-      ...computeBusinessReportStats(buckets[key] || []),
+      ...computeBusinessReportStats(buckets[key] || [], rates),
     }));
 }
 
@@ -309,15 +387,19 @@ function resolvePeriodRange(period, customStart, customEnd) {
     }
     case 'custom': {
       if (customStart && !customEnd) {
-        const day = startOfDay(new Date(customStart));
+        const day = parseReportDateInput(customStart, false) || startOfDay(now);
         return {
           start: day,
-          end: endOfDay(day),
+          end: parseReportDateInput(customStart, true) || endOfDay(day),
           label: toDateInputStr(day),
         };
       }
-      const start = customStart ? startOfDay(new Date(customStart)) : startOfDay(now);
-      const end = customEnd ? endOfDay(new Date(customEnd)) : endOfDay(now);
+      const start = customStart
+        ? (parseReportDateInput(customStart, false) || startOfDay(now))
+        : startOfDay(now);
+      const end = customEnd
+        ? (parseReportDateInput(customEnd, true) || endOfDay(now))
+        : endOfDay(now);
       const label = customStart && customEnd
         ? `${toDateInputStr(start)} – ${toDateInputStr(end)}`
         : 'Custom Range';
@@ -830,27 +912,40 @@ function applyHomeRefillAllocation(rows, homeLocation, homeStockByProduct) {
 }
 
 // Helper function to group data
-function groupData(data, groupBy, dateField = 'salesDate', isSales = true) {
+function groupData(data, groupBy, dateField = 'salesDate', isSales = true, rates = null) {
   const grouped = {};
   
   data.forEach(item => {
     let key;
     let displayName;
     const date = new Date(item[dateField]);
+    const appDateKey = getDateKeyInAppTz(date, SALES_REPORT_TIMEZONE);
+    const parts = getZonedParts(date, SALES_REPORT_TIMEZONE);
     
     switch (groupBy) {
       case 'date':
-        key = date.toISOString().split('T')[0];
+        key = appDateKey || date.toISOString().split('T')[0];
         displayName = key;
         break;
-      case 'week':
-        const weekStart = new Date(date);
-        weekStart.setDate(date.getDate() - date.getDay());
-        key = weekStart.toISOString().split('T')[0];
+      case 'week': {
+        // Sunday-start week in app timezone (same idea as business report buckets)
+        const dayKey = appDateKey || toDateInputStr(date);
+        const anchor = zonedDateTimeToUtc(dayKey, '12:00:00', SALES_REPORT_TIMEZONE);
+        const zoned = getZonedParts(anchor, SALES_REPORT_TIMEZONE);
+        const utcNoon = Date.UTC(zoned.year, zoned.month - 1, zoned.day, 12, 0, 0);
+        const weekday = new Date(utcNoon).getUTCDay(); // 0=Sun
+        const weekStart = new Date(utcNoon);
+        weekStart.setUTCDate(weekStart.getUTCDate() - weekday);
+        key = `${weekStart.getUTCFullYear()}-${String(weekStart.getUTCMonth() + 1).padStart(2, '0')}-${String(weekStart.getUTCDate()).padStart(2, '0')}`;
         displayName = `Week of ${key}`;
         break;
+      }
       case 'month':
-        key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (parts) {
+          key = `${parts.year}-${String(parts.month).padStart(2, '0')}`;
+        } else {
+          key = appDateKey ? appDateKey.slice(0, 7) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        }
         displayName = key;
         break;
       case 'product':
@@ -862,12 +957,19 @@ function groupData(data, groupBy, dateField = 'salesDate', isSales = true) {
               group: productName,
               count: 0,
               revenue: 0,
+              revenueInr: 0,
               itemsSold: 0,
               product: itemLine.product
             };
           }
           grouped[productId].count += 1;
           grouped[productId].revenue += itemLine.total || 0;
+          const saleInr = isSales && rates ? saleAmountInr(item, rates) : (item.total || 0);
+          const saleTotal = item.total || 0;
+          const lineShare = saleTotal > 0 ? (itemLine.total || 0) / saleTotal : 0;
+          grouped[productId].revenueInr += isSales && rates
+            ? saleInr * lineShare
+            : (itemLine.total || 0);
           grouped[productId].itemsSold += itemLine.quantity || 0;
         });
         return; // Skip the main grouping for product
@@ -907,16 +1009,22 @@ function groupData(data, groupBy, dateField = 'salesDate', isSales = true) {
           group: displayName || key,
           count: 0,
           revenue: 0, // This will be expenditure for purchases, but keeping name for consistency
+          revenueInr: 0,
           itemsSold: 0
         };
       }
       grouped[key].count += isSales ? countSaleLineItems(item) : 1;
       grouped[key].revenue += (item.total || 0);
+      grouped[key].revenueInr += isSales && rates ? saleAmountInr(item, rates) : (item.total || 0);
       grouped[key].itemsSold += item.items.reduce((sum, i) => sum + (i.quantity || 0), 0);
     }
   });
   
-  return Object.values(grouped);
+  return Object.values(grouped).map((row) => ({
+    ...row,
+    revenue: Math.round((row.revenue || 0) * 100) / 100,
+    revenueInr: Math.round((row.revenueInr != null ? row.revenueInr : row.revenue || 0) * 100) / 100,
+  }));
 }
 
 function buildSaleFilterQuery(query = {}) {
@@ -1009,6 +1117,7 @@ function toSellingProductSummary(row) {
     variation: row.variation,
     totalQuantity: row.totalQuantity,
     totalRevenue: row.totalRevenue,
+    totalRevenueInr: row.totalRevenueInr != null ? row.totalRevenueInr : row.totalRevenue,
   };
 }
 
@@ -1235,23 +1344,29 @@ const SALES_SKU_EXPORT_HEADERS = [
 
 const BUSINESS_REPORT_EXPORT_HEADERS = [
   { key: 'date', label: 'Date' },
-  { key: 'orderedProductSales', label: 'Ordered Product Sales' },
+  { key: 'orderedProductSales', label: 'Ordered Product Sales (local)' },
+  { key: 'orderedProductSalesInr', label: 'Ordered Product Sales (INR)' },
   { key: 'unitsOrdered', label: 'Units Ordered' },
   { key: 'totalOrderItems', label: 'Total Order Items' },
-  { key: 'avgSalesPerOrderItem', label: 'Average Sales per Order Item' },
+  { key: 'avgSalesPerOrderItem', label: 'Average Sales per Order Item (local)' },
+  { key: 'avgSalesPerOrderItemInr', label: 'Average Sales per Order Item (INR)' },
   { key: 'avgUnitsPerOrderItem', label: 'Average Units per Order Item' },
-  { key: 'avgSellingPrice', label: 'Average Selling Price' },
+  { key: 'avgSellingPrice', label: 'Average Selling Price (local)' },
+  { key: 'avgSellingPriceInr', label: 'Average Selling Price (INR)' },
 ];
 
 function mapBusinessReportToExportRows(rows = []) {
   return rows.map((row) => ({
     date: row.date,
     orderedProductSales: row.orderedProductSales ?? '',
+    orderedProductSalesInr: row.orderedProductSalesInr ?? '',
     unitsOrdered: row.unitsOrdered ?? '',
     totalOrderItems: row.totalOrderItems ?? '',
     avgSalesPerOrderItem: row.avgSalesPerOrderItem ?? '',
+    avgSalesPerOrderItemInr: row.avgSalesPerOrderItemInr ?? '',
     avgUnitsPerOrderItem: row.avgUnitsPerOrderItem ?? '',
     avgSellingPrice: row.avgSellingPrice ?? '',
+    avgSellingPriceInr: row.avgSellingPriceInr ?? '',
   }));
 }
 
@@ -1324,6 +1439,20 @@ async function aggregateSalesBySku(filters = {}) {
         hsnCode: { $first: '$product.hsnCode' },
         totalQuantity: { $sum: '$items.quantity' },
         totalRevenue: { $sum: '$items.total' },
+        totalRevenueInr: {
+          $sum: {
+            $multiply: [
+              { $ifNull: ['$items.total', 0] },
+              {
+                $cond: [
+                  { $gt: [{ $ifNull: ['$exchangeRateToInr', 0] }, 0] },
+                  '$exchangeRateToInr',
+                  1,
+                ],
+              },
+            ],
+          },
+        },
         totalUnitPriceSum: { $sum: { $multiply: ['$items.unitPrice', '$items.quantity'] } },
         orderIds: { $addToSet: '$_id' },
       },
@@ -1343,6 +1472,7 @@ async function aggregateSalesBySku(filters = {}) {
         hsnCode: { $ifNull: ['$hsnCode', ''] },
         totalQuantity: 1,
         totalRevenue: { $round: ['$totalRevenue', 2] },
+        totalRevenueInr: { $round: ['$totalRevenueInr', 2] },
         averageUnitPrice: {
           $round: [
             {
@@ -1355,10 +1485,22 @@ async function aggregateSalesBySku(filters = {}) {
             2,
           ],
         },
+        averageUnitPriceInr: {
+          $round: [
+            {
+              $cond: [
+                { $gt: ['$totalQuantity', 0] },
+                { $divide: ['$totalRevenueInr', '$totalQuantity'] },
+                0,
+              ],
+            },
+            2,
+          ],
+        },
         orderCount: { $size: '$orderIds' },
       },
     },
-    { $sort: { totalRevenue: -1, totalQuantity: -1 } },
+    { $sort: { totalRevenueInr: -1, totalQuantity: -1 } },
   ]);
 
   const Category = require('../models/Category');
@@ -1393,7 +1535,9 @@ async function aggregateSalesBySku(filters = {}) {
     hsnCode: row.hsnCode || '—',
     totalQuantity: row.totalQuantity,
     totalRevenue: row.totalRevenue,
+    totalRevenueInr: row.totalRevenueInr != null ? row.totalRevenueInr : row.totalRevenue,
     averageUnitPrice: row.averageUnitPrice,
+    averageUnitPriceInr: row.averageUnitPriceInr != null ? row.averageUnitPriceInr : row.averageUnitPrice,
     orderCount: row.orderCount,
   }));
 
@@ -1403,6 +1547,9 @@ async function aggregateSalesBySku(filters = {}) {
 
   const lineItemRevenue = Math.round(
     skuRows.reduce((sum, row) => sum + row.totalRevenue, 0) * 100
+  ) / 100;
+  const lineItemRevenueInr = Math.round(
+    skuRows.reduce((sum, row) => sum + (row.totalRevenueInr || 0), 0) * 100
   ) / 100;
 
   const orderSummaryPipeline = [
@@ -1473,8 +1620,10 @@ async function aggregateSalesBySku(filters = {}) {
     totalSkus: skuRows.length,
     totalQuantitySold: orderSummary.totalQuantitySold || 0,
     totalRevenue: Math.round((orderSummary.totalRevenue || 0) * 100) / 100,
+    totalRevenueInr: lineItemRevenueInr,
     totalOrders: orderSummary.totalOrders || 0,
     lineItemRevenue,
+    lineItemRevenueInr,
     topSellingProducts,
     leastSellingProducts,
   };
@@ -1493,46 +1642,90 @@ router.get('/sales/by-sku', async (req, res) => {
   }
 });
 
+/**
+ * Load business-report rows using the same sale filter as By Sale / By SKU
+ * (buildSaleFilterQuery + Asia/Kolkata day bounds) so period totals cannot diverge.
+ */
+async function fetchSalesBusinessReport(filters = {}) {
+  const { startDate, endDate, reportGroupBy = 'day' } = filters;
+  if (!startDate || !endDate) {
+    const err = new Error('Start date and end date are required');
+    err.status = 400;
+    throw err;
+  }
+
+  const currentRange = resolvePeriodRange('custom', startDate, endDate);
+  // Same filters as detailed sales — ignore payment/order status so BR matches unfiltered By Sale
+  const query = buildSaleFilterQuery({
+    startDate,
+    endDate,
+    salesChannel: filters.salesChannel,
+    salesLocation: filters.salesLocation,
+  });
+
+  const sales = await Sale.find(query)
+    .populate('salesChannel', 'name code country defaultCurrency')
+    .populate('salesLocation', 'name code country currency')
+    .populate('items.product', 'name title sku')
+    .sort({ salesDate: -1 });
+
+  const ratesPayload = await getRates();
+  const rates = ratesPayload.rates;
+  const normalizedGroupBy = ['day', 'week', 'month'].includes(reportGroupBy) ? reportGroupBy : 'day';
+  const rows = buildBusinessReport(
+    sales,
+    currentRange.start,
+    currentRange.end,
+    normalizedGroupBy,
+    rates
+  );
+  const periodTotals = computeBusinessReportStats(sales, rates);
+
+  return {
+    rows,
+    periodTotals,
+    reportGroupBy: normalizedGroupBy,
+    range: {
+      start: toDateInputStr(currentRange.start),
+      end: toDateInputStr(currentRange.end),
+    },
+    orderCount: sales.length,
+  };
+}
+
+// GET sales business report (same date filter as By Sale)
+router.get('/sales/business-report', async (req, res) => {
+  try {
+    const result = await fetchSalesBusinessReport(req.query);
+    res.json(result);
+  } catch (error) {
+    if (error.status === 400) {
+      return res.status(400).json({ error: error.message });
+    }
+    logger.backend.error('Error fetching sales business report', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET export sales business report as Excel
 router.get('/sales/business-report/export', async (req, res) => {
   try {
-    const { startDate, endDate, salesChannel, salesLocation, reportGroupBy = 'day' } = req.query;
-    if (!startDate || !endDate) {
-      return res.status(400).json({ error: 'Start date and end date are required' });
-    }
-
-    const currentRange = resolvePeriodRange('custom', startDate, endDate);
-    const baseQuery = {};
-    if (salesChannel) baseQuery.salesChannel = salesChannel;
-    if (salesLocation) baseQuery.salesLocation = salesLocation;
-
-    const sales = await Sale.find({
-      ...baseQuery,
-      salesDate: { $gte: currentRange.start, $lte: currentRange.end },
-    })
-      .populate('salesChannel', 'name code')
-      .populate('salesLocation', 'name code')
-      .populate('items.product', 'name title sku')
-      .sort({ salesDate: -1 });
-
-    const reportRows = buildBusinessReport(
-      sales,
-      currentRange.start,
-      currentRange.end,
-      reportGroupBy
-    );
-    const exportRows = mapBusinessReportToExportRows(reportRows);
+    const { startDate, endDate } = req.query;
+    const result = await fetchSalesBusinessReport(req.query);
+    const exportRows = mapBusinessReportToExportRows(result.rows);
     const buffer = exportToExcel(exportRows, BUSINESS_REPORT_EXPORT_HEADERS);
     const filename = `sales_business_report_${startDate}_${endDate}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
     res.send(buffer);
   } catch (error) {
+    if (error.status === 400) {
+      return res.status(400).json({ error: error.message });
+    }
     logger.backend.error('Error exporting sales business report', { error: error.message, stack: error.stack });
     res.status(500).json({ error: error.message });
   }
 });
-
 // GET export sales by SKU as Excel
 router.get('/sales/by-sku/export', async (req, res) => {
   try {
@@ -1671,7 +1864,15 @@ router.get('/sales/dashboard', async (req, res) => {
       comparisonChart: comparison.chart,
       channelBreakdown: buildChannelBreakdown(currentSales, rates),
       countryBreakdown: buildCountrySalesBreakdown(currentSales, rates),
-      businessReport: buildBusinessReport(sales, currentRange.start, currentRange.end, reportGroupBy),
+      // Use currentSales (already range-filtered) — same set as period KPIs
+      businessReport: buildBusinessReport(
+        currentSales,
+        currentRange.start,
+        currentRange.end,
+        reportGroupBy,
+        rates
+      ),
+      businessReportPeriodTotals: computeBusinessReportStats(currentSales, rates),
       reportGroupBy: ['day', 'week', 'month'].includes(reportGroupBy) ? reportGroupBy : 'day',
     });
   } catch (error) {
@@ -1699,11 +1900,15 @@ router.get('/sales/summary', async (req, res) => {
       .populate('salesLocation', 'name code country currency')
       .populate('items.product', 'name title sku images parentSkuOrAsin variation')
       .sort({ salesDate: -1 });
+
+    const ratesPayload = await getRates();
+    const rates = ratesPayload.rates;
     
     const orderCount = sales.length;
     const totalSales = sales.reduce((sum, s) => sum + countSaleLineItems(s), 0);
     const totalRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
-    const averageOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
+    const totalRevenueInr = sales.reduce((sum, s) => sum + saleAmountInr(s, rates), 0);
+    const averageOrderValue = orderCount > 0 ? totalRevenueInr / orderCount : 0;
     const totalItemsSold = sales.reduce((sum, s) => 
       sum + s.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0), 0
     );
@@ -1722,7 +1927,7 @@ router.get('/sales/summary', async (req, res) => {
       displayCurrency = currencies.size === 1 ? [...currencies][0] : 'INR';
     }
     
-    const groupedData = groupBy ? groupData(sales, groupBy, 'salesDate', true) : [];
+    const groupedData = groupBy ? groupData(sales, groupBy, 'salesDate', true, rates) : [];
     
     // Calculate statistics
     const productMap = {};
@@ -1772,10 +1977,17 @@ router.get('/sales/summary', async (req, res) => {
     
     res.json({
       totalSales,
-      totalRevenue,
-      averageOrderValue,
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      totalRevenueInr: Math.round(totalRevenueInr * 100) / 100,
+      averageOrderValue: Math.round(averageOrderValue * 100) / 100,
       totalItemsSold,
       displayCurrency,
+      exchangeRates: {
+        base: ratesPayload.base,
+        rates,
+        source: ratesPayload.source,
+        fetchedAt: ratesPayload.fetchedAt,
+      },
       groupedData,
       statistics: {
         topProducts,
@@ -1811,18 +2023,29 @@ router.get('/sales/statistics', async (req, res) => {
     const query = buildSaleFilterQuery(req.query);
 
     const sales = await Sale.find(query)
-      .populate('salesChannel', 'name code')
+      .populate('salesChannel', 'name code country defaultCurrency')
+      .populate('salesLocation', 'name code country currency')
       .populate('items.product', 'name title sku images parentSkuOrAsin variation');
 
+    const ratesPayload = await getRates();
+    const rates = ratesPayload.rates;
     const totalRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
+    const totalRevenueInr = sales.reduce((sum, s) => sum + saleAmountInr(s, rates), 0);
     const orderCount = sales.length;
     const totalSales = sales.reduce((sum, s) => sum + countSaleLineItems(s), 0);
-    const averageOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
+    const averageOrderValue = orderCount > 0 ? totalRevenueInr / orderCount : 0;
 
     res.json({
-      totalRevenue,
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      totalRevenueInr: Math.round(totalRevenueInr * 100) / 100,
       totalSales,
-      averageOrderValue
+      averageOrderValue: Math.round(averageOrderValue * 100) / 100,
+      exchangeRates: {
+        base: ratesPayload.base,
+        rates,
+        source: ratesPayload.source,
+        fetchedAt: ratesPayload.fetchedAt,
+      },
     });
   } catch (error) {
     logger.backend.error('Error fetching sales statistics', { error: error.message, stack: error.stack });

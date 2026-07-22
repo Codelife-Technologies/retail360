@@ -271,6 +271,27 @@
 .dm-badge.deleted { background: #fee2e2; color: #991b1b; }
 .dm-badge.ai { background: #ede9fe; color: #5b21b6; }
 .dm-badge.manual { background: #dbeafe; color: #1e40af; }
+.dm-badge.personal {
+  background: #ffedd5;
+  color: #9a3412;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+}
+
+.dm-folder-personal-opt {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  grid-column: 1 / -1;
+  font-size: 0.8rem;
+  color: #64748b;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dm-folder-personal-opt input {
+  margin: 0;
+}
 
 .dm-empty {
   text-align: center;
@@ -398,9 +419,11 @@
 }
 
 .dm-folder-create {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   gap: 0.4rem;
   margin-bottom: 0.85rem;
+  align-items: center;
 }
 
 .dm-folder-create .dm-input {

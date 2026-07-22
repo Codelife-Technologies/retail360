@@ -321,6 +321,7 @@ export const reportsAPI = {
   getSalesDetailed: (params) => api.get('/reports/sales/detailed', { params }),
   getSalesStatistics: (params) => api.get('/reports/sales/statistics', { params }),
   getSalesBySku: (params) => api.get('/reports/sales/by-sku', { params }),
+  getSalesBusinessReport: (params) => api.get('/reports/sales/business-report', { params }),
   exportSalesBySku: (params) =>
     api.get('/reports/sales/by-sku/export', { params, responseType: 'blob' }),
   exportSalesDetailed: (params) =>

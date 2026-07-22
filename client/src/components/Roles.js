@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { rolesAPI, permissionsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import DetailModal from './DetailModal';
 import { getShortRoleLabel } from '../utils/roleLabels';
+import PermissionPicker from '../userManagement/PermissionPicker';
 import './UserManagement.css';
 import './DetailModal.css';
 
@@ -109,14 +111,6 @@ function Roles() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handlePermissionToggle = (permId) => {
-    setFormData((prev) => {
-      const arr = prev.permissions || [];
-      const next = arr.includes(permId) ? arr.filter((id) => id !== permId) : [...arr, permId];
-      return { ...prev, permissions: next };
-    });
-  };
-
   const resetForm = () => {
     setFormData({ name: '', code: '', description: '', permissions: [] });
   };
@@ -175,9 +169,12 @@ function Roles() {
       <div className="um-mgmt-card">
         <div className="um-mgmt-card-top">
           <div className="um-mgmt-heading">
-            <h1>Role Management</h1>
+            <h1>Roles &amp; Permissions</h1>
             <p className="um-mgmt-breadcrumb">
-              Home <span>›</span> Permissions &amp; Accounts <span>›</span> Roles
+              Home <span>›</span> User Management <span>›</span> Roles
+            </p>
+            <p className="um-mgmt-hint">
+              Permissions are granted through roles. Edit a role below, then assign that role to users under the Users tab.
             </p>
           </div>
           <div className="um-mgmt-toolbar">
@@ -210,18 +207,10 @@ function Roles() {
           <>
             <div className="um-mgmt-list" role="table" aria-label="Roles">
               <div className="um-mgmt-row roles um-mgmt-row-head" role="row">
-                <div className="um-mgmt-cell name" role="columnheader">
-                  Name
-                </div>
-                <div className="um-mgmt-cell desc" role="columnheader">
-                  Description
-                </div>
-                <div className="um-mgmt-cell meta" role="columnheader">
-                  Permissions
-                </div>
-                <div className="um-mgmt-cell actions" role="columnheader">
-                  Actions
-                </div>
+                <div className="um-mgmt-cell name" role="columnheader">Name</div>
+                <div className="um-mgmt-cell desc" role="columnheader">Description</div>
+                <div className="um-mgmt-cell meta" role="columnheader">Permissions</div>
+                <div className="um-mgmt-cell actions" role="columnheader">Actions</div>
               </div>
 
               {roles.length === 0 ? (
@@ -243,9 +232,7 @@ function Roles() {
                             {getInitials(r.name)}
                           </div>
                           <div className="um-mgmt-entity-meta">
-                            <span className="um-mgmt-entity-name" title={r.name}>
-                              {r.name}
-                            </span>
+                            <span className="um-mgmt-entity-name" title={r.name}>{r.name}</span>
                             <span className="um-mgmt-entity-sub">{getShortRoleLabel(r, 16)}</span>
                           </div>
                         </div>
@@ -267,21 +254,13 @@ function Roles() {
                       <div className="um-mgmt-cell actions" role="cell" onClick={stopRowClick}>
                         <div className="um-mgmt-actions">
                           {hasPermission('roles.update') && (
-                            <button
-                              type="button"
-                              className="um-mgmt-action-link"
-                              onClick={() => handleEdit(r)}
-                            >
+                            <button type="button" className="um-mgmt-action-link" onClick={() => handleEdit(r)}>
                               <span aria-hidden="true">⚙</span>
-                              Modify Role
+                              Edit permissions
                             </button>
                           )}
                           {hasPermission('roles.delete') && (
-                            <button
-                              type="button"
-                              className="um-mgmt-action-link danger"
-                              onClick={() => handleDelete(r._id)}
-                            >
+                            <button type="button" className="um-mgmt-action-link danger" onClick={() => handleDelete(r._id)}>
                               <span aria-hidden="true">⊘</span>
                               Remove Role
                             </button>
@@ -300,40 +279,15 @@ function Roles() {
                   displaying page <strong>{currentPage}</strong>
                 </span>
                 <div className="um-mgmt-page-controls">
-                  <button type="button" disabled={currentPage <= 1} onClick={() => setPage(1)}>
-                    First
-                  </button>
-                  <button
-                    type="button"
-                    disabled={currentPage <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  >
-                    ‹
-                  </button>
+                  <button type="button" disabled={currentPage <= 1} onClick={() => setPage(1)}>First</button>
+                  <button type="button" disabled={currentPage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>‹</button>
                   {pageNumbers.map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      className={num === currentPage ? 'active' : ''}
-                      onClick={() => setPage(num)}
-                    >
+                    <button key={num} type="button" className={num === currentPage ? 'active' : ''} onClick={() => setPage(num)}>
                       {num}
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  >
-                    ›
-                  </button>
-                  <button
-                    type="button"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setPage(totalPages)}
-                  >
-                    Last
-                  </button>
+                  <button type="button" disabled={currentPage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>›</button>
+                  <button type="button" disabled={currentPage >= totalPages} onClick={() => setPage(totalPages)}>Last</button>
                 </div>
               </div>
             )}
@@ -377,10 +331,10 @@ function Roles() {
         </DetailModal>
       )}
 
-      {showModal && (
+      {showModal && createPortal(
         <div className="um-mgmt-modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="um-mgmt-modal wide" onClick={(e) => e.stopPropagation()}>
-            <h2>{editingRole ? 'Modify Role' : 'Add Role'}</h2>
+          <div className="um-mgmt-modal wide um-mgmt-modal-perms" onClick={(e) => e.stopPropagation()}>
+            <h2>{editingRole ? 'Edit role permissions' : 'Add Role'}</h2>
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Name *</label>
@@ -388,51 +342,30 @@ function Roles() {
               </div>
               <div className="form-group">
                 <label>Code *</label>
-                <input
-                  type="text"
-                  name="code"
-                  value={formData.code}
-                  onChange={handleInputChange}
-                  required
-                  placeholder="e.g. manager"
-                />
+                <input type="text" name="code" value={formData.code} onChange={handleInputChange} required placeholder="e.g. manager" />
               </div>
               <div className="form-group">
                 <label>Description</label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  rows="2"
+                <textarea name="description" value={formData.description} onChange={handleInputChange} rows="2" />
+              </div>
+              <div className="um-perm-section">
+                <div className="um-perm-section-title">Permissions</div>
+                <PermissionPicker
+                  permissions={permissions}
+                  selectedIds={formData.permissions}
+                  onChange={(ids) => setFormData((prev) => ({ ...prev, permissions: ids }))}
                 />
               </div>
-              <div className="form-group">
-                <label>Permissions</label>
-                <div className="multiselect-box">
-                  {permissions.map((p) => (
-                    <label key={p._id}>
-                      <input
-                        type="checkbox"
-                        checked={(formData.permissions || []).includes(p._id)}
-                        onChange={() => handlePermissionToggle(p._id)}
-                      />
-                      {getShortRoleLabel(p, 18)}
-                    </label>
-                  ))}
-                  {permissions.length === 0 && <span>No permissions defined</span>}
-                </div>
-              </div>
               <div className="form-actions">
-                <button type="button" onClick={() => setShowModal(false)}>
-                  Cancel
-                </button>
+                <button type="button" onClick={() => setShowModal(false)}>Cancel</button>
                 <button type="submit" className="um-mgmt-modal-submit">
-                  {editingRole ? 'Update' : 'Create'}
+                  {editingRole ? 'Save permissions' : 'Create role'}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
