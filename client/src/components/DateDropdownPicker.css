@@ -1,0 +1,48 @@
+.date-dropdown-picker {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.date-dropdown-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0;
+}
+
+.date-dropdown-heading {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+.date-dropdown-select {
+  padding: 0.35rem 0.45rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #1e293b;
+  background: #fff;
+  max-width: 100%;
+}
+
+.date-dropdown-month {
+  min-width: 7.5rem;
+}
+
+.date-dropdown-year {
+  min-width: 4.75rem;
+}
+
+.date-dropdown-day {
+  min-width: 4.25rem;
+}
+
+.date-dropdown-select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}

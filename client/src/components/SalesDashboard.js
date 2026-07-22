@@ -20,6 +20,7 @@ import Pagination from './Pagination';
 import SaleDetailsModal from './SaleDetailsModal';
 import { useCurrency } from '../currency/CurrencyContext';
 import { CurrencySelector, DualKpiValue } from '../currency/CurrencyUI';
+import DateDropdownPicker from './DateDropdownPicker';
 import '../currency/currency.css';
 import './SalesDashboard.css';
 
@@ -92,6 +93,7 @@ function formatComparisonPeriodLabel(startStr, endStr, periodFilter, isPrevious)
 
 const emptyStat = () => ({
   totalSales: 0,
+  totalOrderItems: 0,
   totalRevenue: 0,
   totalItemsSold: 0,
   averageOrderValue: 0,
@@ -188,7 +190,7 @@ const emptyDashboard = {
   },
   currentPeriod: { totalSales: 0, totalRevenue: 0, totalRevenueInr: 0, totalItemsSold: 0, averageOrderValue: 0 },
   previousPeriod: { totalSales: 0, totalRevenue: 0, totalRevenueInr: 0, totalItemsSold: 0, averageOrderValue: 0 },
-  change: { totalSales: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
+  change: { totalSales: 0, totalOrderItems: 0, totalRevenue: 0, totalItemsSold: 0, averageOrderValue: 0 },
   comparisonChart: [],
   channelBreakdown: [],
   countryBreakdown: [],
@@ -560,7 +562,7 @@ function SalesDashboard({ onSelectReport }) {
             subValue={
               loading
                 ? 'Loading…'
-                : `${overview.today.totalSales} orders · ${overview.today.totalItemsSold} units`
+                : `${overview.today.totalSales} unique orders · ${overview.today.totalOrderItems || overview.today.totalSales} rows · ${overview.today.totalItemsSold} units`
             }
             onClick={() => handlePeriodChange('day')}
             title="View today’s sales"
@@ -571,7 +573,7 @@ function SalesDashboard({ onSelectReport }) {
             subValue={
               loading
                 ? 'Loading…'
-                : `${overview.thisWeek.totalSales} orders · ${overview.thisWeek.totalItemsSold} units`
+                : `${overview.thisWeek.totalSales} unique orders · ${overview.thisWeek.totalOrderItems || overview.thisWeek.totalSales} rows · ${overview.thisWeek.totalItemsSold} units`
             }
             onClick={() => handlePeriodChange('week')}
             title="View this week’s sales"
@@ -582,7 +584,7 @@ function SalesDashboard({ onSelectReport }) {
             subValue={
               loading
                 ? 'Loading…'
-                : `${overview.thisMonth.totalSales} orders · ${overview.thisMonth.totalItemsSold} units`
+                : `${overview.thisMonth.totalSales} unique orders · ${overview.thisMonth.totalOrderItems || overview.thisMonth.totalSales} rows · ${overview.thisMonth.totalItemsSold} units`
             }
             onClick={() => handlePeriodChange('month')}
             title="View this month’s sales"
@@ -593,7 +595,7 @@ function SalesDashboard({ onSelectReport }) {
             subValue={
               loading
                 ? 'Loading…'
-                : `${overview.thisYear.totalSales} orders · ${overview.thisYear.totalItemsSold} units`
+                : `${overview.thisYear.totalSales} unique orders · ${overview.thisYear.totalOrderItems || overview.thisYear.totalSales} rows · ${overview.thisYear.totalItemsSold} units`
             }
             highlight
             onClick={() => handlePeriodChange('allTime')}
@@ -621,20 +623,20 @@ function SalesDashboard({ onSelectReport }) {
             <>
               <label className="sales-dash-filter-field">
                 <span>From</span>
-                <input
-                  type="date"
+                <DateDropdownPicker
+                  aria-label="From date"
                   value={filters.customStart}
                   max={filters.customEnd || undefined}
-                  onChange={(e) => handleCustomDateChange('customStart', e.target.value)}
+                  onChange={(iso) => handleCustomDateChange('customStart', iso)}
                 />
               </label>
               <label className="sales-dash-filter-field">
                 <span>To</span>
-                <input
-                  type="date"
+                <DateDropdownPicker
+                  aria-label="To date"
                   value={filters.customEnd}
                   min={filters.customStart || undefined}
-                  onChange={(e) => handleCustomDateChange('customEnd', e.target.value)}
+                  onChange={(iso) => handleCustomDateChange('customEnd', iso)}
                 />
               </label>
             </>
@@ -698,12 +700,28 @@ function SalesDashboard({ onSelectReport }) {
                 title="Open Sales Report"
               />
               <KpiCard
-                label="Number of Orders"
+                label="Unique Orders"
                 value={currentPeriod.totalSales}
-                subValue={isAllTimeView ? `${currentPeriod.totalItemsSold} units sold` : `${previousLegendLabel}: ${previousPeriod.totalSales}`}
+                subValue={
+                  isAllTimeView
+                    ? `${currentPeriod.totalOrderItems ?? currentPeriod.totalSales} Excel rows · ${currentPeriod.totalItemsSold} units`
+                    : `${previousLegendLabel}: ${previousPeriod.totalSales}`
+                }
                 change={isAllTimeView ? null : change.totalSales}
                 onClick={goToSalesReport}
-                title="Open Sales Report"
+                title="Unique Amazon Order IDs — matches Excel order count"
+              />
+              <KpiCard
+                label="Order Items"
+                value={currentPeriod.totalOrderItems ?? currentPeriod.totalSales}
+                subValue={
+                  isAllTimeView
+                    ? 'One per Excel row'
+                    : `${previousLegendLabel}: ${previousPeriod.totalOrderItems ?? previousPeriod.totalSales}`
+                }
+                change={isAllTimeView ? null : change.totalOrderItems}
+                onClick={goToSalesReport}
+                title="Line items — matches Excel row count"
               />
               <KpiCard
                 label="Units Sold"
@@ -761,7 +779,7 @@ function SalesDashboard({ onSelectReport }) {
                 </div>
 
                 <div className="sales-dash-chart-card">
-                  <h3>Number of Orders Comparison</h3>
+                  <h3>Unique Orders Comparison</h3>
                   <ResponsiveContainer width="100%" height={COMPARISON_CHART_HEIGHT}>
                     <LineChart data={displayComparisonChart}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -798,6 +816,7 @@ function SalesDashboard({ onSelectReport }) {
                       <tr>
                         <th>Product SKU</th>
                         <th>Amazon Order ID</th>
+                        <th>Shipment Item ID</th>
                         <th>Sale Date</th>
                         <th>Channel</th>
                         <th className="num">Quantity</th>
@@ -813,6 +832,7 @@ function SalesDashboard({ onSelectReport }) {
                         >
                           <td className="mono">{row.sku}</td>
                           <td className="mono">{row.sale.amazonOrderId || '—'}</td>
+                          <td className="mono">{row.item?.shipmentItemId || '—'}</td>
                           <td>{new Date(row.sale.salesDate).toLocaleDateString('en-IN')}</td>
                           <td>{row.sale.salesChannel?.name || '—'}</td>
                           <td className="num">{row.qty}</td>

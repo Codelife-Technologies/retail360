@@ -11,6 +11,7 @@ import SalesMonthlyTrendCharts from './SalesMonthlyTrendCharts';
 import SaleDetailsModal from './SaleDetailsModal';
 import ProductDetailsModal from './ProductDetailsModal';
 import ExcelUpload from './ExcelUpload';
+import DateDropdownPicker from './DateDropdownPicker';
 import './SalesSkuReport.css';
 import '../currency/currency.css';
 
@@ -901,6 +902,7 @@ function SalesSkuReport({ onClose }) {
               <colgroup>
                 <col className="sales-by-sale-col-sku" />
                 <col className="sales-by-sale-col-order" />
+                <col className="sales-by-sale-col-shipment" />
                 <col className="sales-by-sale-col-date" />
                 <col className="sales-by-sale-col-channel" />
                 <col className="sales-by-sale-col-num" />
@@ -910,6 +912,7 @@ function SalesSkuReport({ onClose }) {
                 <tr>
                   <th className="sales-by-sale-col-sku">Product SKU</th>
                   <th className="sales-by-sale-col-order">Amazon Order ID</th>
+                  <th className="sales-by-sale-col-shipment">Shipment Item ID</th>
                   <th className="sales-by-sale-col-date">Sale Date</th>
                   <th className="sales-by-sale-col-channel">Channel</th>
                   <th className="sales-by-sale-col-num">Quantity</th>
@@ -925,6 +928,7 @@ function SalesSkuReport({ onClose }) {
                   >
                     <td className="mono sales-by-sale-col-sku">{row.sku}</td>
                     <td className="mono sales-by-sale-col-order">{row.sale.amazonOrderId || '—'}</td>
+                    <td className="mono sales-by-sale-col-shipment">{row.item?.shipmentItemId || '—'}</td>
                     <td className="sales-by-sale-col-date">
                       {new Date(row.sale.salesDate).toLocaleDateString('en-IN')}
                     </td>
@@ -1066,22 +1070,24 @@ function SalesSkuReport({ onClose }) {
           <div className="sales-sku-period-custom">
             <label>
               <span>From</span>
-              <input
-                type="date"
-                name="startDate"
+              <DateDropdownPicker
+                aria-label="From date"
                 value={filters.startDate}
                 max={filters.endDate || undefined}
-                onChange={handleFilterChange}
+                onChange={(iso) => {
+                  setFilters((prev) => ({ ...prev, startDate: iso, period: 'custom' }));
+                }}
               />
             </label>
             <label>
               <span>To</span>
-              <input
-                type="date"
-                name="endDate"
+              <DateDropdownPicker
+                aria-label="To date"
                 value={filters.endDate}
                 min={filters.startDate || undefined}
-                onChange={handleFilterChange}
+                onChange={(iso) => {
+                  setFilters((prev) => ({ ...prev, endDate: iso, period: 'custom' }));
+                }}
               />
             </label>
             <button type="button" className="btn-primary sales-sku-period-apply" onClick={handleApplyFilters}>
@@ -1240,7 +1246,7 @@ function SalesSkuReport({ onClose }) {
               <strong>{periodStats.unitsOrdered.toLocaleString()}</strong>
             </div>
             <div className="sales-period-match-kpi">
-              <span className="sales-period-match-label">Total Order Items</span>
+              <span className="sales-period-match-label">Order Items (Excel rows)</span>
               <strong>{periodStats.totalOrderItems.toLocaleString()}</strong>
             </div>
             <div className="sales-period-match-kpi">

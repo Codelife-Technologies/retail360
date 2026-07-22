@@ -14,7 +14,9 @@ const getImportTotals = (result) => {
   const updated = result?.updated || 0;
   const failed = result?.failed || 0;
   const skipped = result?.skipped || 0;
-  const totalRows = result?.totalRows ?? result?.processed ?? imported + updated + failed + skipped;
+  const totalRows = result?.totalRows ?? result?.excelRows ?? result?.processed ?? imported + updated + failed + skipped;
+  const uniqueOrders = result?.uniqueOrders ?? imported + updated;
+  const lineItemsImported = result?.lineItemsImported ?? null;
   const uploaded = imported + updated;
   const notUploaded = failed + skipped;
   const errorSummary =
@@ -28,6 +30,8 @@ const getImportTotals = (result) => {
     failed,
     skipped,
     totalRows,
+    uniqueOrders,
+    lineItemsImported,
     uploaded,
     notUploaded,
     errorSummary,
@@ -355,8 +359,8 @@ const ExcelUpload = ({
                 }`}
               >
                 {totals.notUploaded > 0
-                  ? `${totals.uploaded} of ${totals.totalRows} record(s) uploaded successfully. ${totals.notUploaded} could not be uploaded.`
-                  : `All ${totals.totalRows} record(s) uploaded successfully.`}
+                  ? `${totals.uniqueOrders} unique order(s) saved from ${totals.totalRows} Excel row(s). ${totals.notUploaded} order group(s) could not be uploaded.`
+                  : `${totals.uniqueOrders} unique order(s) saved from ${totals.totalRows} Excel row(s).`}
               </p>
 
               {totals.notUploaded > 0 && (
@@ -373,17 +377,27 @@ const ExcelUpload = ({
 
               <div className="result-stats">
                 <div className="stat-item info">
-                  <span className="stat-label">Total rows</span>
+                  <span className="stat-label">Excel rows</span>
                   <span className="stat-value">{totals.totalRows}</span>
                 </div>
                 <div className="stat-item success">
-                  <span className="stat-label">Imported</span>
+                  <span className="stat-label">Unique orders</span>
+                  <span className="stat-value">{totals.uniqueOrders}</span>
+                </div>
+                <div className="stat-item success">
+                  <span className="stat-label">New orders</span>
                   <span className="stat-value">{totals.imported}</span>
                 </div>
                 <div className="stat-item info">
-                  <span className="stat-label">Updated</span>
+                  <span className="stat-label">Updated orders</span>
                   <span className="stat-value">{totals.updated}</span>
                 </div>
+                {totals.lineItemsImported != null && (
+                  <div className="stat-item info">
+                    <span className="stat-label">Line items saved</span>
+                    <span className="stat-value">{totals.lineItemsImported}</span>
+                  </div>
+                )}
                 <div className="stat-item error">
                   <span className="stat-label">Failed</span>
                   <span className="stat-value">{totals.failed}</span>

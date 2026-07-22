@@ -17,6 +17,7 @@ function PermissionPicker({
   showPacks = true,
 }) {
   const [search, setSearch] = useState('');
+  const [packFeedback, setPackFeedback] = useState('');
 
   const selectedSet = useMemo(
     () => new Set((selectedIds || []).map(String)),
@@ -57,9 +58,45 @@ function PermissionPicker({
     }
   };
 
+  const packCoverage = useMemo(() => {
+    const map = {};
+    ACCESS_PACKS.forEach((pack) => {
+      const packIds = permissionIdsForCodes(permissions, pack.permissionCodes).map(String);
+      const selectedCount = packIds.filter((id) => selectedSet.has(id)).length;
+      map[pack.id] = {
+        packIds,
+        selectedCount,
+        total: packIds.length,
+        allOn: packIds.length > 0 && selectedCount === packIds.length,
+      };
+    });
+    return map;
+  }, [permissions, selectedSet]);
+
   const applyPack = (pack) => {
-    const packIds = permissionIdsForCodes(permissions, pack.permissionCodes).map(String);
+    const coverage = packCoverage[pack.id] || {
+      packIds: permissionIdsForCodes(permissions, pack.permissionCodes).map(String),
+    };
+    const packIds = coverage.packIds || [];
+
+    if (!permissions.length) {
+      setPackFeedback('Permissions are still loading…');
+      return;
+    }
+    if (packIds.length === 0) {
+      setPackFeedback(`No matching permissions found for “${pack.label}”.`);
+      return;
+    }
+
+    const missing = packIds.filter((id) => !selectedSet.has(id));
+    if (missing.length === 0) {
+      setPackFeedback(`“${pack.label}” is already fully selected.`);
+      return;
+    }
+
     setSelected([...selectedSet, ...packIds]);
+    setSearch('');
+    setPackFeedback(`Added ${missing.length} permission${missing.length === 1 ? '' : 's'} from “${pack.label}”.`);
   };
 
   return (
@@ -89,18 +126,32 @@ function PermissionPicker({
         <div className="um-access-packs">
           <div className="um-access-packs-label">Quick access packs</div>
           <div className="um-access-packs-row">
-            {ACCESS_PACKS.map((pack) => (
-              <button
-                key={pack.id}
-                type="button"
-                className="um-access-pack-btn"
-                title={pack.description}
-                onClick={() => applyPack(pack)}
-              >
-                + {pack.label}
-              </button>
-            ))}
+            {ACCESS_PACKS.map((pack) => {
+              const coverage = packCoverage[pack.id];
+              const active = coverage?.allOn;
+              return (
+                <button
+                  key={pack.id}
+                  type="button"
+                  className={`um-access-pack-btn${active ? ' is-active' : ''}`}
+                  title={pack.description}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    applyPack(pack);
+                  }}
+                >
+                  {active ? '✓ ' : '+ '}
+                  {pack.label}
+                </button>
+              );
+            })}
           </div>
+          {packFeedback ? (
+            <div className="um-access-pack-feedback" role="status">
+              {packFeedback}
+            </div>
+          ) : null}
         </div>
       ) : null}
 

@@ -12,6 +12,7 @@ import {
   HR_PERIOD_OPTIONS,
   getHrPeriodRange,
   formatHrPeriodLabel,
+  downloadBlobResponse,
 } from '../utils/hrUtils';
 
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'];
@@ -50,6 +51,7 @@ function EmployeeTasks() {
     };
   });
   const [viewTask, setViewTask] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -69,6 +71,22 @@ function EmployeeTasks() {
     }
   }, [filters]);
 
+  const handleExportExcel = async () => {
+    try {
+      setExporting(true);
+      const params = {};
+      if (filters.employee) params.employee = filters.employee;
+      if (filters.status) params.status = filters.status;
+      if (filters.fromDate) params.fromDate = filters.fromDate;
+      if (filters.toDate) params.toDate = filters.toDate;
+      const response = await hrTasksAPI.exportExcel(params);
+      downloadBlobResponse(response, `hr_tasks_${filters.fromDate || 'export'}.xlsx`);
+    } catch (error) {
+      alert(error.response?.data?.error || error.message || 'Failed to download Excel');
+    } finally {
+      setExporting(false);
+    }
+  };
   useEffect(() => {
     hrEmployeesAPI.getAll({ status: 'Active' }).then((res) => {
       setEmployees(extractList(res));
@@ -194,9 +212,19 @@ function EmployeeTasks() {
           <h1>Assign Task</h1>
           <p className="hr-page-subtitle">Assign tasks to employees with a deadline</p>
         </div>
-        <button type="button" className="hr-btn hr-btn-primary" onClick={openAssignModal}>
-          + Assign Task
-        </button>
+        <div className="hr-page-actions">
+          <button
+            type="button"
+            className="hr-btn hr-btn-secondary"
+            onClick={handleExportExcel}
+            disabled={exporting || loading}
+          >
+            {exporting ? 'Downloading…' : 'Download Excel'}
+          </button>
+          <button type="button" className="hr-btn hr-btn-primary" onClick={openAssignModal}>
+            + Assign Task
+          </button>
+        </div>
       </header>
 
       <div className="hr-worklog-filters">

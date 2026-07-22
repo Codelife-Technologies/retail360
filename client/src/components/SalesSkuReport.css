@@ -340,6 +340,10 @@
   font-size: 0.875rem;
 }
 
+.sales-sku-period-custom .date-dropdown-picker {
+  margin-top: 0;
+}
+
 .sales-sku-period-apply {
   padding: 0.4rem 0.9rem !important;
   font-size: 0.875rem !important;
@@ -1149,12 +1153,17 @@
 
 .sales-sku-table.sales-detail-table col.sales-by-sale-col-order,
 .sales-by-sale-col-order {
-  width: 24%;
+  width: 18%;
+}
+
+.sales-sku-table.sales-detail-table col.sales-by-sale-col-shipment,
+.sales-by-sale-col-shipment {
+  width: 14%;
 }
 
 .sales-sku-table.sales-detail-table col.sales-by-sale-col-date,
 .sales-by-sale-col-date {
-  width: 12%;
+  width: 10%;
 }
 
 .sales-sku-table.sales-detail-table col.sales-by-sale-col-channel,
@@ -1181,6 +1190,14 @@
 }
 
 .sales-by-sale-col-order {
+  min-width: 0;
+  white-space: normal;
+  word-break: break-all;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.sales-by-sale-col-shipment {
   min-width: 0;
   white-space: normal;
   word-break: break-all;

@@ -101,9 +101,9 @@ function countSaleLineItems(sale) {
 }
 
 function computeSaleStats(sales = [], rates = null) {
-  // Number of Orders = line items (e.g. April 3 multi-SKU orders → all lines counted)
-  const totalSales = sales.reduce((sum, s) => sum + countSaleLineItems(s), 0);
+  // Unique orders = Sale documents (matches Excel import "Imported" / Amazon Order IDs)
   const orderCount = sales.length;
+  const totalOrderItems = sales.reduce((sum, s) => sum + countSaleLineItems(s), 0);
   const totalRevenue = sales.reduce((sum, s) => sum + (s.total || 0), 0);
   const totalRevenueInr = rates
     ? sales.reduce((sum, s) => sum + saleAmountInr(s, rates), 0)
@@ -112,13 +112,14 @@ function computeSaleStats(sales = [], rates = null) {
     (sum, s) => sum + s.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0),
     0
   );
-  // AOV stays revenue ÷ unique orders (Sale documents), not line rows
   const averageOrderValue = orderCount > 0 ? totalRevenueInr / orderCount : 0;
   const totalRevenueUsd = rates
     ? convertAmount(totalRevenueInr, BASE_CURRENCY, 'USD', rates)
     : totalRevenueInr;
   return {
-    totalSales,
+    totalSales: orderCount,
+    orderCount,
+    totalOrderItems,
     totalRevenue: Math.round(totalRevenue * 100) / 100,
     totalRevenueInr: Math.round(totalRevenueInr * 100) / 100,
     totalRevenueUsd: Math.round(totalRevenueUsd * 100) / 100,
@@ -150,7 +151,7 @@ function buildCountrySalesBreakdown(sales = [], rates = null) {
       });
     }
     const row = map.get(key);
-    row.orders += countSaleLineItems(s);
+    row.orders += 1;
     const inr = saleAmountInr(s, rates);
     row.amountInr += inr;
     const original =
@@ -466,7 +467,7 @@ function salesTotalsByDateKey(sales, rates = null) {
     const key = toDateInputStr(startOfDay(new Date(sale.salesDate)));
     if (!map[key]) map[key] = { revenue: 0, orders: 0 };
     map[key].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
-    map[key].orders += countSaleLineItems(sale);
+    map[key].orders += 1;
   });
   return map;
 }
@@ -480,7 +481,7 @@ function salesTotalsByHourKey(sales, dayStart, rates = null) {
     const hour = saleDate.getHours();
     if (!map[hour]) map[hour] = { revenue: 0, orders: 0 };
     map[hour].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
-    map[hour].orders += countSaleLineItems(sale);
+    map[hour].orders += 1;
   });
   return map;
 }
@@ -683,14 +684,14 @@ function buildIndexedComparison(
     const idx = bucketIndexForDate(sale.salesDate, currentRange.start, timeline);
     if (!currentAgg[idx]) currentAgg[idx] = { revenue: 0, orders: 0 };
     currentAgg[idx].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
-    currentAgg[idx].orders += countSaleLineItems(sale);
+    currentAgg[idx].orders += 1;
   });
 
   previousSales.forEach((sale) => {
     const idx = bucketIndexForDate(sale.salesDate, previousRange.start, timeline);
     if (!previousAgg[idx]) previousAgg[idx] = { revenue: 0, orders: 0 };
     previousAgg[idx].revenue += rates ? saleAmountInr(sale, rates) : (sale.total || 0);
-    previousAgg[idx].orders += countSaleLineItems(sale);
+    previousAgg[idx].orders += 1;
   });
 
   const maxIndex = maxBucketIndex(currentRange.start, currentRange.end, timeline);
@@ -732,7 +733,7 @@ function buildChannelBreakdown(sales, rates = null) {
     channelMap[channelId].revenue += rates
       ? saleAmountInr(sale, rates)
       : (sale.total || 0);
-    channelMap[channelId].orders += countSaleLineItems(sale);
+    channelMap[channelId].orders += 1;
   });
 
   return Object.values(channelMap)
@@ -1321,6 +1322,7 @@ async function fetchPurchasesForReport(filters = {}) {
 const SALES_ORDER_EXPORT_HEADERS = [
   { key: 'productSkus', label: 'Product SKU' },
   { key: 'amazonOrderId', label: 'Amazon Order ID' },
+  { key: 'shipmentItemId', label: 'Shipment Item ID' },
   { key: 'saleDate', label: 'Sale Date' },
   { key: 'channel', label: 'Channel' },
   { key: 'qtyOrdered', label: 'Quantity' },
@@ -1384,6 +1386,7 @@ function mapSalesToExportRows(sales) {
       rows.push({
         productSkus: item ? (item.product?.sku || item.sku || '') : '',
         amazonOrderId: sale.amazonOrderId || '',
+        shipmentItemId: item?.shipmentItemId || '',
         saleDate: sale.salesDate ? new Date(sale.salesDate).toISOString().slice(0, 10) : '',
         channel: sale.salesChannel?.name || '',
         qtyOrdered: qty,
@@ -1816,6 +1819,7 @@ router.get('/sales/dashboard', async (req, res) => {
 
     const change = {
       totalSales: pctChange(currentPeriod.totalSales, previousPeriod.totalSales),
+      totalOrderItems: pctChange(currentPeriod.totalOrderItems, previousPeriod.totalOrderItems),
       totalRevenue: pctChange(currentPeriod.totalRevenueInr, previousPeriod.totalRevenueInr),
       totalItemsSold: pctChange(currentPeriod.totalItemsSold, previousPeriod.totalItemsSold),
       averageOrderValue: pctChange(currentPeriod.averageOrderValue, previousPeriod.averageOrderValue),

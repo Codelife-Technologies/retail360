@@ -61,15 +61,36 @@ async function ensureSingleDefault(officeId, isDefault) {
 }
 
 async function syncEmployeeOfficeLinks(office) {
-  const employeeIds = (office.assignedEmployees || []).map((id) => String(id));
+  const linkedIds = new Set((office.assignedEmployees || []).map((id) => String(id)));
+
+  // Also link active employees in assigned departments so direct officeLocation is set.
+  const departments = (office.assignedDepartments || [])
+    .map((d) => String(d || '').trim())
+    .filter(Boolean);
+  if (departments.length) {
+    const deptRegexes = departments.map(
+      (d) => new RegExp(`^${String(d).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+    );
+    const byDept = await Employee.find({
+      status: 'Active',
+      $or: deptRegexes.map((rx) => ({ department: rx })),
+    })
+      .select('_id')
+      .lean();
+    byDept.forEach((emp) => linkedIds.add(String(emp._id)));
+  }
+
+  const employeeIds = [...linkedIds];
   if (employeeIds.length) {
     await Employee.updateMany(
       { _id: { $in: employeeIds } },
       { $set: { officeLocation: office._id } }
     );
   }
+
   // Clear direct link for employees who were previously linked only via this office
-  // but are no longer in assignedEmployees (keep department-based assignment working).
+  // but are no longer covered by assignment / department.
+  // Default / single-office coverage is resolved at attendance time without forcing links.
   await Employee.updateMany(
     {
       officeLocation: office._id,

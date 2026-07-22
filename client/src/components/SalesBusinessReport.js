@@ -16,7 +16,7 @@ const REPORT_COLUMNS = [
   { key: 'date', label: 'Date', type: 'text' },
   { key: 'orderedProductSales', label: 'Ordered Product Sales', type: 'currency' },
   { key: 'unitsOrdered', label: 'Units Ordered', type: 'number' },
-  { key: 'totalOrderItems', label: 'Total Order Items', type: 'number', highlight: 'teal' },
+  { key: 'totalOrderItems', label: 'Order Items (Excel rows)', type: 'number', highlight: 'teal' },
   { key: 'avgSalesPerOrderItem', label: 'Average Sales per Order Item', type: 'currency' },
   { key: 'avgUnitsPerOrderItem', label: 'Average Units per Order Item', type: 'number' },
   { key: 'avgSellingPrice', label: 'Average Selling Price', type: 'currency' },
@@ -300,7 +300,7 @@ const SalesBusinessReport = forwardRef(function SalesBusinessReport({
             <strong>{Number(periodTotals.unitsOrdered || 0).toLocaleString()}</strong>
           </div>
           <div className="sales-period-match-kpi">
-            <span className="sales-period-match-label">Total Order Items</span>
+            <span className="sales-period-match-label">Order Items (Excel rows)</span>
             <strong>{Number(periodTotals.totalOrderItems || 0).toLocaleString()}</strong>
           </div>
           <div className="sales-period-match-kpi">

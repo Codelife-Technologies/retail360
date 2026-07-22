@@ -29,14 +29,28 @@ async function resolveOfficeForEmployee(employeeId) {
   if (byEmployee) return byEmployee;
 
   if (employee.department) {
+    const dept = String(employee.department).trim();
     const byDept = await OfficeLocation.findOne({
       isActive: true,
-      assignedDepartments: employee.department,
+      assignedDepartments: {
+        $elemMatch: { $regex: `^${escapeRegex(dept)}$`, $options: 'i' },
+      },
     }).lean();
     if (byDept) return byDept;
   }
 
-  return OfficeLocation.findOne({ isActive: true, isDefault: true }).lean();
+  const defaultOffice = await OfficeLocation.findOne({ isActive: true, isDefault: true }).lean();
+  if (defaultOffice) return defaultOffice;
+
+  // Single active office → apply to everyone (common HR setup).
+  const activeOffices = await OfficeLocation.find({ isActive: true }).limit(2).lean();
+  if (activeOffices.length === 1) return activeOffices[0];
+
+  return null;
+}
+
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**

@@ -101,6 +101,19 @@
   width: auto !important;
 }
 
+.um-perm-picker .um-access-pack-btn.is-active {
+  background: #6b3894 !important;
+  border-color: #6b3894 !important;
+  color: #fff !important;
+}
+
+.um-access-pack-feedback {
+  margin-top: 0.45rem;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5b21b6;
+}
+
 .um-perm-groups {
   max-height: min(55vh, 480px);
   overflow-y: auto;

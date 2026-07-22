@@ -213,3 +213,24 @@ export function minutesFromHoursAndMinutes(hours, minutes) {
   const m = Number(minutes) || 0;
   return Math.max(0, Math.round(h * 60 + m));
 }
+
+/** Trigger a browser download for a blob/arraybuffer API response. */
+export function downloadBlobResponse(response, fallbackName = 'download.xlsx') {
+  const blob = response?.data instanceof Blob
+    ? response.data
+    : new Blob([response?.data], {
+        type: response?.headers?.['content-type']
+          || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+  const disposition = response?.headers?.['content-disposition'] || '';
+  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+  const filename = decodeURIComponent(match?.[1] || match?.[2] || fallbackName);
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}

@@ -78,6 +78,7 @@ export const hrHolidaysAPI = {
 export const hrTasksAPI = {
   getToday: (params) => api.get('/hr/tasks/today', { params }),
   getAll: (params) => api.get('/hr/tasks', { params }),
+  exportExcel: (params) => api.get('/hr/tasks/export', { params, responseType: 'blob' }),
   create: (data) => api.post('/hr/tasks', data),
   update: (id, data) => api.put(`/hr/tasks/${id}`, data),
   updateStatus: (id, status) => api.patch(`/hr/tasks/${id}/status`, { status }),
@@ -88,6 +89,9 @@ export const hrWorkLogsAPI = {
   getAll: (params) => api.get('/hr/work-logs', { params }),
   getSummary: (params) => api.get('/hr/work-logs/summary', { params }),
   getMonthlyReport: (params) => api.get('/hr/work-logs/monthly-report', { params }),
+  exportExcel: (params) => api.get('/hr/work-logs/export', { params, responseType: 'blob' }),
+  exportMonthlyExcel: (params) =>
+    api.get('/hr/work-logs/monthly-report/export', { params, responseType: 'blob' }),
   getByDate: (params) => api.get('/hr/work-logs/by-date', { params }),
   save: (data) => api.post('/hr/work-logs', data),
   update: (id, data) => api.put(`/hr/work-logs/${id}`, data),

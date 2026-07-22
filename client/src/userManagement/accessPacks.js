@@ -186,8 +186,12 @@ export function groupPermissionsByModule(permissions = []) {
 }
 
 export function permissionIdsForCodes(permissions = [], codes = []) {
-  const wanted = new Set(codes);
-  return permissions.filter((p) => wanted.has(p.code)).map((p) => p._id);
+  // Permission.code is stored lowercase in Mongo; packs/UI often use camelCase.
+  const wanted = new Set((codes || []).map((c) => String(c || '').toLowerCase()));
+  return permissions
+    .filter((p) => wanted.has(String(p?.code || '').toLowerCase()))
+    .map((p) => p._id || p.id)
+    .filter(Boolean);
 }
 
 export default ACCESS_PACKS;

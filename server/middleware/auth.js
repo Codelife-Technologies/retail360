@@ -3,21 +3,21 @@ const User = require('../models/User');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'retailos-jwt-secret-change-in-production';
 
-/** Modules unlocked by master.full (Master folder pages). */
+/** Modules unlocked by master.full (Master folder pages). Codes are lowercase in DB. */
 const MASTER_PERMISSION_MODULES = new Set([
   'products',
   'stock',
   'categories',
   'subcategories',
   'prices',
-  'priceMasters',
+  'pricemasters',
   'units',
   'suppliers',
-  'companyProfile',
-  'shipmentVendors',
+  'companyprofile',
+  'shipmentvendors',
   'locations',
-  'salesChannels',
-  'salesLocations',
+  'saleschannels',
+  'saleslocations',
   'master',
 ]);
 
@@ -92,11 +92,19 @@ function requirePermission(permissionCode) {
   return async (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'Authentication required' });
     const permissions = await getEffectivePermissions(req.user.id);
-    if (permissions.has('admin.all') || permissions.has(permissionCode)) {
+    const wanted = String(permissionCode || '').toLowerCase();
+    const hasCode = [...permissions].some((code) => {
+      const normalized = String(code || '').toLowerCase();
+      return normalized === 'admin.all' || normalized === wanted;
+    });
+    if (hasCode) {
       return next();
     }
-    if (permissions.has('master.full')) {
-      const moduleKey = String(permissionCode || '').split('.')[0];
+    const hasMasterFull = [...permissions].some(
+      (code) => String(code || '').toLowerCase() === 'master.full'
+    );
+    if (hasMasterFull) {
+      const moduleKey = String(permissionCode || '').split('.')[0].toLowerCase();
       if (MASTER_PERMISSION_MODULES.has(moduleKey)) {
         return next();
       }

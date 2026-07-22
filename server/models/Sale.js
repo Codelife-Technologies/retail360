@@ -21,7 +21,13 @@ const saleItemSchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 0
-  }
+  },
+  /** Amazon / marketplace line id (e.g. shipment-item-id). */
+  shipmentItemId: {
+    type: String,
+    trim: true,
+    default: '',
+  },
 }, { _id: false });
 
 const customerSchema = new mongoose.Schema({

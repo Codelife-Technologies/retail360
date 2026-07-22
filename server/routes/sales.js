@@ -15,10 +15,10 @@ const {
   SKU_COLUMN_KEYS,
   QUANTITY_COLUMN_KEYS,
   UNIT_PRICE_COLUMN_KEYS,
+  SHIPMENT_ITEM_ID_COLUMN_KEYS,
   getImportCellValue,
   parseExcelNumber,
   resolveProductForImport,
-  mergeSaleItems,
   parseImportSaleDate,
 } = require('../utils/saleImportUtils');
 
@@ -222,6 +222,7 @@ async function buildSalePayloadFromImportGroup(entries, importContext = {}) {
       quantity,
       unitPrice: resolvedUnitPrice,
       total: Math.round(lineTotal * 100) / 100,
+      shipmentItemId: getImportCellValue(row, SHIPMENT_ITEM_ID_COLUMN_KEYS).toString().trim(),
     });
   }
 
@@ -229,7 +230,9 @@ async function buildSalePayloadFromImportGroup(entries, importContext = {}) {
     throw new Error('No valid line items in this sale group');
   }
 
-  const mergedItems = mergeSaleItems(items);
+  // Keep one line per Excel row (do not collapse same-SKU rows) so Order Items
+  // match the spreadsheet. Unique orders still group by Amazon Order ID.
+  const mergedItems = items;
   const mergedProductIds = new Set(mergedItems.map((item) => String(item.product)));
   const mergedProductDocs = productDocs.filter(
     (product, index, list) =>
@@ -429,6 +432,7 @@ const SALES_IMPORT_HEADERS = [
   { key: 'customerPhone', label: 'Customer Phone' },
   { key: 'customerAddress', label: 'Customer Address' },
   { key: 'amazonOrderId', label: 'Amazon Order ID' },
+  { key: 'shipmentItemId', label: 'Shipment Item ID' },
   { key: 'salesDate', label: 'Sales Date (YYYY-MM-DD)' },
   { key: 'discount', label: 'Discount' },
   { key: 'defaultTaxRate', label: 'Default Tax Rate (%)' },
@@ -454,6 +458,7 @@ router.get('/template', (req, res) => {
         customerPhone: '9999999999',
         customerAddress: '123 Main St',
         amazonOrderId: '123-1234567-1234567',
+        shipmentItemId: 'SHIP-ITEM-001',
         salesDate: '2026-06-23',
         discount: 0,
         defaultTaxRate: 0,
@@ -474,6 +479,7 @@ router.get('/template', (req, res) => {
         customerPhone: '9999999999',
         customerAddress: '123 Main St',
         amazonOrderId: '123-1234567-1234567',
+        shipmentItemId: 'SHIP-ITEM-002',
         salesDate: '2026-06-23',
         discount: 0,
         defaultTaxRate: 0,
@@ -551,6 +557,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
     let failed = 0;
     let productsCreated = 0;
     let lineItemsSkipped = 0;
+    let lineItemsImported = 0;
     let importedQuantityTotal = 0;
     const fileAmazonOrderIds = new Map();
     const createdSkus = new Set();
@@ -615,6 +622,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
           existing.notes = payload.notes;
           await existing.save();
           updated += 1;
+          lineItemsImported += payload.items.length;
           importedQuantityTotal += saleItemQuantity;
           continue;
         }
@@ -631,6 +639,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
         delete sale.warehouseLocation;
         await sale.save();
         imported += 1;
+        lineItemsImported += payload.items.length;
         importedQuantityTotal += saleItemQuantity;
       } catch (err) {
         failed += 1;
@@ -645,6 +654,9 @@ router.post('/import', upload.single('file'), async (req, res) => {
       failed,
       productsCreated,
       lineItemsSkipped,
+      lineItemsImported,
+      uniqueOrders: imported + updated,
+      excelRows: rows.length,
       fileQuantityTotal,
       importedQuantityTotal,
       missingQuantity: Math.max(0, fileQuantityTotal - importedQuantityTotal),

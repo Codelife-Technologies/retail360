@@ -16,6 +16,14 @@ const UNIT_PRICE_COLUMN_KEYS = [
   'Unit Price (Amount)',
   'Price',
 ];
+const SHIPMENT_ITEM_ID_COLUMN_KEYS = [
+  'Shipment Item ID',
+  'Shipment Item Id',
+  'shipment-item-id',
+  'shipment_item_id',
+  'Order Item ID',
+  'order-item-id',
+];
 
 function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -287,6 +295,7 @@ module.exports = {
   SKU_COLUMN_KEYS,
   QUANTITY_COLUMN_KEYS,
   UNIT_PRICE_COLUMN_KEYS,
+  SHIPMENT_ITEM_ID_COLUMN_KEYS,
   getImportCellValue,
   parseExcelNumber,
   buildSkuLookupCandidates,

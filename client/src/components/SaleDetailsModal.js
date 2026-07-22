@@ -125,6 +125,7 @@ function SaleDetailsModal({ sale, loading, onClose }) {
                       <tr>
                         <th className="sale-line-image-col">Image</th>
                         <th>SKU</th>
+                        <th>Shipment Item ID</th>
                         <th>Product</th>
                         <th>Qty</th>
                         <th>Unit Price</th>
@@ -149,6 +150,7 @@ function SaleDetailsModal({ sale, loading, onClose }) {
                               />
                             </td>
                             <td className="mono">{getProductSku(item)}</td>
+                            <td className="mono">{item.shipmentItemId || '—'}</td>
                             <td>{getProductLabel(item)}</td>
                             <td className="num">{item.quantity ?? '—'}</td>
                             <td className="num">{formatSaleMoney(item.unitPrice)}</td>

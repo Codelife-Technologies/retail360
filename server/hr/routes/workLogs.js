@@ -5,6 +5,7 @@ const Employee = require('../models/Employee');
 const { paginate } = require('../../utils/pagination');
 const { startOfDay, endOfDay } = require('../utils/employeeId');
 const { getDateKeyInAppTz, zonedDateTimeToUtc } = require('../../utils/appTimezone');
+const { exportToExcel } = require('../../utils/excelGenerator');
 const {
   resolveAttendanceScope,
   applyEmployeeScope,
@@ -28,6 +29,29 @@ function parseCalendarDate(value, fallback = new Date()) {
 function buildDayRangeQuery(dateValue) {
   const dayStart = parseCalendarDate(dateValue);
   return { $gte: dayStart, $lte: endOfDay(dayStart) };
+}
+
+function employeeDisplayName(emp) {
+  if (!emp) return '';
+  return `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+}
+
+function formatExportDate(value) {
+  if (!value) return '';
+  const key = getDateKeyInAppTz(value);
+  if (!key) return '';
+  const [y, m, d] = key.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function formatDurationLabel(minutes) {
+  const total = Math.max(0, Math.round(Number(minutes) || 0));
+  if (total === 0) return '0m';
+  const hours = Math.floor(total / 60);
+  const mins = total % 60;
+  if (hours && mins) return `${hours}h ${mins}m`;
+  if (hours) return `${hours}h`;
+  return `${mins}m`;
 }
 
 /** Find day's log, including legacy docs saved as UTC midnight (buggy setHours on UTC hosts). */
@@ -219,6 +243,112 @@ router.get('/summary', async (req, res) => {
   }
 });
 
+router.get('/monthly-report/export', async (req, res) => {
+  try {
+    const scope = await resolveAttendanceScope(req);
+    if (!scope.canManageAll) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const now = new Date();
+    const year = parseInt(req.query.year, 10) || now.getFullYear();
+    const month = parseInt(req.query.month, 10) || now.getMonth() + 1;
+    const { department, status } = req.query;
+
+    if (month < 1 || month > 12) {
+      return res.status(400).json({ error: 'Invalid month' });
+    }
+
+    const fromDate = startOfDay(new Date(year, month - 1, 1));
+    const toDate = endOfDay(new Date(year, month, 0));
+
+    const employeeQuery = { status: 'Active' };
+    if (department) employeeQuery.department = department;
+    if (req.query.employee) employeeQuery._id = req.query.employee;
+
+    const employees = await Employee.find(employeeQuery)
+      .select('employeeId firstName lastName department designation')
+      .sort({ firstName: 1, lastName: 1 })
+      .lean();
+
+    const logQuery = {
+      date: { $gte: fromDate, $lte: toDate },
+      employee: { $in: employees.map((emp) => emp._id) },
+    };
+    if (status) logQuery.status = status;
+
+    const logs = await DailyWorkLog.find(logQuery).sort({ date: 1 }).lean();
+    const logsByEmployee = new Map();
+    logs.forEach((log) => {
+      const key = String(log.employee);
+      if (!logsByEmployee.has(key)) logsByEmployee.set(key, []);
+      logsByEmployee.get(key).push(log);
+    });
+
+    const rows = [];
+    employees.forEach((emp) => {
+      const employeeLogs = logsByEmployee.get(String(emp._id)) || [];
+      const name = employeeDisplayName(emp);
+      if (!employeeLogs.length) {
+        rows.push({
+          employee: name,
+          employeeId: emp.employeeId || '',
+          department: emp.department || '',
+          date: '',
+          task: 'No logs',
+          details: '',
+          timeSpent: '',
+          status: '',
+          notes: '',
+        });
+        return;
+      }
+
+      employeeLogs.forEach((log) => {
+        const date = formatExportDate(log.date);
+        const notes = log.notes || '';
+        const entries = Array.isArray(log.entries) && log.entries.length ? log.entries : [null];
+        entries.forEach((entry, index) => {
+          rows.push({
+            employee: index === 0 ? name : '',
+            employeeId: index === 0 ? emp.employeeId || '' : '',
+            department: index === 0 ? emp.department || '' : '',
+            date: index === 0 ? date : '',
+            task: entry?.description || '—',
+            details: entry?.details || '',
+            timeSpent: entry
+              ? formatDurationLabel(entry.timeSpentMinutes)
+              : formatDurationLabel(log.totalMinutes),
+            status: index === 0 ? log.status : '',
+            notes: index === 0 ? notes : '',
+          });
+        });
+      });
+    });
+
+    const headers = [
+      { key: 'employee', label: 'Employee' },
+      { key: 'employeeId', label: 'Employee ID' },
+      { key: 'department', label: 'Department' },
+      { key: 'date', label: 'Date' },
+      { key: 'task', label: 'Task' },
+      { key: 'details', label: 'Details' },
+      { key: 'timeSpent', label: 'Time' },
+      { key: 'status', label: 'Status' },
+      { key: 'notes', label: 'Notes' },
+    ];
+
+    const buffer = exportToExcel(rows, headers);
+    const label = new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' })
+      .replace(/\s+/g, '_');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=hr_work_logs_${label}.xlsx`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/monthly-report', async (req, res) => {
   try {
     const scope = await resolveAttendanceScope(req);
@@ -318,6 +448,78 @@ router.get('/monthly-report', async (req, res) => {
       totals,
       employees: employeeReports,
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/export', async (req, res) => {
+  try {
+    const scope = await resolveAttendanceScope(req);
+    const { status, fromDate, toDate } = req.query;
+    const query = {
+      ...buildDateRangeQuery(fromDate, toDate),
+    };
+
+    if (status) query.status = status;
+    applyEmployeeScope(query, scope, req.query.employee);
+
+    if (!scope.canManageAll && !scope.employeeId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const logs = await DailyWorkLog.find(query)
+      .populate(EMPLOYEE_POPULATE)
+      .sort({ date: -1, updatedAt: -1 })
+      .lean();
+
+    const rows = [];
+    logs.forEach((log) => {
+      const emp = log.employee;
+      const base = {
+        date: formatExportDate(log.date),
+        employeeId: emp?.employeeId || '',
+        employee: employeeDisplayName(emp),
+        department: emp?.department || '',
+        status: log.status || '',
+        notes: log.notes || '',
+        dayTotal: formatDurationLabel(log.totalMinutes),
+      };
+      const entries = Array.isArray(log.entries) && log.entries.length ? log.entries : [null];
+      entries.forEach((entry, index) => {
+        rows.push({
+          date: index === 0 ? base.date : '',
+          employeeId: index === 0 ? base.employeeId : '',
+          employee: index === 0 ? base.employee : '',
+          department: index === 0 ? base.department : '',
+          task: entry?.description || (entry === null ? '—' : ''),
+          details: entry?.details || '',
+          timeSpent: entry ? formatDurationLabel(entry.timeSpentMinutes) : '',
+          dayTotal: index === 0 ? base.dayTotal : '',
+          status: index === 0 ? base.status : '',
+          notes: index === 0 ? base.notes : '',
+        });
+      });
+    });
+
+    const headers = [
+      { key: 'date', label: 'Date' },
+      { key: 'employeeId', label: 'Employee ID' },
+      { key: 'employee', label: 'Employee' },
+      { key: 'department', label: 'Department' },
+      { key: 'task', label: 'Task' },
+      { key: 'details', label: 'Details' },
+      { key: 'timeSpent', label: 'Time Spent' },
+      { key: 'dayTotal', label: 'Day Total' },
+      { key: 'status', label: 'Status' },
+      { key: 'notes', label: 'Notes' },
+    ];
+
+    const buffer = exportToExcel(rows, headers);
+    const stamp = getDateKeyInAppTz(new Date());
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=hr_work_logs_${stamp}.xlsx`);
+    res.send(buffer);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

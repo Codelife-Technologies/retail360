@@ -4,6 +4,8 @@ const EmployeeTask = require('../models/EmployeeTask');
 const Employee = require('../models/Employee');
 const { paginate } = require('../../utils/pagination');
 const { startOfDay, endOfDay } = require('../utils/employeeId');
+const { getDateKeyInAppTz } = require('../../utils/appTimezone');
+const { exportToExcel } = require('../../utils/excelGenerator');
 const {
   resolveAttendanceScope,
   applyEmployeeScope,
@@ -17,6 +19,19 @@ function parseInputDate(value, fallback = new Date()) {
   if (!value) return startOfDay(fallback);
   const date = startOfDay(value);
   return Number.isNaN(date.getTime()) ? startOfDay(fallback) : date;
+}
+
+function employeeDisplayName(emp) {
+  if (!emp) return '';
+  return `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+}
+
+function formatExportDate(value) {
+  if (!value) return '';
+  const key = getDateKeyInAppTz(value);
+  if (!key) return '';
+  const [y, m, d] = key.split('-');
+  return `${d}/${m}/${y}`;
 }
 
 /** Move overdue Pending tasks to Backlog (deadline before today). */
@@ -69,6 +84,35 @@ function buildTimelineOverlapQuery(fromDate, toDate) {
   };
 }
 
+function buildTaskListQuery(req, scope) {
+  const { status, source, fromDate, toDate } = req.query;
+  const query = {};
+  if (status) query.status = status;
+  if (source) query.source = source;
+  if (fromDate && toDate) {
+    Object.assign(query, buildTimelineOverlapQuery(fromDate, toDate));
+  }
+  applyEmployeeScope(query, scope, req.query.employee);
+  return query;
+}
+
+function sortTasksByStatusThenDate(list = []) {
+  const statusOrder = {
+    Backlog: 0,
+    Pending: 1,
+    'In Progress': 2,
+    'On Hold': 3,
+    Completed: 4,
+    Cancelled: 5,
+  };
+  return [...list].sort((a, b) => {
+    const aRank = statusOrder[a.status] ?? 50;
+    const bRank = statusOrder[b.status] ?? 50;
+    if (aRank !== bRank) return aRank - bRank;
+    return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
+  });
+}
+
 router.get('/today', async (req, res) => {
   try {
     await promoteOverduePendingToBacklog();
@@ -92,20 +136,70 @@ router.get('/today', async (req, res) => {
   }
 });
 
+router.get('/export', async (req, res) => {
+  try {
+    await promoteOverduePendingToBacklog();
+    const scope = await resolveAttendanceScope(req);
+    if (!scope.canManageAll && !scope.employeeId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const query = buildTaskListQuery(req, scope);
+    const tasks = sortTasksByStatusThenDate(
+      await EmployeeTask.find(query)
+        .populate(EMPLOYEE_POPULATE)
+        .sort({ startDate: 1, dueDate: 1, priority: -1 })
+        .lean()
+    );
+
+    const rows = tasks.map((task) => ({
+      issueDate: formatExportDate(task.startDate),
+      deadline: formatExportDate(task.dueDate),
+      employeeId: task.employee?.employeeId || '',
+      employee: employeeDisplayName(task.employee),
+      department: task.employee?.department || '',
+      task: task.title || '',
+      description: task.description || '',
+      priority: task.priority || '',
+      status: task.status || '',
+      source: task.source || '',
+      assignedBy: task.assignedBy || '',
+      notes: task.delayReason || '',
+      completedAt: formatExportDate(task.completedAt),
+    }));
+
+    const headers = [
+      { key: 'issueDate', label: 'Date of Issue' },
+      { key: 'deadline', label: 'Deadline' },
+      { key: 'employeeId', label: 'Employee ID' },
+      { key: 'employee', label: 'Employee' },
+      { key: 'department', label: 'Department' },
+      { key: 'task', label: 'Task' },
+      { key: 'description', label: 'Description' },
+      { key: 'priority', label: 'Priority' },
+      { key: 'status', label: 'Status' },
+      { key: 'source', label: 'Source' },
+      { key: 'assignedBy', label: 'Assigned By' },
+      { key: 'notes', label: 'Task Notes' },
+      { key: 'completedAt', label: 'Completed At' },
+    ];
+
+    const buffer = exportToExcel(rows, headers);
+    const stamp = getDateKeyInAppTz(new Date());
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=hr_tasks_${stamp}.xlsx`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     await promoteOverduePendingToBacklog();
     const scope = await resolveAttendanceScope(req);
-    const { status, source, page, limit, fromDate, toDate } = req.query;
-    const query = {};
-
-    if (status) query.status = status;
-    if (source) query.source = source;
-    if (fromDate && toDate) {
-      Object.assign(query, buildTimelineOverlapQuery(fromDate, toDate));
-    }
-
-    applyEmployeeScope(query, scope, req.query.employee);
+    const { page, limit } = req.query;
+    const query = buildTaskListQuery(req, scope);
 
     if (!scope.canManageAll && !scope.employeeId) {
       if (page || limit) {
@@ -115,21 +209,6 @@ router.get('/', async (req, res) => {
     }
 
     const sort = { startDate: 1, dueDate: 1, priority: -1 };
-    const statusOrder = {
-      Backlog: 0,
-      Pending: 1,
-      'In Progress': 2,
-      'On Hold': 3,
-      Completed: 4,
-      Cancelled: 5,
-    };
-    const sortByStatusThenDate = (list = []) =>
-      [...list].sort((a, b) => {
-        const aRank = statusOrder[a.status] ?? 50;
-        const bRank = statusOrder[b.status] ?? 50;
-        if (aRank !== bRank) return aRank - bRank;
-        return new Date(a.dueDate || 0) - new Date(b.dueDate || 0);
-      });
 
     if (page || limit) {
       const result = await paginate(EmployeeTask, query, {
@@ -138,14 +217,14 @@ router.get('/', async (req, res) => {
         sort,
         populate: EMPLOYEE_POPULATE,
       });
-      result.data = sortByStatusThenDate(result.data);
+      result.data = sortTasksByStatusThenDate(result.data);
       return res.json(result);
     }
 
     const tasks = await EmployeeTask.find(query)
       .populate(EMPLOYEE_POPULATE)
       .sort(sort);
-    res.json(sortByStatusThenDate(tasks));
+    res.json(sortTasksByStatusThenDate(tasks));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

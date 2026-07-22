@@ -11,63 +11,8 @@ import {
   HR_PERIOD_OPTIONS,
   getHrPeriodRange,
   formatHrPeriodLabel,
+  downloadBlobResponse,
 } from '../utils/hrUtils';
-
-function csvEscape(value) {
-  const text = String(value ?? '');
-  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
-  return text;
-}
-
-function downloadMonthlyReportCsv(report, periodLabel) {
-  const rows = [
-    ['Employee', 'Employee ID', 'Department', 'Date', 'Task', 'Time', 'Status', 'Notes'],
-  ];
-
-  (report?.employees || []).forEach((row) => {
-    const emp = row.employee;
-    const name = employeeName(emp);
-    const empId = emp?.employeeId || '';
-    const dept = emp?.department || '';
-
-    if (!row.logs?.length) {
-      rows.push([name, empId, dept, '', 'No logs', '', '', '']);
-      return;
-    }
-
-    row.logs.forEach((log) => {
-      const date = formatDate(log.date);
-      const notes = log.notes || '';
-      if (!log.entries?.length) {
-        rows.push([name, empId, dept, date, '—', formatDuration(log.totalMinutes), log.status, notes]);
-        return;
-      }
-      log.entries.forEach((entry, index) => {
-        rows.push([
-          index === 0 ? name : '',
-          index === 0 ? empId : '',
-          index === 0 ? dept : '',
-          index === 0 ? date : '',
-          entry.details
-            ? `${entry.description} — ${entry.details}`
-            : entry.description,
-          formatDuration(entry.timeSpentMinutes),
-          index === 0 ? log.status : '',
-          index === 0 ? notes : '',
-        ]);
-      });
-    });
-  });
-
-  const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `work-log-report-${periodLabel.replace(/\s+/g, '-').toLowerCase()}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
 
 function DailyWorkLogsView({ employees }) {
   const [logs, setLogs] = useState([]);
@@ -86,6 +31,7 @@ function DailyWorkLogsView({ employees }) {
       toDate: week.toDate,
     };
   });
+  const [exporting, setExporting] = useState(false);
 
   const filterParams = useMemo(() => {
     const params = {};
@@ -145,6 +91,18 @@ function DailyWorkLogsView({ employees }) {
   };
 
   const periodLabel = formatHrPeriodLabel(filters.period, filters.fromDate, filters.toDate);
+
+  const handleExportExcel = async () => {
+    try {
+      setExporting(true);
+      const response = await hrWorkLogsAPI.exportExcel(filterParams);
+      downloadBlobResponse(response, `hr_work_logs_${filters.fromDate || 'export'}.xlsx`);
+    } catch (error) {
+      alert(error.response?.data?.error || error.message || 'Failed to download Excel');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <>
@@ -224,6 +182,14 @@ function DailyWorkLogsView({ employees }) {
             <option value="Draft">Draft</option>
             <option value="Submitted">Submitted</option>
           </select>
+          <button
+            type="button"
+            className="hr-btn hr-btn-secondary"
+            onClick={handleExportExcel}
+            disabled={exporting || loading}
+          >
+            {exporting ? 'Downloading…' : 'Download Excel'}
+          </button>
         </div>
         <p className="hr-worklog-period-hint">
           Showing: <strong>{periodLabel}</strong>
@@ -324,6 +290,7 @@ function MonthlyWorkLogReportView({ employees, departments }) {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const filterParams = useMemo(() => {
     const params = { month: filters.month, year: filters.year };
@@ -370,6 +337,19 @@ function MonthlyWorkLogReportView({ employees, departments }) {
   }, [report, searchTerm]);
 
   const periodLabel = report?.period?.label || '';
+
+  const handleExportExcel = async () => {
+    try {
+      setExporting(true);
+      const response = await hrWorkLogsAPI.exportMonthlyExcel(filterParams);
+      const stamp = `${filters.year}-${String(filters.month).padStart(2, '0')}`;
+      downloadBlobResponse(response, `hr_work_logs_${stamp}.xlsx`);
+    } catch (error) {
+      alert(error.response?.data?.error || error.message || 'Failed to download Excel');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <>
@@ -458,10 +438,10 @@ function MonthlyWorkLogReportView({ employees, departments }) {
               <button
                 type="button"
                 className="hr-btn hr-btn-primary hr-btn-sm"
-                disabled={loading || !report?.employees?.length}
-                onClick={() => downloadMonthlyReportCsv(report, periodLabel || 'report')}
+                disabled={loading || exporting || !report?.employees?.length}
+                onClick={handleExportExcel}
               >
-                Export CSV
+                {exporting ? 'Downloading…' : 'Download Excel'}
               </button>
             </div>
           </div>

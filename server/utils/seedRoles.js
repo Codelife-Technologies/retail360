@@ -222,7 +222,10 @@ async function resolvePermissionIds(def, allPermissions) {
   const ids = new Set();
 
   (def.permissionCodes || []).forEach((code) => {
-    const perm = allPermissions.find((p) => p.code === code);
+    const wanted = String(code || '').toLowerCase();
+    const perm = allPermissions.find(
+      (p) => String(p.code || '').toLowerCase() === wanted
+    );
     if (perm) ids.add(String(perm._id));
   });
 

@@ -23,6 +23,7 @@ function LocationSettings() {
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [employeeSearch, setEmployeeSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -52,8 +53,9 @@ function LocationSettings() {
 
   const loadLookups = useCallback(async () => {
     try {
+      // Do not pass page/limit — pagination caps at 100 and would hide the rest of the staff.
       const [empRes, deptRes] = await Promise.all([
-        hrEmployeesAPI.getAll({ status: 'Active', limit: 500 }),
+        hrEmployeesAPI.getAll({ status: 'Active' }),
         hrEmployeesAPI.getDepartments(),
       ]);
       setEmployees(extractList(empRes));
@@ -98,6 +100,7 @@ function LocationSettings() {
     setEditing(null);
     setFormData(emptyForm());
     setFormErrors({});
+    setEmployeeSearch('');
     setShowModal(true);
   };
 
@@ -116,6 +119,7 @@ function LocationSettings() {
       notes: office.notes || '',
     });
     setFormErrors({});
+    setEmployeeSearch('');
     setShowModal(true);
   };
 
@@ -197,6 +201,27 @@ function LocationSettings() {
       else set.add(String(id));
       return { ...f, assignedEmployees: [...set] };
     });
+  };
+
+  const filteredEmployees = useMemo(() => {
+    const term = employeeSearch.trim().toLowerCase();
+    if (!term) return employees;
+    return employees.filter((emp) => {
+      const hay = `${employeeName(emp)} ${emp.employeeId || ''} ${emp.department || ''}`.toLowerCase();
+      return hay.includes(term);
+    });
+  }, [employees, employeeSearch]);
+
+  const selectAllVisibleEmployees = () => {
+    setFormData((f) => {
+      const set = new Set(f.assignedEmployees.map(String));
+      filteredEmployees.forEach((emp) => set.add(String(emp._id)));
+      return { ...f, assignedEmployees: [...set] };
+    });
+  };
+
+  const clearEmployeeAssignments = () => {
+    setFormData((f) => ({ ...f, assignedEmployees: [] }));
   };
 
   return (
@@ -410,18 +435,50 @@ function LocationSettings() {
                 </div>
 
                 <div className="hr-form-group" style={{ marginTop: '1rem' }}>
-                  <label>Assign Employees</label>
+                  <label>
+                    Assign Employees
+                    <span className="hr-muted" style={{ fontWeight: 400, marginLeft: 8 }}>
+                      {formData.assignedEmployees.length}/{employees.length} selected
+                    </span>
+                  </label>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                    <input
+                      className="hr-filter-input"
+                      type="search"
+                      placeholder="Search employees…"
+                      value={employeeSearch}
+                      onChange={(e) => setEmployeeSearch(e.target.value)}
+                      style={{ flex: '1 1 180px' }}
+                    />
+                    <button type="button" className="hr-btn hr-btn-secondary hr-btn-sm" onClick={selectAllVisibleEmployees}>
+                      Select all{employeeSearch.trim() ? ' visible' : ''}
+                    </button>
+                    <button type="button" className="hr-btn hr-btn-secondary hr-btn-sm" onClick={clearEmployeeAssignments}>
+                      Clear
+                    </button>
+                  </div>
+                  <p className="hr-muted" style={{ marginBottom: '0.5rem' }}>
+                    Tip: mark this office as <strong>Default</strong> (or leave it as the only active office)
+                    so every employee is covered without selecting them one by one.
+                  </p>
                   <div className="hr-chip-select hr-chip-select-scroll">
-                    {employees.map((emp) => (
-                      <label key={emp._id} className="hr-chip-option">
-                        <input
-                          type="checkbox"
-                          checked={formData.assignedEmployees.map(String).includes(String(emp._id))}
-                          onChange={() => toggleEmployee(emp._id)}
-                        />
-                        {employeeName(emp)} ({emp.employeeId})
-                      </label>
-                    ))}
+                    {employees.length === 0 ? (
+                      <span className="hr-muted">No active employees found</span>
+                    ) : filteredEmployees.length === 0 ? (
+                      <span className="hr-muted">No employees match your search</span>
+                    ) : (
+                      filteredEmployees.map((emp) => (
+                        <label key={emp._id} className="hr-chip-option">
+                          <input
+                            type="checkbox"
+                            checked={formData.assignedEmployees.map(String).includes(String(emp._id))}
+                            onChange={() => toggleEmployee(emp._id)}
+                          />
+                          {employeeName(emp)} ({emp.employeeId})
+                          {emp.department ? ` · ${emp.department}` : ''}
+                        </label>
+                      ))
+                    )}
                   </div>
                 </div>
 

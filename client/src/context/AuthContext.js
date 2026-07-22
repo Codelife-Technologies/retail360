@@ -85,7 +85,12 @@ export function AuthProvider({ children }) {
 
   const hasPermission = (permissionCode) => {
     if (!user?.permissions) return false;
-    return user.permissions.includes('admin.all') || user.permissions.includes(permissionCode);
+    // Codes are stored lowercase in Mongo; callers often pass camelCase.
+    const wanted = String(permissionCode || '').toLowerCase();
+    return user.permissions.some((code) => {
+      const normalized = String(code || '').toLowerCase();
+      return normalized === 'admin.all' || normalized === wanted;
+    });
   };
 
   const canEditStockProduct = useCallback(
