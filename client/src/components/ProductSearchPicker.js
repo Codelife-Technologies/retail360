@@ -39,7 +39,7 @@ function ProductSearchPicker({
   products = [],
   value = '',
   onChange,
-  placeholder = 'Type product name or SKU…',
+  placeholder = 'Type title or SKU…',
   id,
   required = false,
   disabled = false,

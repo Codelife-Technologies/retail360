@@ -26,6 +26,9 @@ function GeminiImageGenerator() {
   const [skuSearching, setSkuSearching] = useState(false);
   const [showSkuDropdown, setShowSkuDropdown] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [categoryProducts, setCategoryProducts] = useState([]);
+  const [loadingCategoryProducts, setLoadingCategoryProducts] = useState(false);
+  const [skuListFilter, setSkuListFilter] = useState('');
   const [savingToProduct, setSavingToProduct] = useState(false);
   const [savingToDocuments, setSavingToDocuments] = useState(false);
   const [savedToDocuments, setSavedToDocuments] = useState(new Set());
@@ -119,6 +122,15 @@ function GeminiImageGenerator() {
   }, [selectedSubcategory]);
 
   useEffect(() => {
+    if (selectedCategory && selectedSubcategory) {
+      fetchProductsForCategory();
+    } else {
+      setCategoryProducts([]);
+      setSkuListFilter('');
+    }
+  }, [selectedCategory, selectedSubcategory]);
+
+  useEffect(() => {
     if (prompts.length > 0) {
       setSelectedPrompts(new Set(prompts.map((p) => p.order)));
     }
@@ -177,6 +189,31 @@ function GeminiImageGenerator() {
       setPrompts([]);
     } finally {
       setLoadingPrompts(false);
+    }
+  };
+
+  const fetchProductsForCategory = async () => {
+    try {
+      setLoadingCategoryProducts(true);
+      const response = await productsAPI.getAll({
+        category: selectedCategory,
+        subCategory: selectedSubcategory,
+      });
+      const rows = Array.isArray(response.data)
+        ? response.data
+        : (response.data?.data || []);
+      const sorted = [...rows].sort((a, b) =>
+        String(a.sku || '').localeCompare(String(b.sku || ''), undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        })
+      );
+      setCategoryProducts(sorted);
+    } catch (error) {
+      logger.error('Error fetching category products', { error: error.message });
+      setCategoryProducts([]);
+    } finally {
+      setLoadingCategoryProducts(false);
     }
   };
 
@@ -277,6 +314,14 @@ function GeminiImageGenerator() {
     setSkuQuery('');
     setSkuResults([]);
   };
+
+  const filteredCategoryProducts = categoryProducts.filter((product) => {
+    const term = skuListFilter.trim().toLowerCase();
+    if (!term) return true;
+    const sku = String(product.sku || '').toLowerCase();
+    const title = String(product.title || product.name || '').toLowerCase();
+    return sku.includes(term) || title.includes(term);
+  });
 
   const handleImageSelect = (e) => {
     const file = e.target.files[0];
@@ -737,7 +782,197 @@ function GeminiImageGenerator() {
 
       <div className="gemini-content">
         <div className="gemini-section">
-          <h2>1. Select Product SKU (optional)</h2>
+          <h2>1. Select Category and Subcategory</h2>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Category *</label>
+              <select
+                value={selectedCategory}
+                onChange={(e) => {
+                  setSelectedProduct(null);
+                  setSkuQuery('');
+                  setSkuListFilter('');
+                  setSelectedCategory(e.target.value);
+                }}
+              >
+                <option value="">Select a category</option>
+                {categories.map((cat) => (
+                  <option key={cat._id} value={cat._id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Subcategory *</label>
+              <select
+                value={selectedSubcategory}
+                onChange={(e) => {
+                  setSelectedProduct(null);
+                  setSkuQuery('');
+                  setSkuListFilter('');
+                  setSelectedSubcategory(e.target.value);
+                }}
+                disabled={!selectedCategory}
+              >
+                <option value="">Select a subcategory</option>
+                {subcategories.map((subcat) => (
+                  <option key={subcat._id} value={subcat._id}>
+                    {subcat.name}
+                  </option>
+                ))}
+              </select>
+              {!selectedCategory ? (
+                <small className="form-hint">Please select a category first</small>
+              ) : null}
+            </div>
+          </div>
+
+          {selectedCategory && selectedSubcategory ? (
+            <div className="category-sku-panel">
+              <div className="category-sku-panel-header">
+                <h3>
+                  SKUs in this subcategory
+                  {!loadingCategoryProducts ? (
+                    <span className="category-sku-count">
+                      {' '}
+                      ({filteredCategoryProducts.length}
+                      {skuListFilter.trim()
+                        ? ` of ${categoryProducts.length}`
+                        : ''}
+                      )
+                    </span>
+                  ) : null}
+                </h3>
+                <input
+                  type="search"
+                  className="category-sku-filter"
+                  value={skuListFilter}
+                  onChange={(e) => setSkuListFilter(e.target.value)}
+                  placeholder="Filter SKUs…"
+                  autoComplete="off"
+                />
+              </div>
+              {loadingCategoryProducts ? (
+                <p className="form-hint">Loading SKUs…</p>
+              ) : categoryProducts.length === 0 ? (
+                <p className="form-hint">No products found for this category and subcategory.</p>
+              ) : filteredCategoryProducts.length === 0 ? (
+                <p className="form-hint">No SKUs match “{skuListFilter.trim()}”.</p>
+              ) : (
+                <div className="category-sku-grid" role="list">
+                  {filteredCategoryProducts.map((product) => {
+                    const isActive =
+                      selectedProduct &&
+                      String(selectedProduct._id) === String(product._id);
+                    return (
+                      <button
+                        key={product._id}
+                        type="button"
+                        role="listitem"
+                        className={`category-sku-chip${isActive ? ' active' : ''}`}
+                        onClick={() => handleSelectProduct(product)}
+                        title={product.title || product.name || product.sku}
+                      >
+                        <strong>{product.sku || '—'}</strong>
+                        <span>{product.title || product.name || ''}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <small className="form-hint">
+              Select category and subcategory to see all matching SKUs for the image folder.
+            </small>
+          )}
+
+          {selectedSubcategory ? (
+            <div className="prompts-section">
+              <div className="prompts-header">
+                <h3>Image Generation Prompts ({prompts.length})</h3>
+                <div className="prompts-header-actions">
+                  {prompts.length > 0 ? (
+                    <>
+                      <button type="button" className="btn-link" onClick={handleSelectAllPrompts}>
+                        Select All
+                      </button>
+                      <span style={{ margin: '0 0.5rem' }}>|</span>
+                      <button type="button" className="btn-link" onClick={handleDeselectAllPrompts}>
+                        Deselect All
+                      </button>
+                      <span style={{ margin: '0 0.5rem' }}>|</span>
+                    </>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleOpenPromptModal}
+                    disabled={loadingPrompts}
+                  >
+                    {loadingPrompts
+                      ? 'Loading...'
+                      : prompts.length === 0
+                        ? 'Configure Prompts'
+                        : 'Edit Prompts'}
+                  </button>
+                </div>
+              </div>
+              {loadingPrompts ? (
+                <p>Loading prompts...</p>
+              ) : prompts.length === 0 ? (
+                <div className="alert alert-warning">
+                  No prompts configured. Please configure 6-10 prompts for this subcategory.
+                </div>
+              ) : (
+                <>
+                  <div className="prompts-selection-info">
+                    <span>
+                      {selectedPrompts.size} of {prompts.length} prompts selected
+                    </span>
+                  </div>
+                  <div className="prompts-list">
+                    {prompts
+                      .slice()
+                      .sort((a, b) => a.order - b.order)
+                      .map((prompt) => {
+                        const isSelected = selectedPrompts.has(prompt.order);
+                        const isGenerated = generatedImages.some(
+                          (img) => img.order === prompt.order && img.url
+                        );
+                        return (
+                          <div
+                            key={prompt._id || prompt.order}
+                            className={`prompt-item ${isSelected ? 'prompt-selected' : ''} ${isGenerated ? 'prompt-generated' : ''}`}
+                          >
+                            <label className="prompt-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handlePromptToggle(prompt.order)}
+                                className="prompt-checkbox"
+                              />
+                              <span className="prompt-order">{prompt.order}</span>
+                            </label>
+                            <span className="prompt-text">{prompt.prompt}</span>
+                            {isGenerated ? (
+                              <span className="prompt-status-badge" title="Image already generated">
+                                ✓
+                              </span>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="gemini-section">
+          <h2>2. Select Product SKU (optional)</h2>
           <div className="form-group sku-search-group" ref={skuSearchRef}>
             <label>Product SKU</label>
             <div className="sku-search-input-wrap">
@@ -749,7 +984,11 @@ function GeminiImageGenerator() {
                 onFocus={() => {
                   if (skuResults.length > 0) setShowSkuDropdown(true);
                 }}
-                placeholder="Search by SKU, name, or title…"
+                placeholder={
+                  selectedCategory && selectedSubcategory
+                    ? 'Or search within this subcategory…'
+                    : 'Search by SKU, name, or title…'
+                }
                 autoComplete="off"
               />
               {selectedProduct ? (
@@ -793,124 +1032,11 @@ function GeminiImageGenerator() {
               </div>
             ) : (
               <small className="form-hint">
-                Select a SKU to attach product details when saving to Document Management / Product Master.
+                Pick a SKU from the list above (after choosing category/subcategory), or search here.
+                Selected SKU is used when saving to Document Management / Product Master.
               </small>
             )}
           </div>
-        </div>
-
-        <div className="gemini-section">
-          <h2>2. Select Category and Subcategory</h2>
-          <div className="form-row">
-            <div className="form-group">
-              <label>Category *</label>
-              <select
-                value={selectedCategory}
-                onChange={(e) => {
-                  setSelectedProduct(null);
-                  setSkuQuery('');
-                  setSelectedCategory(e.target.value);
-                }}
-              >
-                <option value="">Select a category</option>
-                {categories.map((cat) => (
-                  <option key={cat._id} value={cat._id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Subcategory *</label>
-              <select
-                value={selectedSubcategory}
-                onChange={(e) => setSelectedSubcategory(e.target.value)}
-                disabled={!selectedCategory}
-              >
-                <option value="">Select a subcategory</option>
-                {subcategories.map((subcat) => (
-                  <option key={subcat._id} value={subcat._id}>
-                    {subcat.name}
-                  </option>
-                ))}
-              </select>
-              {!selectedCategory ? (
-                <small className="form-hint">Please select a category first</small>
-              ) : null}
-            </div>
-          </div>
-
-          {selectedSubcategory ? (
-            <div className="prompts-section">
-              <div className="prompts-header">
-                <h3>Image Generation Prompts ({prompts.length})</h3>
-                <div className="prompts-header-actions">
-                  {prompts.length > 0 ? (
-                    <>
-                      <button className="btn-link" onClick={handleSelectAllPrompts}>
-                        Select All
-                      </button>
-                      <span style={{ margin: '0 0.5rem' }}>|</span>
-                      <button className="btn-link" onClick={handleDeselectAllPrompts}>
-                        Deselect All
-                      </button>
-                      <span style={{ margin: '0 0.5rem' }}>|</span>
-                    </>
-                  ) : null}
-                  <button className="btn-secondary" onClick={handleOpenPromptModal}>
-                    {prompts.length === 0 ? 'Configure Prompts' : 'Edit Prompts'}
-                  </button>
-                </div>
-              </div>
-              {loadingPrompts ? (
-                <p>Loading prompts...</p>
-              ) : prompts.length === 0 ? (
-                <div className="alert alert-warning">
-                  No prompts configured. Please configure 6-10 prompts for this subcategory.
-                </div>
-              ) : (
-                <>
-                  <div className="prompts-selection-info">
-                    <span>
-                      {selectedPrompts.size} of {prompts.length} prompts selected
-                    </span>
-                  </div>
-                  <div className="prompts-list">
-                    {prompts
-                      .sort((a, b) => a.order - b.order)
-                      .map((prompt) => {
-                        const isSelected = selectedPrompts.has(prompt.order);
-                        const isGenerated = generatedImages.some(
-                          (img) => img.order === prompt.order && img.url
-                        );
-                        return (
-                          <div
-                            key={prompt._id || prompt.order}
-                            className={`prompt-item ${isSelected ? 'prompt-selected' : ''} ${isGenerated ? 'prompt-generated' : ''}`}
-                          >
-                            <label className="prompt-checkbox-label">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => handlePromptToggle(prompt.order)}
-                                className="prompt-checkbox"
-                              />
-                              <span className="prompt-order">{prompt.order}</span>
-                            </label>
-                            <span className="prompt-text">{prompt.prompt}</span>
-                            {isGenerated ? (
-                              <span className="prompt-status-badge" title="Image already generated">
-                                ✓
-                              </span>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : null}
         </div>
 
         <div className="gemini-section">

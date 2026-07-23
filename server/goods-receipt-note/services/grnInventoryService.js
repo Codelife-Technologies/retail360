@@ -4,7 +4,7 @@ const PurchaseRequisite = require('../../models/PurchaseRequisite');
 const GoodsReceiptNote = require('../../models/GoodsReceiptNote');
 const { computeLineItem } = require('../validations/grnValidation');
 
-const PO_RECEIVED_STATUSES = ['fully_received', 'received'];
+const PO_RECEIVED_STATUSES = ['fully_received', 'received', 'completed', 'closed'];
 
 function isPoFullyReceived(po) {
   if (!po?.items?.length) return false;
@@ -119,7 +119,7 @@ async function updatePurchaseOrderReceipt(grn) {
   );
   const anyReceived = po.items.some((li) => (li.receivedQuantity || 0) > 0);
 
-  if (allReceived) po.status = 'fully_received';
+  if (allReceived) po.status = 'completed';
   else if (anyReceived) po.status = 'partially_received';
 
   await po.save();

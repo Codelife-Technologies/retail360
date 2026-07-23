@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Employee = require('../models/Employee');
 const { paginate } = require('../../utils/pagination');
+const { requirePermission } = require('../../middleware/auth');
 const { generateNextEmployeeId } = require('../utils/employeeId');
 const { mergeDepartments } = require('../utils/departments');
 const Department = require('../models/Department');
@@ -155,7 +156,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePermission('admin.all'), async (req, res) => {
   try {
     const employee = await Employee.findByIdAndDelete(req.params.id);
     if (!employee) return res.status(404).json({ error: 'Employee not found' });

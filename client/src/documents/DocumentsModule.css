@@ -448,13 +448,14 @@
 
 .dm-folder-row {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   gap: 0.15rem;
   border-radius: 8px;
 }
 
 .dm-folder-row.active {
-  background: #f5f3ff;
+  background: #e8f0fe;
 }
 
 .dm-folder-item {
@@ -465,11 +466,12 @@
   border: none;
   background: transparent;
   text-align: left;
-  padding: 0.5rem 0.55rem;
+  padding: 0.4rem 0.45rem;
   border-radius: 8px;
   cursor: pointer;
   color: #334155;
   font-size: 0.88rem;
+  min-width: 0;
 }
 
 .dm-folder-item:hover {
@@ -477,14 +479,14 @@
 }
 
 .dm-folder-item.active {
-  background: #ede9fe;
-  color: #5b21b6;
+  background: #e8f0fe;
+  color: #1967d2;
   font-weight: 600;
 }
 
 .dm-folder-icon {
   flex-shrink: 0;
-  font-size: 0.95rem;
+  font-size: 1rem;
   line-height: 1;
 }
 
@@ -508,15 +510,16 @@
 }
 
 .dm-folder-item.active .dm-folder-count {
-  background: #ddd6fe;
-  color: #5b21b6;
+  background: #d2e3fc;
+  color: #1967d2;
 }
 
 .dm-folder-actions {
   display: flex;
   gap: 0.15rem;
-  padding: 0 0.35rem 0.35rem 2rem;
-  opacity: 0.65;
+  padding: 0 0.25rem 0 0;
+  opacity: 0;
+  flex-shrink: 0;
 }
 
 .dm-folder-row:hover .dm-folder-actions,
@@ -620,6 +623,113 @@
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 0.85rem;
   margin-bottom: 1.25rem;
+}
+
+.dm-drive-toolbar {
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.dm-drive-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  margin-bottom: 0.35rem;
+  font-size: 0.95rem;
+}
+
+.dm-drive-crumb {
+  border: none;
+  background: transparent;
+  color: #1967d2;
+  cursor: pointer;
+  padding: 0.1rem 0.2rem;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.dm-drive-crumb:hover {
+  background: #e8f0fe;
+  text-decoration: underline;
+}
+
+.dm-drive-crumb.current {
+  color: #202124;
+  cursor: default;
+  font-weight: 600;
+}
+
+.dm-drive-crumb-sep {
+  color: #9aa0a6;
+  user-select: none;
+}
+
+.dm-drive-section {
+  margin-bottom: 1.5rem;
+}
+
+.dm-drive-section-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #5f6368;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dm-drive-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.dm-drive-folder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 1rem 0.75rem 0.85rem;
+  border: 1px solid transparent;
+  background: #fff;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  text-align: center;
+}
+
+.dm-drive-folder:hover {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+.dm-drive-folder:focus-visible {
+  outline: 2px solid #1967d2;
+  outline-offset: 2px;
+}
+
+.dm-drive-folder-icon {
+  font-size: 2.75rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.12));
+}
+
+.dm-drive-folder-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #202124;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-drive-folder-meta {
+  font-size: 0.75rem;
+  color: #80868b;
 }
 
 .dm-folder-card {

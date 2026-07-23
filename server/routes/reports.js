@@ -2660,16 +2660,14 @@ async function buildReplenishReportData(query = {}) {
 
 function formatRequiredStockDisplay(item) {
   const main = Number(item?.requiredStockNextMonth ?? 0);
-  if (main <= 0) return '';
-  const deduction = Number(item?.inventory?.availableStock ?? 0);
-  return `${main} (${deduction})`;
+  if (main <= 0) return '0';
+  return String(main);
 }
 
 function formatReorderDisplay(item) {
   const main = Number(item?.reorderQty ?? 0);
-  if (main <= 0) return '';
-  const deduction = Number(item?.refillQty ?? 0);
-  return `${main} (${deduction})`;
+  if (main <= 0) return '0';
+  return String(main);
 }
 
 function buildReplenishProductExportHeaders(monthLabels, showDateColumn) {

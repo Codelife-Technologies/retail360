@@ -8,8 +8,9 @@ const Supplier = require('../models/Supplier');
 const Location = require('../models/Location');
 const Product = require('../models/Product');
 const { paginate } = require('../utils/pagination');
+const { applyDateRangeFilter } = require('../utils/dateRangeFilter');
 const { requirePermission } = require('../middleware/auth');
-const { generateTemplate } = require('../utils/excelGenerator');
+const { generateTemplate, exportToExcel } = require('../utils/excelGenerator');
 const { parseExcel, buildImportErrorSummary } = require('../utils/excelParser');
 
 const upload = multer({ 
@@ -22,7 +23,7 @@ const { generatePurchaseNumber } = require('../utils/generatePurchaseNumber');
 // GET all purchases (with pagination)
 router.get('/', requirePermission('purchases.view'), async (req, res) => {
   try {
-    const { supplier, location, paymentStatus, page, limit } = req.query;
+    const { supplier, location, paymentStatus, fromDate, toDate, page, limit } = req.query;
     const query = {};
     
     if (supplier) {
@@ -36,6 +37,8 @@ router.get('/', requirePermission('purchases.view'), async (req, res) => {
     if (paymentStatus) {
       query.paymentStatus = paymentStatus;
     }
+
+    applyDateRangeFilter(query, 'purchaseDate', fromDate, toDate);
     
     if (page || limit) {
       const result = await paginate(Purchase, query, {
@@ -87,6 +90,75 @@ function isEmptyPurchaseImportRow(row) {
   return !Object.values(row || {}).some((value) => String(value ?? '').trim() !== '');
 }
 
+const PURCHASE_EXPORT_HEADERS = [
+  { key: 'purchaseNumber', label: 'Purchase Number' },
+  { key: 'purchaseDate', label: 'Purchase Date' },
+  { key: 'supplier', label: 'Vendor' },
+  { key: 'location', label: 'Location' },
+  { key: 'poNumber', label: 'PO Number' },
+  { key: 'paymentStatus', label: 'Payment Status' },
+  { key: 'sku', label: 'SKU' },
+  { key: 'product', label: 'Product' },
+  { key: 'quantity', label: 'Quantity' },
+  { key: 'unitPrice', label: 'Unit Price' },
+  { key: 'lineTotal', label: 'Line Total' },
+  { key: 'subtotal', label: 'Subtotal' },
+  { key: 'tax', label: 'Tax' },
+  { key: 'total', label: 'Grand Total' },
+  { key: 'notes', label: 'Notes' },
+];
+
+function formatExportDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
+function mapPurchasesToExcelRows(purchases) {
+  const rows = [];
+  (purchases || []).forEach((purchase) => {
+    const items = purchase.items?.length ? purchase.items : [null];
+    items.forEach((item) => {
+      rows.push({
+        purchaseNumber: purchase.purchaseNumber || '',
+        purchaseDate: formatExportDate(purchase.purchaseDate),
+        supplier: purchase.supplier?.name || '',
+        location: purchase.location?.name || purchase.location?.code || '',
+        poNumber: purchase.purchaseOrder?.poNumber || '',
+        paymentStatus: purchase.paymentStatus || '',
+        sku: item?.product?.sku || item?.sku || '',
+        product: item?.product?.title || item?.product?.name || item?.productName || '',
+        quantity: item?.quantity ?? '',
+        unitPrice: item?.unitPrice ?? '',
+        lineTotal: item?.total ?? '',
+        subtotal: purchase.subtotal ?? '',
+        tax: purchase.tax ?? '',
+        total: purchase.total ?? '',
+        notes: purchase.notes || '',
+      });
+    });
+  });
+  return rows;
+}
+
+function buildPurchaseListQuery(queryParams = {}) {
+  const { supplier, location, paymentStatus, fromDate, toDate } = queryParams;
+  const query = {};
+  if (supplier) query.supplier = supplier;
+  if (location) query.location = location;
+  if (paymentStatus) query.paymentStatus = paymentStatus;
+  applyDateRangeFilter(query, 'purchaseDate', fromDate, toDate);
+  return query;
+}
+
+const PURCHASE_POPULATE = [
+  { path: 'supplier', select: 'name' },
+  { path: 'location', select: 'name code' },
+  { path: 'purchaseOrder', select: 'poNumber' },
+  { path: 'items.product', select: 'name title sku' },
+];
+
 // GET Excel template (must be before /:id)
 router.get('/template', requirePermission('purchases.view'), (req, res) => {
   try {
@@ -128,6 +200,43 @@ router.get('/template', requirePermission('purchases.view'), (req, res) => {
     });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=purchases_template.xlsx');
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET export filtered purchases as Excel (must be before /:id)
+router.get('/export', requirePermission('purchases.view'), async (req, res) => {
+  try {
+    const query = buildPurchaseListQuery(req.query);
+    const purchases = await Purchase.find(query)
+      .populate(PURCHASE_POPULATE)
+      .sort({ purchaseDate: -1, createdAt: -1 });
+    const rows = mapPurchasesToExcelRows(purchases);
+    const buffer = exportToExcel(rows, PURCHASE_EXPORT_HEADERS);
+    const filename = `purchases_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET export a single purchase as Excel
+router.get('/:id/export', requirePermission('purchases.view'), async (req, res) => {
+  try {
+    const purchase = await Purchase.findById(req.params.id).populate(PURCHASE_POPULATE);
+    if (!purchase) {
+      return res.status(404).json({ error: 'Purchase not found' });
+    }
+    const rows = mapPurchasesToExcelRows([purchase]);
+    const buffer = exportToExcel(rows, PURCHASE_EXPORT_HEADERS);
+    const safeName = String(purchase.purchaseNumber || req.params.id).replace(/[\\/:*?"<>|]/g, '_');
+    const filename = `purchase_${safeName}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
     res.send(buffer);
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
-import { reportsAPI, salesAPI, salesChannelsAPI, productsAPI, pricesAPI } from '../services/api';
+import {
+  reportsAPI,
+  salesAPI,
+  salesChannelsAPI,
+  salesLocationsAPI,
+  productsAPI,
+  pricesAPI,
+} from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
   getCurrencyForSalesChannelId,
@@ -11,8 +18,23 @@ import SalesMonthlyTrendCharts from './SalesMonthlyTrendCharts';
 import SaleDetailsModal from './SaleDetailsModal';
 import ProductDetailsModal from './ProductDetailsModal';
 import ExcelUpload from './ExcelUpload';
+import ProductSearchPicker from './ProductSearchPicker';
 import './SalesSkuReport.css';
+import './ProductSearchPicker.css';
 import '../currency/currency.css';
+
+const emptyManualSaleForm = () => ({
+  salesChannel: '',
+  salesLocation: '',
+  salesDate: toDateInput(new Date()),
+  product: '',
+  quantity: 1,
+  unitPrice: 0,
+  amazonOrderId: '',
+  customerName: '',
+  paymentStatus: 'paid',
+  orderStatus: 'confirmed',
+});
 
 const SalesBusinessReport = lazy(() => import('./SalesBusinessReport'));
 
@@ -347,6 +369,8 @@ function ProductExtremeCarousel({ label, products, variant, onOpenProduct, forma
 function SalesSkuReport({ onClose }) {
   const { hasPermission } = useAuth();
   const isAdmin = hasPermission('admin.all');
+  const canCreateSale =
+    isAdmin || hasPermission('sales.create') || hasPermission('sales.update');
   const {
     displayCurrency,
     fromOriginal,
@@ -359,6 +383,9 @@ function SalesSkuReport({ onClose }) {
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [showFilters, setShowFilters] = useState(false);
   const [salesChannels, setSalesChannels] = useState([]);
+  const [salesLocations, setSalesLocations] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [productPrices, setProductPrices] = useState({});
   const [summary, setSummary] = useState(null);
   const [skuRows, setSkuRows] = useState([]);
   const [orderRows, setOrderRows] = useState([]);
@@ -367,6 +394,9 @@ function SalesSkuReport({ onClose }) {
   const [exporting, setExporting] = useState(false);
   const [deletingAllSales, setDeletingAllSales] = useState(false);
   const [showExcelUpload, setShowExcelUpload] = useState(false);
+  const [showAddSaleModal, setShowAddSaleModal] = useState(false);
+  const [manualSaleForm, setManualSaleForm] = useState(emptyManualSaleForm);
+  const [savingManualSale, setSavingManualSale] = useState(false);
   const [viewingSale, setViewingSale] = useState(null);
   const [viewingSaleLoading, setViewingSaleLoading] = useState(false);
   const [viewingProduct, setViewingProduct] = useState(null);
@@ -490,6 +520,129 @@ function SalesSkuReport({ onClose }) {
       setSalesChannels(res.data || []);
     }).catch(console.error);
   }, []);
+
+  const locationsForChannel = useMemo(() => {
+    const channelId = String(manualSaleForm.salesChannel || '');
+    if (!channelId) return salesLocations;
+    return salesLocations.filter((loc) =>
+      (loc.salesChannels || []).some((ch) => String(ch?._id || ch) === channelId)
+    );
+  }, [salesLocations, manualSaleForm.salesChannel]);
+
+  const openAddSaleModal = async () => {
+    setManualSaleForm(emptyManualSaleForm());
+    setShowAddSaleModal(true);
+    try {
+      const [locRes, prodRes, priceRes] = await Promise.all([
+        salesLocationsAPI.getAll({ isActive: 'true' }),
+        productsAPI.getAll(),
+        pricesAPI.getAll(),
+      ]);
+      setSalesLocations(Array.isArray(locRes.data) ? locRes.data : locRes.data?.data || []);
+      setProducts(Array.isArray(prodRes.data) ? prodRes.data : prodRes.data?.data || []);
+      const priceMap = {};
+      const prices = Array.isArray(priceRes.data) ? priceRes.data : priceRes.data?.data || [];
+      prices.forEach((price) => {
+        const id = price.product?._id || price.product;
+        if (id) priceMap[id] = price;
+      });
+      setProductPrices(priceMap);
+    } catch (error) {
+      console.error('Error loading sale form data:', error);
+    }
+  };
+
+  const handleManualSaleFieldChange = (e) => {
+    const { name, value } = e.target;
+    setManualSaleForm((prev) => {
+      const next = {
+        ...prev,
+        [name]:
+          name === 'quantity' || name === 'unitPrice'
+            ? parseFloat(value) || 0
+            : value,
+      };
+      if (name === 'salesChannel') {
+        const stillValid = (salesLocations || []).some((loc) => {
+          if (String(loc._id) !== String(prev.salesLocation)) return false;
+          return (loc.salesChannels || []).some(
+            (ch) => String(ch?._id || ch) === String(value)
+          );
+        });
+        if (!stillValid) next.salesLocation = '';
+      }
+      return next;
+    });
+  };
+
+  const handleManualSaleProductChange = (productId) => {
+    const price = productPrices[productId];
+    setManualSaleForm((prev) => ({
+      ...prev,
+      product: productId,
+      unitPrice: price
+        ? Number(price.salesPrice ?? price.purchasePrice ?? prev.unitPrice) || 0
+        : prev.unitPrice,
+    }));
+  };
+
+  const handleSaveManualSale = async () => {
+    if (!manualSaleForm.salesChannel || !manualSaleForm.salesLocation) {
+      alert('Please select sales channel and location');
+      return;
+    }
+    if (!manualSaleForm.product) {
+      alert('Please select a product');
+      return;
+    }
+    if (!(Number(manualSaleForm.quantity) > 0)) {
+      alert('Quantity must be greater than zero');
+      return;
+    }
+    if (Number(manualSaleForm.unitPrice) < 0) {
+      alert('Unit price cannot be negative');
+      return;
+    }
+
+    try {
+      setSavingManualSale(true);
+      const quantity = Number(manualSaleForm.quantity) || 1;
+      const unitPrice = Number(manualSaleForm.unitPrice) || 0;
+      await salesAPI.create({
+        salesChannel: manualSaleForm.salesChannel,
+        salesLocation: manualSaleForm.salesLocation,
+        salesDate: manualSaleForm.salesDate,
+        amazonOrderId: String(manualSaleForm.amazonOrderId || '').trim() || undefined,
+        customer: {
+          name: String(manualSaleForm.customerName || '').trim() || undefined,
+        },
+        paymentStatus: manualSaleForm.paymentStatus || 'paid',
+        orderStatus: manualSaleForm.orderStatus || 'confirmed',
+        items: [
+          {
+            product: manualSaleForm.product,
+            quantity,
+            unitPrice,
+            total: quantity * unitPrice,
+          },
+        ],
+        discount: 0,
+        notes: 'Added manually',
+      });
+      setShowAddSaleModal(false);
+      setManualSaleForm(emptyManualSaleForm());
+      fetchReport();
+      if (businessReportRef.current?.refresh) {
+        businessReportRef.current.refresh();
+      }
+      alert('Sale added successfully');
+    } catch (error) {
+      console.error('Error creating sale:', error);
+      alert(error.response?.data?.error || 'Failed to add sale');
+    } finally {
+      setSavingManualSale(false);
+    }
+  };
 
   const fetchReport = useCallback(async () => {
     if (appliedFilters.view === 'business') {
@@ -996,6 +1149,16 @@ function SalesSkuReport({ onClose }) {
           >
             ⬆ Import Excel
           </button>
+          {canCreateSale && (
+            <button
+              type="button"
+              className="btn-primary-sale"
+              onClick={openAddSaleModal}
+              title="Create a sale manually"
+            >
+              + Add Sale Manually
+            </button>
+          )}
           {!isBusinessView && (
             <>
           <button
@@ -1400,6 +1563,166 @@ function SalesSkuReport({ onClose }) {
             'Unit Price *',
           ]}
         />
+      )}
+
+      {showAddSaleModal && (
+        <div className="modal-overlay" onClick={() => !savingManualSale && setShowAddSaleModal(false)}>
+          <div className="modal-content sales-manual-sale-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Add Sale Manually</h2>
+            <p className="sales-manual-sale-hint">
+              Enter channel, location, and one product line. Tax is calculated automatically.
+            </p>
+            <div className="sales-manual-sale-form">
+              <div className="form-group">
+                <label>Sales Channel *</label>
+                <select
+                  name="salesChannel"
+                  value={manualSaleForm.salesChannel}
+                  onChange={handleManualSaleFieldChange}
+                  required
+                >
+                  <option value="">Select channel</option>
+                  {salesChannels.map((channel) => (
+                    <option key={channel._id} value={channel._id}>
+                      {channel.name}
+                      {channel.code ? ` (${channel.code})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Sales Location *</label>
+                <select
+                  name="salesLocation"
+                  value={manualSaleForm.salesLocation}
+                  onChange={handleManualSaleFieldChange}
+                  required
+                  disabled={!manualSaleForm.salesChannel}
+                >
+                  <option value="">
+                    {manualSaleForm.salesChannel ? 'Select location' : 'Select channel first'}
+                  </option>
+                  {locationsForChannel.map((loc) => (
+                    <option key={loc._id} value={loc._id}>
+                      {loc.name}
+                      {loc.code ? ` (${loc.code})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Sale Date *</label>
+                <input
+                  type="date"
+                  name="salesDate"
+                  value={manualSaleForm.salesDate}
+                  onChange={handleManualSaleFieldChange}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Product *</label>
+                <ProductSearchPicker
+                  products={products}
+                  value={manualSaleForm.product}
+                  onChange={handleManualSaleProductChange}
+                  placeholder="Type title or SKU…"
+                  required
+                />
+              </div>
+              <div className="sales-manual-sale-row">
+                <div className="form-group">
+                  <label>Quantity *</label>
+                  <input
+                    type="number"
+                    name="quantity"
+                    min="1"
+                    value={manualSaleForm.quantity}
+                    onChange={handleManualSaleFieldChange}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Unit Price *</label>
+                  <input
+                    type="number"
+                    name="unitPrice"
+                    min="0"
+                    step="0.01"
+                    value={manualSaleForm.unitPrice}
+                    onChange={handleManualSaleFieldChange}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Order / Amazon ID (optional)</label>
+                <input
+                  type="text"
+                  name="amazonOrderId"
+                  value={manualSaleForm.amazonOrderId}
+                  onChange={handleManualSaleFieldChange}
+                  placeholder="Optional reference"
+                />
+              </div>
+              <div className="form-group">
+                <label>Customer name (optional)</label>
+                <input
+                  type="text"
+                  name="customerName"
+                  value={manualSaleForm.customerName}
+                  onChange={handleManualSaleFieldChange}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className="sales-manual-sale-row">
+                <div className="form-group">
+                  <label>Payment status</label>
+                  <select
+                    name="paymentStatus"
+                    value={manualSaleForm.paymentStatus}
+                    onChange={handleManualSaleFieldChange}
+                  >
+                    <option value="paid">Paid</option>
+                    <option value="pending">Pending</option>
+                    <option value="partial">Partial</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Order status</label>
+                  <select
+                    name="orderStatus"
+                    value={manualSaleForm.orderStatus}
+                    onChange={handleManualSaleFieldChange}
+                  >
+                    <option value="confirmed">Confirmed</option>
+                    <option value="pending">Pending</option>
+                    <option value="shipped">Shipped</option>
+                    <option value="delivered">Delivered</option>
+                  </select>
+                </div>
+              </div>
+              <div className="sales-manual-sale-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={savingManualSale}
+                  onClick={() => setShowAddSaleModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary-sale"
+                  disabled={savingManualSale}
+                  onClick={handleSaveManualSale}
+                >
+                  {savingManualSale ? 'Saving…' : 'Save Sale'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

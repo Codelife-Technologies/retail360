@@ -126,10 +126,30 @@ function requireAdminOrRole(...roleCodes) {
   };
 }
 
+/** Stock create/update: admin, master.full, stock.create/update, or warehouse role */
+function requireStockEdit() {
+  return async (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+    const permissions = await getEffectivePermissions(req.user.id);
+    if (
+      permissions.has('admin.all') ||
+      permissions.has('master.full') ||
+      permissions.has('stock.create') ||
+      permissions.has('stock.update')
+    ) {
+      return next();
+    }
+    const userRoles = await getUserRoleCodes(req.user.id);
+    if (userRoles.has('warehouse') || userRoles.has('admin')) return next();
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  };
+}
+
 module.exports = {
   authenticate,
   requirePermission,
   requireAdminOrRole,
+  requireStockEdit,
   getEffectivePermissions,
   getUserRoleCodes,
   JWT_SECRET

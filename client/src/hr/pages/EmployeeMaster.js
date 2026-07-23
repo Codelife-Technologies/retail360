@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { hrEmployeesAPI, hrMastersAPI } from '../services/hrApi';
+import { useAuth } from '../../context/AuthContext';
 import HrPagination from '../components/HrPagination';
 import HrStatusBadge from '../components/HrStatusBadge';
 import HrEmployeeAvatar from '../components/HrEmployeeAvatar';
@@ -142,6 +143,8 @@ const emptyForm = () => ({
 });
 
 function EmployeeMaster() {
+  const { hasPermission } = useAuth();
+  const canDeleteEmployee = hasPermission('admin.all');
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [designations, setDesignations] = useState([]);
@@ -343,6 +346,10 @@ function EmployeeMaster() {
   };
 
   const handleDelete = async (emp) => {
+    if (!canDeleteEmployee) {
+      alert('Only an admin can delete employee records');
+      return;
+    }
     if (!window.confirm(`Delete employee ${employeeName(emp)}?`)) return;
     try {
       await hrEmployeesAPI.delete(emp._id);
@@ -487,13 +494,15 @@ function EmployeeMaster() {
                         >
                           Edit
                         </button>
-                        <button
-                          type="button"
-                          className="hr-btn hr-btn-danger hr-btn-sm"
-                          onClick={() => handleDelete(emp)}
-                        >
-                          Delete
-                        </button>
+                        {canDeleteEmployee ? (
+                          <button
+                            type="button"
+                            className="hr-btn hr-btn-danger hr-btn-sm"
+                            onClick={() => handleDelete(emp)}
+                          >
+                            Delete
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -715,7 +724,9 @@ function EmployeeMaster() {
               )}
             </div>
             <div className="hr-modal-footer">
-              <button type="button" className="hr-btn hr-btn-danger" onClick={() => handleDelete(viewingEmployee)}>Delete</button>
+              {canDeleteEmployee ? (
+                <button type="button" className="hr-btn hr-btn-danger" onClick={() => handleDelete(viewingEmployee)}>Delete</button>
+              ) : null}
               <button type="button" className="hr-btn hr-btn-primary" onClick={() => openEdit(viewingEmployee)}>Edit</button>
             </div>
           </div>

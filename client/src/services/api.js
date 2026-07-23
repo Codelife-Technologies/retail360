@@ -124,6 +124,8 @@ export const purchasesAPI = {
   create: (data) => api.post('/purchases', data),
   update: (id, data) => api.put(`/purchases/${id}`, data),
   delete: (id) => api.delete(`/purchases/${id}`),
+  exportExcel: (params) => api.get('/purchases/export', { params, responseType: 'blob' }),
+  exportOne: (id) => api.get(`/purchases/${id}/export`, { responseType: 'blob' }),
   downloadTemplate: () => api.get('/purchases/template', { responseType: 'blob' }),
   import: (formData) => api.post('/purchases/import', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },

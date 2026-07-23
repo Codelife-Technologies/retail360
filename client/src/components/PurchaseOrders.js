@@ -36,6 +36,7 @@ import PoProductVendorAssign from './PoProductVendorAssign';
 import PoShareActions from './PoShareActions';
 import ProductSearchPicker from './ProductSearchPicker';
 import { truncateProductName } from '../utils/productDisplayUtils';
+import { getCurrentMonthDateRange } from '../utils/monthDateRange';
 import './PurchaseOrders.css';
 import './PoShareActions.css';
 
@@ -95,6 +96,8 @@ function PurchaseOrders({ onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [skuSearch, setSkuSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState(() => getCurrentMonthDateRange().fromDate);
+  const [dateTo, setDateTo] = useState(() => getCurrentMonthDateRange().toDate);
   const [showModal, setShowModal] = useState(false);
   const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [editingPO, setEditingPO] = useState(null);
@@ -135,7 +138,7 @@ function PurchaseOrders({ onNavigate }) {
   useEffect(() => {
     const timer = setTimeout(fetchPurchaseOrders, 300);
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, dateFrom, dateTo]);
 
   const skuQuery = skuSearch.trim().toLowerCase();
 
@@ -153,11 +156,10 @@ function PurchaseOrders({ onNavigate }) {
   const skuOrderTotals = useMemo(() => {
     if (!skuQuery) return null;
 
-    const bySku = new Map();
-    let matchedOrders = 0;
+    const rows = [];
+    const matchedOrderIds = new Set();
 
     filteredPurchaseOrders.forEach((po) => {
-      let orderMatched = false;
       (po.items || []).forEach((item) => {
         const sku = resolvePoLineSku(item);
         const title = resolvePoLineTitle(item);
@@ -165,34 +167,30 @@ function PurchaseOrders({ onNavigate }) {
         const titleLower = title.toLowerCase();
         if (!skuLower.includes(skuQuery) && !titleLower.includes(skuQuery)) return;
 
-        orderMatched = true;
-        const key = sku || title || 'unknown';
-        const existing = bySku.get(key) || {
+        matchedOrderIds.add(po._id);
+        rows.push({
+          poId: po._id,
+          poNumber: po.poNumber || '—',
+          vendor: po.needsVendorAssignment
+            ? 'Assign vendor'
+            : po.supplier?.name || '—',
           sku: sku || '—',
           title: title || '—',
-          quantity: 0,
-          amount: 0,
-          orderCount: 0,
-          orderIds: new Set(),
-        };
-        existing.quantity += Number(item.quantity) || 0;
-        existing.amount += Number(item.total ?? item.lineTotal) || 0;
-        if (!existing.orderIds.has(po._id)) {
-          existing.orderIds.add(po._id);
-          existing.orderCount += 1;
-        }
-        bySku.set(key, existing);
+          quantity: Number(item.quantity) || 0,
+          amount: Number(item.total ?? item.lineTotal) || 0,
+        });
       });
-      if (orderMatched) matchedOrders += 1;
     });
 
-    const rows = [...bySku.values()]
-      .map(({ orderIds, ...rest }) => rest)
-      .sort((a, b) => String(a.sku).localeCompare(String(b.sku)));
+    rows.sort((a, b) => {
+      const byPo = String(a.poNumber).localeCompare(String(b.poNumber));
+      if (byPo !== 0) return byPo;
+      return String(a.sku).localeCompare(String(b.sku));
+    });
 
     return {
       rows,
-      matchedOrders,
+      matchedOrders: matchedOrderIds.size,
       totalQuantity: rows.reduce((sum, row) => sum + row.quantity, 0),
       totalAmount: rows.reduce((sum, row) => sum + row.amount, 0),
     };
@@ -331,6 +329,8 @@ function PurchaseOrders({ onNavigate }) {
       setLoading(true);
       const params = {};
       if (searchTerm.trim()) params.search = searchTerm.trim();
+      if (dateFrom) params.fromDate = dateFrom;
+      if (dateTo) params.toDate = dateTo;
       const response = await purchaseOrdersAPI.getAll(params);
       const data = Array.isArray(response.data)
         ? response.data
@@ -966,6 +966,26 @@ function PurchaseOrders({ onNavigate }) {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
+        <label className="po-date-filter">
+          <span>From</span>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        </label>
+        <label className="po-date-filter">
+          <span>To</span>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </label>
+        {(dateFrom || dateTo) ? (
+          <button
+            type="button"
+            className="btn-clear-sku-search"
+            onClick={() => {
+              setDateFrom('');
+              setDateTo('');
+            }}
+          >
+            All dates
+          </button>
+        ) : null}
       </div>
 
       <div className="po-sku-search-bar">
@@ -1003,19 +1023,28 @@ function PurchaseOrders({ onNavigate }) {
               <table className="po-sku-totals-table">
                 <thead>
                   <tr>
+                    <th>PO Number</th>
+                    <th>Vendor</th>
                     <th>SKU</th>
                     <th>Title</th>
-                    <th>POs</th>
-                    <th>Total Qty</th>
-                    <th>Total Amount</th>
+                    <th>Qty</th>
+                    <th>Amount</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {skuOrderTotals.rows.map((row) => (
-                    <tr key={`${row.sku}-${row.title}`}>
+                  {skuOrderTotals.rows.map((row, idx) => (
+                    <tr
+                      key={`${row.poId}-${row.sku}-${idx}`}
+                      className="clickable-row"
+                      onClick={() => {
+                        const po = filteredPurchaseOrders.find((p) => p._id === row.poId);
+                        if (po) setViewingPO(po);
+                      }}
+                    >
+                      <td>{row.poNumber}</td>
+                      <td>{row.vendor}</td>
                       <td>{row.sku}</td>
                       <td>{row.title}</td>
-                      <td>{row.orderCount}</td>
                       <td>{row.quantity.toLocaleString('en-IN')}</td>
                       <td>{formatINR(row.amount)}</td>
                     </tr>
@@ -1041,8 +1070,7 @@ function PurchaseOrders({ onNavigate }) {
                 <th>Supplier</th>
                 <th>Order Date</th>
                 <th>Status</th>
-                <th>SKU</th>
-                <th>Qty</th>
+                <th>Items</th>
                 <th>Total</th>
                 <th>Actions</th>
               </tr>
@@ -1050,79 +1078,52 @@ function PurchaseOrders({ onNavigate }) {
             <tbody>
               {filteredPurchaseOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="no-data">
+                  <td colSpan="8" className="no-data">
                     {skuQuery ? 'No purchase orders found for this SKU' : 'No purchase orders found'}
                   </td>
                 </tr>
               ) : (
-                filteredPurchaseOrders.flatMap((po) => {
-                  const lines =
-                    po.items?.length > 0
-                      ? po.items
-                      : [{ _placeholder: true, sku: '—', quantity: 0 }];
-                  const rowSpan = lines.length;
-                  return lines.map((item, idx) => {
-                    const sku = item._placeholder
-                      ? '—'
-                      : resolvePoLineSku(item) || '—';
-                    const qty = item._placeholder ? '—' : item.quantity ?? 0;
-                    const title = item._placeholder ? '' : resolvePoLineTitle(item);
-                    return (
-                      <tr
-                        key={`${po._id}-${idx}`}
-                        className={`clickable-row${idx > 0 ? ' po-list-item-row' : ''}`}
-                        onClick={() => setViewingPO(po)}
-                      >
-                        {idx === 0 ? (
-                          <>
-                            <td rowSpan={rowSpan}>{po.poNumber}</td>
-                            <td rowSpan={rowSpan}>{getPurchaseRequisitionNumber(po)}</td>
-                            <td rowSpan={rowSpan}>
-                              {po.needsVendorAssignment ? (
-                                <span className="po-vendor-pending-badge">Assign vendor</span>
-                              ) : (
-                                po.supplier?.name || '—'
-                              )}
-                            </td>
-                            <td rowSpan={rowSpan}>
-                              {new Date(po.orderDate).toLocaleDateString()}
-                            </td>
-                            <td rowSpan={rowSpan}>
-                              <span className={`status-badge status-${po.status}`}>
-                                {po.status}
-                              </span>
-                            </td>
-                          </>
-                        ) : null}
-                        <td title={title || undefined}>
-                          <span className="po-list-sku">{sku}</span>
-                          {title && sku === '—' ? (
-                            <span className="po-list-title-hint">{truncateProductName(title)}</span>
-                          ) : null}
-                        </td>
-                        <td>{qty}</td>
-                        {idx === 0 ? (
-                          <>
-                            <td rowSpan={rowSpan}>
-                              ₹
-                              {po.total?.toLocaleString('en-IN', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </td>
-                            <td rowSpan={rowSpan} onClick={(e) => e.stopPropagation()}>
-                              <button className="btn-edit" onClick={() => handleEdit(po)}>
-                                {po.needsVendorAssignment ? 'Assign Vendor' : 'Edit'}
-                              </button>
-                              <button className="btn-delete" onClick={() => handleDelete(po._id)}>
-                                Delete
-                              </button>
-                            </td>
-                          </>
-                        ) : null}
-                      </tr>
-                    );
-                  });
+                filteredPurchaseOrders.map((po) => {
+                  const itemCount = po.items?.length || 0;
+                  return (
+                    <tr
+                      key={po._id}
+                      className="clickable-row"
+                      onClick={() => setViewingPO(po)}
+                    >
+                      <td>{po.poNumber}</td>
+                      <td>{getPurchaseRequisitionNumber(po)}</td>
+                      <td>
+                        {po.needsVendorAssignment ? (
+                          <span className="po-vendor-pending-badge">Assign vendor</span>
+                        ) : (
+                          po.supplier?.name || '—'
+                        )}
+                      </td>
+                      <td>{new Date(po.orderDate).toLocaleDateString()}</td>
+                      <td>
+                        <span className={`status-badge status-${po.status}`}>
+                          {po.status}
+                        </span>
+                      </td>
+                      <td>{itemCount}</td>
+                      <td>
+                        ₹
+                        {po.total?.toLocaleString('en-IN', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <button className="btn-edit" onClick={() => handleEdit(po)}>
+                          {po.needsVendorAssignment ? 'Assign Vendor' : 'Edit'}
+                        </button>
+                        <button className="btn-delete" onClick={() => handleDelete(po._id)}>
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
                 })
               )}
             </tbody>
@@ -1473,7 +1474,7 @@ function PurchaseOrders({ onNavigate }) {
                           supplierId: designated || newItem.supplierId || formData.supplier || '',
                         });
                       }}
-                      placeholder="Type product name or SKU…"
+                      placeholder="Type title or SKU…"
                     />
                   </div>
                   <div className="add-item-field add-item-field-product">

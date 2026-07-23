@@ -7,6 +7,7 @@ const Supplier = require('../models/Supplier');
 const Stock = require('../models/Stock');
 const Price = require('../models/Price');
 const { paginate } = require('../utils/pagination');
+const { applyDateRangeFilter } = require('../utils/dateRangeFilter');
 const logger = require('../utils/logger');
 const {
   resolveLineSupplier,
@@ -198,7 +199,7 @@ const POPULATE_LIST = [
 // GET all purchase requisites
 router.get('/', async (req, res) => {
   try {
-    const { status, search, unapproved, page, limit } = req.query;
+    const { status, search, unapproved, fromDate, toDate, page, limit } = req.query;
     const query = {};
 
     if (unapproved === 'true') {
@@ -219,6 +220,7 @@ router.get('/', async (req, res) => {
         { purchaseOrderNumber: { $regex: search, $options: 'i' } },
       ];
     }
+    applyDateRangeFilter(query, 'createdAt', fromDate, toDate);
 
     if (page || limit) {
       const result = await paginate(PurchaseRequisite, query, {

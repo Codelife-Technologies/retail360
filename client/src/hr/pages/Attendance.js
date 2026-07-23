@@ -312,12 +312,14 @@ function Attendance() {
         </button>
       </div>
 
-      <div className="hr-kpi-grid">
-        <HrKpiCard icon="✅" label="Present" value={summary.present} variant="success" />
-        <HrKpiCard icon="❌" label="Absent" value={summary.absent} variant="danger" />
-        <HrKpiCard icon="⏰" label="Late / Half Day" value={summary.late} variant="warning" />
-        <HrKpiCard icon="🏖️" label="Leave" value={summary.leave} />
-      </div>
+      {viewMode === 'daily' ? (
+        <div className="hr-kpi-grid">
+          <HrKpiCard icon="✅" label="Present" value={summary.present} variant="success" />
+          <HrKpiCard icon="❌" label="Absent" value={summary.absent} variant="danger" />
+          <HrKpiCard icon="⏰" label="Late / Half Day" value={summary.late} variant="warning" />
+          <HrKpiCard icon="🏖️" label="Leave" value={summary.leave} />
+        </div>
+      ) : null}
 
       <div className="hr-filters-row">
         {canManageAll && (

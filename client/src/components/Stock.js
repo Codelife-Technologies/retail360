@@ -4,7 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import logger from '../utils/logger';
 import DetailModal from './DetailModal';
 import ExcelUpload from './ExcelUpload';
+import ProductSearchPicker, { matchProductSearch } from './ProductSearchPicker';
 import './Stock.css';
+import './ProductSearchPicker.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 const UPLOADS_BASE = API_BASE_URL.replace('/api', '');
@@ -379,35 +381,27 @@ function Stock() {
   const isProductView = viewMode === 'product';
 
   const filteredLocationStock = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
+    const term = searchTerm.trim();
     if (!term) return stock;
 
     return stock.filter((record) => {
       const product = record.product;
       const location = record.location;
+      const locTerm = term.toLowerCase();
       return (
-        (product?.title && product.title.toLowerCase().includes(term)) ||
-        (product?.name && product.name.toLowerCase().includes(term)) ||
-        (product?.sku && product.sku.toLowerCase().includes(term)) ||
-        (location?.name && location.name.toLowerCase().includes(term)) ||
-        (location?.code && location.code.toLowerCase().includes(term))
+        matchProductSearch(product, term) ||
+        (location?.name && location.name.toLowerCase().includes(locTerm)) ||
+        (location?.code && location.code.toLowerCase().includes(locTerm))
       );
     });
   }, [stock, searchTerm]);
 
   const productStockRows = useMemo(() => {
     const aggregated = aggregateStockByProduct(stock);
-    const term = searchTerm.trim().toLowerCase();
+    const term = searchTerm.trim();
     if (!term) return aggregated;
 
-    return aggregated.filter((row) => {
-      const product = row.product;
-      return (
-        (product?.title && product.title.toLowerCase().includes(term)) ||
-        (product?.name && product.name.toLowerCase().includes(term)) ||
-        (product?.sku && product.sku.toLowerCase().includes(term))
-      );
-    });
+    return aggregated.filter((row) => matchProductSearch(row.product, term));
   }, [stock, searchTerm]);
 
   const displayRows = isProductView ? productStockRows : filteredLocationStock;
@@ -504,7 +498,7 @@ function Stock() {
             🗑 Remove Stock Data
           </button>
           <button className="btn-primary" onClick={handleAddStock}>
-            + Add Stock
+            + Add Stock Manually
           </button>
             </>
           )}
@@ -531,7 +525,7 @@ function Stock() {
       <div className="stock-search-bar">
         <input
           type="text"
-          placeholder={isProductView ? 'Search product or SKU…' : 'Search product, SKU, location…'}
+          placeholder={isProductView ? 'Search by title or SKU…' : 'Search by title, SKU, or location…'}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
@@ -917,23 +911,25 @@ function Stock() {
       {showAddModal && (
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Add Stock</h2>
+            <h2>Add Stock Manually</h2>
+            <p className="form-hint" style={{ marginTop: 0 }}>
+              Choose a product and location, then enter the quantity on hand.
+            </p>
             <div className="adjust-form">
               <div className="form-group">
                 <label>Product *</label>
-                <select
-                  name="product"
+                <ProductSearchPicker
+                  products={products}
                   value={newStockFormData.product}
-                  onChange={handleNewStockInputChange}
+                  onChange={(productId) =>
+                    setNewStockFormData((prev) => ({
+                      ...prev,
+                      product: productId,
+                    }))
+                  }
+                  placeholder="Type title or SKU…"
                   required
-                >
-                  <option value="">Select Product</option>
-                  {products.map((product) => (
-                    <option key={product._id} value={product._id}>
-                      {product.title || product.name} ({product.sku || 'No SKU'})
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
               <div className="form-group">
                 <label>Location *</label>
@@ -961,6 +957,7 @@ function Stock() {
                   onChange={handleNewStockInputChange}
                   required
                 />
+                <small className="form-hint">Sets the stock quantity for this product at the location.</small>
               </div>
               <div className="form-actions">
                 <button

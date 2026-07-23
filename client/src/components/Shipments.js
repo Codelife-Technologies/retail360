@@ -3,7 +3,9 @@ import { shipmentsAPI, shipmentVendorsAPI, shippingChargesAPI, locationsAPI, pro
 import logger from '../utils/logger';
 import DetailModal from './DetailModal';
 import ExcelUpload from './ExcelUpload';
+import ProductSearchPicker from './ProductSearchPicker';
 import './Shipments.css';
+import './ProductSearchPicker.css';
 
 function Shipments() {
   const [shipments, setShipments] = useState([]);
@@ -17,6 +19,7 @@ function Shipments() {
   const [editingShipment, setEditingShipment] = useState(null);
   const [viewingShipment, setViewingShipment] = useState(null);
   const [statusTab, setStatusTab] = useState('all');
+  const [vendorFilter, setVendorFilter] = useState('');
   const [searchDraft, setSearchDraft] = useState('');
   const [searchApplied, setSearchApplied] = useState('');
   const [formData, setFormData] = useState({
@@ -48,7 +51,7 @@ function Shipments() {
   useEffect(() => {
     fetchShipments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusTab, searchApplied]);
+  }, [statusTab, searchApplied, vendorFilter]);
 
   useEffect(() => {
     if (formData.shipmentVendor) {
@@ -74,6 +77,7 @@ function Shipments() {
       const query = {};
       if (statusTab && statusTab !== 'all') query.status = statusTab;
       if (searchApplied) query.search = searchApplied;
+      if (vendorFilter) query.shipmentVendor = vendorFilter;
 
       const response = await shipmentsAPI.getAll(query);
       setShipments(response.data);
@@ -118,10 +122,14 @@ function Shipments() {
   const fetchVendors = async () => {
     try {
       const response = await shipmentVendorsAPI.getAll({ isActive: 'true' });
-      setVendors(response.data);
+      const rows = Array.isArray(response.data)
+        ? response.data
+        : (response.data?.data || []);
+      setVendors(rows);
     } catch (error) {
       console.error('Error fetching vendors:', error);
       logger.error('Error fetching vendors', error);
+      setVendors([]);
     }
   };
 
@@ -407,6 +415,19 @@ function Shipments() {
         </div>
 
         <div className="shipments-search">
+          <select
+            className="shipments-vendor-filter"
+            value={vendorFilter}
+            onChange={(e) => setVendorFilter(e.target.value)}
+            aria-label="Filter by vendor"
+          >
+            <option value="">All vendors</option>
+            {vendors.map((vendor) => (
+              <option key={vendor._id} value={vendor._id}>
+                {vendor.name}{vendor.code ? ` (${vendor.code})` : ''}
+              </option>
+            ))}
+          </select>
           <input
             className="shipments-search-input"
             value={searchDraft}
@@ -426,6 +447,7 @@ function Shipments() {
             onClick={() => {
               setSearchDraft('');
               setSearchApplied('');
+              setVendorFilter('');
             }}
           >
             Clear
@@ -696,18 +718,17 @@ function Shipments() {
                 <label>Items *</label>
                 <div className="items-section">
                   <div className="add-item-form">
-                    <select
-                      name="product"
+                    <ProductSearchPicker
+                      products={products}
                       value={newItem.product}
-                      onChange={handleItemInputChange}
-                    >
-                      <option value="">Select Product</option>
-                      {products.map((product) => (
-                        <option key={product._id} value={product._id}>
-                          {product.name} {product.sku ? `(${product.sku})` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(productId) =>
+                        setNewItem((prev) => ({
+                          ...prev,
+                          product: productId,
+                        }))
+                      }
+                      placeholder="Type title or SKU…"
+                    />
                     <input
                       type="number"
                       name="quantity"

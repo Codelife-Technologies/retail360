@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { grnAPI } from '../services/grnApi';
+import { getCurrentMonthDateRange } from '../../utils/monthDateRange';
 
 export function useGrnDashboard() {
   const [stats, setStats] = useState(null);
@@ -27,9 +28,14 @@ export function useGrnDashboard() {
 }
 
 export function useGrnList(initialFilters = {}) {
+  const monthRange = getCurrentMonthDateRange();
   const [grns, setGrns] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState(initialFilters);
+  const [filters, setFilters] = useState({
+    fromDate: monthRange.fromDate,
+    toDate: monthRange.toDate,
+    ...initialFilters,
+  });
 
   const fetchList = useCallback(async () => {
     try {

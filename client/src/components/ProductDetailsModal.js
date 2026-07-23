@@ -20,21 +20,12 @@ function ProductDetailField({ label, value }) {
   );
 }
 
-function ReplenishBracketField({ label, main, deduction }) {
+function ReplenishQtyField({ label, main }) {
   const mainNum = Number(main);
   if (!Number.isFinite(mainNum) || mainNum <= 0) {
     return <ProductDetailField label={label} value="—" />;
   }
-  const deductionNum = Number(deduction) || 0;
-  return (
-    <div className="detail-field">
-      <span className="detail-field-label">{label}</span>
-      <span className="detail-field-value">
-        {mainNum}{' '}
-        <span className="replenish-bracket-deduction">({deductionNum})</span>
-      </span>
-    </div>
-  );
+  return <ProductDetailField label={label} value={mainNum} />;
 }
  
 function formatDim(d) {
@@ -144,10 +135,9 @@ function ProductDetailsModal({
                 label={`Highest Monthly Sale (${replenishContext.pastThreeMonthsLabel || 'Past 3 mo'})`}
                 value={replenishContext.highestMonthlySale}
               />
-              <ReplenishBracketField
+              <ReplenishQtyField
                 label="Req. Stock (Next Month)"
                 main={replenishContext.requiredStockNextMonth}
-                deduction={replenishContext.availableStock}
               />
               {replenishContext.showDateColumn && (
                 <ProductDetailField
@@ -156,10 +146,9 @@ function ProductDetailsModal({
                 />
               )}
               <ProductDetailField label="Replenish Status" value={replenishContext.replenishStatus} />
-              <ReplenishBracketField
+              <ReplenishQtyField
                 label="Reorder"
                 main={replenishContext.reorderQty}
-                deduction={replenishContext.refillQty}
               />
             </div>
           </div>

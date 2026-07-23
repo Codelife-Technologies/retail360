@@ -255,7 +255,7 @@ function HrMasters() {
         </div>
       </div>
 
-      <div className="hr-kpi-row">
+      <div className="hr-kpi-grid hr-masters-kpi">
         <div className="hr-kpi-card">
           <div className="hr-kpi-body">
             <span>Departments</span>

@@ -2,6 +2,7 @@ import React from 'react';
 import { formatINR } from '../types/grn.types';
 import GrnStatusBadge from '../components/GrnStatusBadge';
 import { useGrnDashboard, useGrnList } from '../hooks/useGrnDashboard';
+import { getCurrentMonthDateRange } from '../../utils/monthDateRange';
 
 function GrnDashboard({ onNavigate, onSelectGrn, onCreateFromPo }) {
   const { stats, loading, refresh } = useGrnDashboard();
@@ -122,6 +123,41 @@ function GrnDashboard({ onNavigate, onSelectGrn, onCreateFromPo }) {
             <option value="closed">Closed</option>
             <option value="cancelled">Cancelled</option>
           </select>
+          <label className="grn-date-filter">
+            <span>From</span>
+            <input
+              type="date"
+              value={filters.fromDate || ''}
+              onChange={(e) => setFilters((f) => ({ ...f, fromDate: e.target.value }))}
+            />
+          </label>
+          <label className="grn-date-filter">
+            <span>To</span>
+            <input
+              type="date"
+              value={filters.toDate || ''}
+              onChange={(e) => setFilters((f) => ({ ...f, toDate: e.target.value }))}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => {
+              const { fromDate, toDate } = getCurrentMonthDateRange();
+              setFilters((f) => ({ ...f, fromDate, toDate }));
+            }}
+          >
+            This month
+          </button>
+          {(filters.fromDate || filters.toDate) ? (
+            <button
+              type="button"
+              className="btn-clear-sku-search"
+              onClick={() => setFilters((f) => ({ ...f, fromDate: '', toDate: '' }))}
+            >
+              All dates
+            </button>
+          ) : null}
         </div>
 
         <div className="grn-table-wrap">

@@ -75,7 +75,7 @@ const purchaseOrderSchema = new mongoose.Schema({
     type: String,
     enum: [
       'draft', 'pending', 'pending_approval', 'approved',
-      'partially_received', 'fully_received', 'received',
+      'partially_received', 'fully_received', 'received', 'completed',
       'closed', 'cancelled'
     ],
     default: 'pending'

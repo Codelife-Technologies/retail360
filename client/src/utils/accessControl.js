@@ -38,7 +38,8 @@ export function canViewMaster(hasPermission) {
 }
 
 export function canEditStockProduct(hasPermission, user) {
-  if (hasPermission('admin.all')) return true;
+  if (hasPermission('admin.all') || hasPermission('master.full')) return true;
+  if (hasPermission('stock.create') || hasPermission('stock.update')) return true;
   return hasRole(user, 'warehouse');
 }
 

@@ -316,7 +316,7 @@ function PurchaseFormModal({ onClose, onSaved }) {
                 + Add Line
               </button>
             </div>
-            <p className="form-hint">Type a product name or SKU — pick from the suggestions list.</p>
+            <p className="form-hint">Type a title or SKU — pick from the suggestions list.</p>
 
             <div className="purchase-items-table-wrap">
               <table className="purchase-items-table">
@@ -340,7 +340,7 @@ function PurchaseFormModal({ onClose, onSaved }) {
                             type="text"
                             className="purchase-item-product-input"
                             value={line.query}
-                            placeholder="Type product name or SKU"
+                            placeholder="Type title or SKU"
                             autoComplete="off"
                             onChange={(e) => handleProductQueryChange(index, e.target.value)}
                             onFocus={() => handleProductFocus(index)}

@@ -1597,6 +1597,38 @@
   margin-bottom: 1rem;
 }
 
+.hr-masters-kpi {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.hr-masters-kpi .hr-kpi-card {
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.hr-masters-kpi .hr-kpi-body span {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-muted, #6b7280);
+  line-height: 1.2;
+}
+
+.hr-masters-kpi .hr-kpi-body h3 {
+  margin-top: 0.2rem;
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+@media (max-width: 640px) {
+  .hr-masters-kpi {
+    grid-template-columns: 1fr;
+  }
+}
+
 .hr-masters-section-tab {
   display: inline-flex;
   align-items: center;

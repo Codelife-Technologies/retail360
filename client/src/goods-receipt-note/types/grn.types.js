@@ -40,7 +40,7 @@ export const GRN_ELIGIBLE_PO_STATUSES = [
   'received',
 ];
 
-export const PO_BLOCKED_FOR_GRN = ['closed', 'cancelled', 'fully_received'];
+export const PO_BLOCKED_FOR_GRN = ['closed', 'cancelled', 'fully_received', 'completed'];
 
 export function getPoLinePendingQty(line) {
   if (line?.pendingQuantity != null) return Math.max(0, line.pendingQuantity);

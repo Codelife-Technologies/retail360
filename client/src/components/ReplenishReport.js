@@ -21,27 +21,19 @@ function resolvePrCreatorName(authUser) {
 function formatRequiredStockDisplay(item) {
   const main = Number(item?.requiredStockNextMonth ?? 0);
   if (main <= 0) return '';
-  const deduction = Number(item?.inventory?.availableStock ?? 0);
-  return `${main} (${deduction})`;
+  return String(main);
 }
 
 function formatReorderDisplay(item) {
   const main = Number(item?.reorderQty ?? 0);
   if (main <= 0) return '';
-  const deduction = Number(item?.refillQty ?? 0);
-  return `${main} (${deduction})`;
+  return String(main);
 }
 
-function ReplenishBracketQty({ main, deduction, title }) {
+function ReplenishQty({ main }) {
   const mainNum = Number(main);
   if (!Number.isFinite(mainNum) || mainNum <= 0) return '—';
-  const deductionNum = Number(deduction) || 0;
-  return (
-    <span title={title}>
-      {mainNum}{' '}
-      <span className="replenish-bracket-deduction">({deductionNum})</span>
-    </span>
-  );
+  return mainNum;
 }
 
 function ReplenishReport({ onNavigate }) {
@@ -475,21 +467,13 @@ function ReplenishReport({ onNavigate }) {
           className="text-center font-bold required-stock-cell replenish-col-req-stock"
           title={`Peak monthly sale from past 3 months (${item.highestMonthlySale ?? 0}) minus available stock (${item.inventory.availableStock ?? 0})`}
         >
-          <ReplenishBracketQty
-            main={item.requiredStockNextMonth}
-            deduction={item.inventory?.availableStock}
-            title={`${item.requiredStockNextMonth ?? 0} needed; ${item.inventory?.availableStock ?? 0} available stock subtracted`}
-          />
+          <ReplenishQty main={item.requiredStockNextMonth} />
         </td>
         <td
           className="text-center font-bold text-violet replenish-col-reorder"
           title={`${item.reorderQty ?? 0} to purchase; ${item.refillQty ?? 0} covered by home refill`}
         >
-          <ReplenishBracketQty
-            main={item.reorderQty}
-            deduction={item.refillQty}
-            title={`${item.reorderQty ?? 0} to purchase; ${item.refillQty ?? 0} covered by home refill`}
-          />
+          <ReplenishQty main={item.reorderQty} />
         </td>
       </tr>
       );
@@ -663,7 +647,7 @@ function ReplenishReport({ onNavigate }) {
         <div className="search-bar">
           <input
             type="text"
-            placeholder="Search SKU, product..."
+            placeholder="Search by title or SKU…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -944,7 +928,7 @@ function ReplenishReport({ onNavigate }) {
               <input
                 type="text"
                 className="replenish-pr-modal-search"
-                placeholder="Search SKU, product, location…"
+                placeholder="Search by title, SKU, or location…"
                 value={prModalSearch}
                 onChange={(e) => setPrModalSearch(e.target.value)}
               />

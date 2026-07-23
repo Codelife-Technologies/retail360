@@ -2,8 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { purchasesAPI, suppliersAPI, productsAPI, purchaseOrdersAPI, locationsAPI, pricesAPI } from '../services/api';
 import DetailModal from './DetailModal';
 import PurchaseFormModal from './PurchaseFormModal';
+import ProductSearchPicker from './ProductSearchPicker';
 import { computeCategoryTax, getCategoryName, getTaxRateForCategory } from '../utils/taxRates';
+import { getCurrentMonthDateRange } from '../utils/monthDateRange';
 import './Purchases.css';
+import './ProductSearchPicker.css';
 
 function resolvePurchaseItemSku(item, products = []) {
   if (item?.product?.sku) return String(item.product.sku).trim();
@@ -39,14 +42,21 @@ function Purchases() {
   const [productPrices, setProductPrices] = useState({}); // Map of productId -> price
   const [loading, setLoading] = useState(true);
   const [skuSearch, setSkuSearch] = useState('');
-  const [filters, setFilters] = useState({
-    supplier: '',
-    location: '',
+  const [filters, setFilters] = useState(() => {
+    const { fromDate, toDate } = getCurrentMonthDateRange();
+    return {
+      supplier: '',
+      location: '',
+      fromDate,
+      toDate,
+    };
   });
   const [showModal, setShowModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState(null);
   const [viewingPurchase, setViewingPurchase] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportingOne, setExportingOne] = useState(false);
   const [formData, setFormData] = useState({
     supplier: '',
     location: '',
@@ -73,7 +83,7 @@ function Purchases() {
 
   useEffect(() => {
     fetchPurchases();
-  }, [filters.supplier, filters.location]);
+  }, [filters.supplier, filters.location, filters.fromDate, filters.toDate]);
 
   const skuQuery = skuSearch.trim().toLowerCase();
 
@@ -142,6 +152,8 @@ function Purchases() {
       const params = {};
       if (filters.supplier) params.supplier = filters.supplier;
       if (filters.location) params.location = filters.location;
+      if (filters.fromDate) params.fromDate = filters.fromDate;
+      if (filters.toDate) params.toDate = filters.toDate;
       const response = await purchasesAPI.getAll(params);
       const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
       setPurchases(data);
@@ -412,13 +424,73 @@ function Purchases() {
     setShowAddModal(true);
   };
 
+  const downloadBlob = (blobData, filename) => {
+    const url = window.URL.createObjectURL(new Blob([blobData]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      setExporting(true);
+      const params = {};
+      if (filters.supplier) params.supplier = filters.supplier;
+      if (filters.location) params.location = filters.location;
+      if (filters.fromDate) params.fromDate = filters.fromDate;
+      if (filters.toDate) params.toDate = filters.toDate;
+      const response = await purchasesAPI.exportExcel(params);
+      downloadBlob(
+        response.data,
+        `purchases_${new Date().toISOString().slice(0, 10)}.xlsx`
+      );
+    } catch (error) {
+      console.error('Error exporting purchases:', error);
+      alert(error.response?.data?.error || 'Failed to export purchases');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportOne = async (purchase) => {
+    if (!purchase?._id) return;
+    try {
+      setExportingOne(true);
+      const response = await purchasesAPI.exportOne(purchase._id);
+      const safeName = String(purchase.purchaseNumber || purchase._id).replace(
+        /[\\/:*?"<>|]/g,
+        '_'
+      );
+      downloadBlob(response.data, `purchase_${safeName}.xlsx`);
+    } catch (error) {
+      console.error('Error exporting purchase:', error);
+      alert(error.response?.data?.error || 'Failed to export purchase');
+    } finally {
+      setExportingOne(false);
+    }
+  };
+
   return (
     <div className="purchases-container">
       <div className="purchases-header">
         <h1>Purchases</h1>
-        <button className="btn-primary" onClick={openAddModal}>
-          + Create Purchase
-        </button>
+        <div className="purchases-header-actions">
+          <button
+            type="button"
+            className="btn-export"
+            onClick={handleExportExcel}
+            disabled={loading || exporting || purchases.length === 0}
+          >
+            {exporting ? 'Exporting…' : '📤 Download Excel'}
+          </button>
+          <button className="btn-primary" onClick={openAddModal}>
+            + Create Purchase
+          </button>
+        </div>
       </div>
 
       <div className="purchases-sku-search-bar">
@@ -453,11 +525,39 @@ function Purchases() {
               ))}
             </select>
           </div>
-          {(filters.supplier || filters.location) ? (
+          <div className="purchases-filter-group">
+            <label htmlFor="purchases-from-date">From</label>
+            <input
+              id="purchases-from-date"
+              type="date"
+              value={filters.fromDate}
+              onChange={(e) => setFilters((prev) => ({ ...prev, fromDate: e.target.value }))}
+            />
+          </div>
+          <div className="purchases-filter-group">
+            <label htmlFor="purchases-to-date">To</label>
+            <input
+              id="purchases-to-date"
+              type="date"
+              value={filters.toDate}
+              onChange={(e) => setFilters((prev) => ({ ...prev, toDate: e.target.value }))}
+            />
+          </div>
+          <button
+            type="button"
+            className="btn-secondary purchases-filters-clear"
+            onClick={() => {
+              const { fromDate, toDate } = getCurrentMonthDateRange();
+              setFilters((prev) => ({ ...prev, fromDate, toDate }));
+            }}
+          >
+            This month
+          </button>
+          {(filters.supplier || filters.location || filters.fromDate || filters.toDate) ? (
             <button
               type="button"
               className="btn-clear-sku-search purchases-filters-clear"
-              onClick={() => setFilters({ supplier: '', location: '' })}
+              onClick={() => setFilters({ supplier: '', location: '', fromDate: '', toDate: '' })}
             >
               Clear filters
             </button>
@@ -593,6 +693,16 @@ function Purchases() {
       {viewingPurchase && (
         <DetailModal
           title={`Purchase ${viewingPurchase.purchaseNumber || ''}`}
+          headerActions={
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => handleExportOne(viewingPurchase)}
+              disabled={exportingOne}
+            >
+              {exportingOne ? 'Downloading…' : '📤 Download Excel'}
+            </button>
+          }
           fields={[
             { label: 'Purchase #', value: viewingPurchase.purchaseNumber },
             { label: 'Vendor', value: viewingPurchase.supplier?.name },
@@ -742,10 +852,10 @@ function Purchases() {
               <div className="items-section">
                 <h3>Items</h3>
                 <div className="add-item-form">
-                  <select
+                  <ProductSearchPicker
+                    products={products}
                     value={newItem.product}
-                    onChange={(e) => {
-                      const productId = e.target.value;
+                    onChange={(productId) => {
                       const price = productPrices[productId];
                       setNewItem({
                         ...newItem,
@@ -753,18 +863,8 @@ function Purchases() {
                         unitPrice: price ? price.purchasePrice : 0,
                       });
                     }}
-                  >
-                    <option value="">Select Product</option>
-                    {products.map((product) => {
-                      const price = productPrices[product._id];
-                      const purchasePrice = price ? price.purchasePrice : 0;
-                      return (
-                        <option key={product._id} value={product._id}>
-                          {product.title || product.name} - ₹{purchasePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </option>
-                      );
-                    })}
-                  </select>
+                    placeholder="Type title or SKU…"
+                  />
                   <input
                     type="number"
                     placeholder="Quantity"

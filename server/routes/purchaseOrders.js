@@ -5,6 +5,7 @@ const PurchaseOrder = require('../models/PurchaseOrder');
 const PurchaseRequisite = require('../models/PurchaseRequisite');
 const Supplier = require('../models/Supplier');
 const { paginate } = require('../utils/pagination');
+const { applyDateRangeFilter } = require('../utils/dateRangeFilter');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
 const { linkPurchaseOrderProductsToSupplier } = require('../utils/productSuppliers');
@@ -35,16 +36,15 @@ const PURCHASE_ORDER_HEADERS = [
 
 const PO_STATUS_ENUM = [
   'draft', 'pending', 'pending_approval', 'approved',
-  'partially_received', 'fully_received', 'received',
+  'partially_received', 'fully_received', 'received', 'completed',
   'closed', 'cancelled',
 ];
 
 const PO_STATUS_ALIASES = {
-  done: 'closed',
-  complete: 'closed',
-  completed: 'closed',
-  finish: 'closed',
-  finished: 'closed',
+  done: 'completed',
+  complete: 'completed',
+  finished: 'completed',
+  finish: 'completed',
   'fully received': 'fully_received',
   'partially received': 'partially_received',
   'pending approval': 'pending_approval',
@@ -196,7 +196,7 @@ async function buildPurchaseOrderSearchOr(search) {
 // GET all purchase orders (with pagination)
 router.get('/', async (req, res) => {
   try {
-    const { status, supplier, search, page, limit } = req.query;
+    const { status, supplier, search, fromDate, toDate, page, limit } = req.query;
     const query = {};
     
     if (status) {
@@ -210,6 +210,8 @@ router.get('/', async (req, res) => {
     if (search?.trim()) {
       query.$or = await buildPurchaseOrderSearchOr(search);
     }
+
+    applyDateRangeFilter(query, 'orderDate', fromDate, toDate);
     
     if (page || limit) {
       const result = await paginate(PurchaseOrder, query, {

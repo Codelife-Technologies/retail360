@@ -505,8 +505,18 @@
   font-size: 1.1rem;
 }
 
+.form-group .product-search-picker-input {
+  font-size: 1.1rem;
+}
+
 .form-group input:disabled {
   background: #f3f4f6;
+  color: #6b7280;
+}
+
+.form-hint {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
   color: #6b7280;
 }
 

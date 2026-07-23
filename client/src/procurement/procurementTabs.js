@@ -4,6 +4,7 @@ export const PROCUREMENT_GROUPS = [
     tabs: [
       { id: 'purchase-requisite', label: 'Purchase Requisition', icon: '📝', shortLabel: 'PR', permission: 'purchaseOrders.view' },
       { id: 'purchase-orders', label: 'Purchase Orders', icon: '📋', shortLabel: 'PO', permission: 'purchaseOrders.view' },
+      { id: 'purchase-order-record', label: 'Purchase Order Record', icon: '📑', shortLabel: 'POR', permission: 'purchaseOrders.view' },
       { id: 'grn', label: 'Goods Receipt Note', icon: '📥', shortLabel: 'GRN', permission: 'purchaseOrders.view' },
       { id: 'purchases', label: 'Purchases', icon: '💰', permission: 'purchases.view' },
     ],

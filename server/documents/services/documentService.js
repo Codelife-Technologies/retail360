@@ -108,7 +108,24 @@ function productImagePublicUrl(imagePath) {
 }
 
 /**
+ * Find an Active Shared folder by name within parent + source (case-insensitive,
+ * matching unique_shared_folder_name index collation).
+ */
+async function findSharedFolderByName({ name, parentId, sourceScope }) {
+  const trimmedName = String(name || '').trim();
+  if (!trimmedName) return null;
+  return DocumentFolder.findOne({
+    status: 'Active',
+    visibility: 'Shared',
+    sourceScope,
+    parentId: parentId || null,
+    name: trimmedName,
+  }).collation({ locale: 'en', strength: 2 });
+}
+
+/**
  * Find or create a shared catalog folder (category / subcategory / sku).
+ * Safe against unique_shared_folder_name (case-insensitive) collisions.
  */
 async function findOrCreateCatalogFolder({
   name,
@@ -171,15 +188,40 @@ async function findOrCreateCatalogFolder({
     });
   }
 
+  // Reuse existing Shared folder with same display name (case-insensitive)
+  if (!folder) {
+    folder = await findSharedFolderByName({
+      name: trimmedName,
+      parentId: parentObjectId,
+      sourceScope: scopeValue,
+    });
+  }
+
   if (folder) {
     let dirty = false;
-    if (folder.name !== trimmedName) {
+    const nameTaken = await findSharedFolderByName({
+      name: trimmedName,
+      parentId: parentObjectId,
+      sourceScope: scopeValue,
+    });
+    const canRename =
+      folder.name !== trimmedName &&
+      (!nameTaken || String(nameTaken._id) === String(folder._id));
+
+    if (canRename) {
       folder.name = trimmedName;
       dirty = true;
     }
     if (parentObjectId && String(folder.parentId || '') !== String(parentObjectId)) {
-      folder.parentId = parentObjectId;
-      dirty = true;
+      const clashAtNewParent = await findSharedFolderByName({
+        name: folder.name,
+        parentId: parentObjectId,
+        sourceScope: scopeValue,
+      });
+      if (!clashAtNewParent || String(clashAtNewParent._id) === String(folder._id)) {
+        folder.parentId = parentObjectId;
+        dirty = true;
+      }
     }
     if (categoryId && String(folder.categoryId || '') !== String(categoryId)) {
       folder.categoryId = categoryId;
@@ -193,7 +235,29 @@ async function findOrCreateCatalogFolder({
       folder.linkedSku = String(linkedSku).trim();
       dirty = true;
     }
-    if (dirty) await folder.save();
+    if (folder.folderKind === 'custom') {
+      folder.folderKind = folderKind;
+      dirty = true;
+    }
+    if (folder.visibility !== 'Shared') {
+      folder.visibility = 'Shared';
+      dirty = true;
+    }
+    if (dirty) {
+      try {
+        await folder.save();
+      } catch (err) {
+        if (err && err.code === 11000) {
+          const existing = await findSharedFolderByName({
+            name: trimmedName,
+            parentId: parentObjectId,
+            sourceScope: scopeValue,
+          });
+          if (existing) return existing;
+        }
+        throw err;
+      }
+    }
     return folder;
   }
 
@@ -226,14 +290,38 @@ async function findOrCreateCatalogFolder({
     });
   } catch (err) {
     if (err && err.code === 11000) {
-      const existing = await DocumentFolder.findOne({
-        status: 'Active',
-        sourceScope: scopeValue,
-        visibility: 'Shared',
-        parentId: parentObjectId,
+      const existing = await findSharedFolderByName({
         name: trimmedName,
+        parentId: parentObjectId,
+        sourceScope: scopeValue,
       });
-      if (existing) return existing;
+      if (existing) {
+        let dirty = false;
+        if (categoryId && !existing.categoryId) {
+          existing.categoryId = categoryId;
+          dirty = true;
+        }
+        if (subCategoryId && !existing.subCategoryId) {
+          existing.subCategoryId = subCategoryId;
+          dirty = true;
+        }
+        if (linkedSku && !existing.linkedSku) {
+          existing.linkedSku = String(linkedSku).trim();
+          dirty = true;
+        }
+        if (existing.folderKind === 'custom') {
+          existing.folderKind = folderKind;
+          dirty = true;
+        }
+        if (dirty) {
+          try {
+            await existing.save();
+          } catch (_saveErr) {
+            // return as-is if identity update races
+          }
+        }
+        return existing;
+      }
     }
     throw err;
   }
@@ -338,47 +426,55 @@ async function syncCatalogFolders({ sourceScope = 'AI Generator', user = null } 
 
   const categoryFolderById = new Map();
   for (const category of categories) {
-    const before = await DocumentFolder.findOne({
-      status: 'Active',
-      sourceScope: scopeValue,
-      folderKind: 'category',
-      categoryId: category._id,
-    }).select('_id').lean();
-    const folder = await findOrCreateCatalogFolder({
-      name: category.name,
-      parentId: null,
-      sourceScope: scopeValue,
-      folderKind: 'category',
-      categoryId: category._id,
-      user,
-      description: 'Category folder',
-    });
-    categoryFolderById.set(String(category._id), folder);
-    if (!before) categoriesCreated += 1;
+    try {
+      const before = await DocumentFolder.findOne({
+        status: 'Active',
+        sourceScope: scopeValue,
+        folderKind: 'category',
+        categoryId: category._id,
+      }).select('_id').lean();
+      const folder = await findOrCreateCatalogFolder({
+        name: category.name,
+        parentId: null,
+        sourceScope: scopeValue,
+        folderKind: 'category',
+        categoryId: category._id,
+        user,
+        description: 'Category folder',
+      });
+      categoryFolderById.set(String(category._id), folder);
+      if (!before) categoriesCreated += 1;
+    } catch (err) {
+      console.warn(`Catalog sync: skipped category "${category.name}":`, err.message);
+    }
   }
 
   const subFolderById = new Map();
   for (const sub of subcategories) {
     const parent = categoryFolderById.get(String(sub.category));
     if (!parent) continue;
-    const before = await DocumentFolder.findOne({
-      status: 'Active',
-      sourceScope: scopeValue,
-      folderKind: 'subcategory',
-      subCategoryId: sub._id,
-    }).select('_id').lean();
-    const folder = await findOrCreateCatalogFolder({
-      name: sub.name,
-      parentId: parent._id,
-      sourceScope: scopeValue,
-      folderKind: 'subcategory',
-      categoryId: sub.category,
-      subCategoryId: sub._id,
-      user,
-      description: 'Subcategory folder',
-    });
-    subFolderById.set(String(sub._id), folder);
-    if (!before) subcategoriesCreated += 1;
+    try {
+      const before = await DocumentFolder.findOne({
+        status: 'Active',
+        sourceScope: scopeValue,
+        folderKind: 'subcategory',
+        subCategoryId: sub._id,
+      }).select('_id').lean();
+      const folder = await findOrCreateCatalogFolder({
+        name: sub.name,
+        parentId: parent._id,
+        sourceScope: scopeValue,
+        folderKind: 'subcategory',
+        categoryId: sub.category,
+        subCategoryId: sub._id,
+        user,
+        description: 'Subcategory folder',
+      });
+      subFolderById.set(String(sub._id), folder);
+      if (!before) subcategoriesCreated += 1;
+    } catch (err) {
+      console.warn(`Catalog sync: skipped subcategory "${sub.name}":`, err.message);
+    }
   }
 
   for (const product of products) {
@@ -392,25 +488,29 @@ async function syncCatalogFolders({ sourceScope = 'AI Generator', user = null } 
       categoryFolderById.get(String(product.category));
     if (!parent) continue;
 
-    const before = await DocumentFolder.findOne({
-      status: 'Active',
-      sourceScope: scopeValue,
-      folderKind: 'sku',
-      linkedSku: sku,
-    }).select('_id').lean();
+    try {
+      const before = await DocumentFolder.findOne({
+        status: 'Active',
+        sourceScope: scopeValue,
+        folderKind: 'sku',
+        linkedSku: sku,
+      }).select('_id').lean();
 
-    await findOrCreateCatalogFolder({
-      name: sku,
-      parentId: parent._id,
-      sourceScope: scopeValue,
-      folderKind: 'sku',
-      categoryId: product.category,
-      subCategoryId: product.subCategory,
-      linkedSku: sku,
-      user,
-      description: product.title || product.name || 'SKU images',
-    });
-    if (!before) skusCreated += 1;
+      await findOrCreateCatalogFolder({
+        name: sku,
+        parentId: parent._id,
+        sourceScope: scopeValue,
+        folderKind: 'sku',
+        categoryId: product.category,
+        subCategoryId: product.subCategory,
+        linkedSku: sku,
+        user,
+        description: product.title || product.name || 'SKU images',
+      });
+      if (!before) skusCreated += 1;
+    } catch (err) {
+      console.warn(`Catalog sync: skipped SKU "${sku}":`, err.message);
+    }
   }
 
   return {

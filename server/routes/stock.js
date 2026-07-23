@@ -13,9 +13,9 @@ const {
   buildSoldCurrentMonthMap,
   enrichStockWithSoldCurrentMonth,
 } = require('../utils/stockSalesUtils');
-const { requireAdminOrRole } = require('../middleware/auth');
+const { requireAdminOrRole, requireStockEdit } = require('../middleware/auth');
 
-const stockEditAccess = requireAdminOrRole('admin', 'warehouse');
+const stockEditAccess = requireStockEdit();
 
 const upload = multer({
   storage: multer.memoryStorage(),

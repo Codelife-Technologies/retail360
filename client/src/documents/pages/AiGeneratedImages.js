@@ -5,10 +5,8 @@ import { extractList, formatDateTime } from '../utils/documentsUtils';
 const SOURCE_SCOPE = 'AI Generator';
 
 function folderIcon(kind) {
-  if (kind === 'category') return '🗂️';
-  if (kind === 'subcategory') return '📁';
   if (kind === 'sku') return '🏷️';
-  return '📂';
+  return '📁';
 }
 
 function buildFolderTree(folders) {
@@ -94,18 +92,36 @@ function AiGeneratedImages() {
     : null;
 
   const breadcrumb = useMemo(() => {
-    if (selectedFolder === 'all') return ['All images'];
-    if (selectedFolder === 'unfiled') return ['Unfiled'];
+    if (selectedFolder === 'all') return [{ id: 'all', name: 'My Drive' }];
+    if (selectedFolder === 'unfiled') {
+      return [
+        { id: 'all', name: 'My Drive' },
+        { id: 'unfiled', name: 'Unfiled' },
+      ];
+    }
     const parts = [];
     let cursor = selectedFolderMeta;
     const guard = new Set();
     while (cursor && !guard.has(String(cursor._id))) {
       guard.add(String(cursor._id));
-      parts.unshift(cursor.name);
+      parts.unshift({ id: String(cursor._id), name: cursor.name });
       cursor = cursor.parentId ? folderById[String(cursor.parentId)] : null;
     }
-    return parts.length ? parts : [selectedFolderMeta?.name || 'Folder'];
+    return [{ id: 'all', name: 'My Drive' }, ...parts];
   }, [selectedFolder, selectedFolderMeta, folderById]);
+
+  const selectedFolderLabel = useMemo(() => {
+    if (!breadcrumb.length) return 'My Drive';
+    return breadcrumb.map((p) => p.name).join(' / ');
+  }, [breadcrumb]);
+
+  const driveFolders = useMemo(() => {
+    if (selectedFolder === 'unfiled') return [];
+    if (selectedFolder === 'all') {
+      return folderTree.map((node) => node.folder);
+    }
+    return childFolders || [];
+  }, [selectedFolder, folderTree, childFolders]);
 
   const loadFolders = useCallback(async () => {
     try {
@@ -186,8 +202,6 @@ function AiGeneratedImages() {
 
   useEffect(() => { loadFolders(); }, [loadFolders]);
   useEffect(() => { load(); }, [load]);
-
-  const selectedFolderLabel = breadcrumb.join(' / ');
 
   const showToast = (message) => {
     setToast(message);
@@ -401,6 +415,20 @@ function AiGeneratedImages() {
     setSelectedFolder(key);
     setPage(1);
     setMoveDocId(null);
+    if (key && key !== 'all' && key !== 'unfiled') {
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        let cursor = folderById[String(key)];
+        const guard = new Set();
+        while (cursor && !guard.has(String(cursor._id))) {
+          guard.add(String(cursor._id));
+          next.add(String(cursor._id));
+          if (cursor.parentId) next.add(String(cursor.parentId));
+          cursor = cursor.parentId ? folderById[String(cursor.parentId)] : null;
+        }
+        return next;
+      });
+    }
   };
 
   const toggleExpanded = (folderId) => {
@@ -481,12 +509,24 @@ function AiGeneratedImages() {
               <div className="dm-folder-actions">
                 {kind === 'custom' ? (
                   <>
-                    <button type="button" className="dm-folder-action" title="Rename" onClick={() => startRename(folder)}>✎</button>
-                    <button type="button" className="dm-folder-action-btn danger" title="Delete folder" onClick={() => handleDeleteFolder(folder)}>Delete</button>
+                    <button
+                      type="button"
+                      className="dm-folder-action"
+                      title="Rename"
+                      onClick={() => startRename(folder)}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      className="dm-folder-action danger"
+                      title="Delete folder"
+                      onClick={() => handleDeleteFolder(folder)}
+                    >
+                      ×
+                    </button>
                   </>
-                ) : (
-                  <button type="button" className="dm-folder-action-btn danger" title="Remove folder" onClick={() => handleDeleteFolder(folder)}>Remove</button>
-                )}
+                ) : null}
               </div>
             </div>
           )}
@@ -501,17 +541,16 @@ function AiGeneratedImages() {
   }, [productImages, docs]);
 
   const viewingSku = selectedFolderMeta?.folderKind === 'sku';
-  const viewingMidLevel =
-    selectedFolderMeta &&
-    (selectedFolderMeta.folderKind === 'category' || selectedFolderMeta.folderKind === 'subcategory');
+  const showFolderGrid = driveFolders.length > 0;
+  const showFilesSection = allImages.length > 0;
 
   return (
-    <div className="dm-page">
+    <div className="dm-page dm-drive-page">
       <div className="dm-page-header">
         <div>
           <h1>Product images</h1>
           <p className="dm-subtitle">
-            Browse by Category → Subcategory → SKU. Upload from desktop or save AI-generated images here.
+            Browse folders like Drive — Category → Subcategory → SKU. Upload from desktop or save AI-generated images here.
           </p>
         </div>
         <div className="dm-actions">
@@ -555,7 +594,7 @@ function AiGeneratedImages() {
               aria-label="New folder name"
             />
             <button type="submit" className="dm-btn dm-btn-primary" disabled={creatingFolder || !newFolderName.trim()}>
-              {creatingFolder ? '…' : 'Add'}
+              {creatingFolder ? '…' : 'New'}
             </button>
           </form>
 
@@ -565,8 +604,8 @@ function AiGeneratedImages() {
               className={`dm-folder-item${selectedFolder === 'all' ? ' active' : ''}`}
               onClick={() => selectBrowseFolder('all')}
             >
-              <span className="dm-folder-icon">📁</span>
-              <span className="dm-folder-name">All images</span>
+              <span className="dm-folder-icon">💾</span>
+              <span className="dm-folder-name">My Drive</span>
             </button>
             <button
               type="button"
@@ -589,10 +628,28 @@ function AiGeneratedImages() {
         </aside>
 
         <div className="dm-main-panel">
-          <div className="dm-toolbar">
-            <div className="dm-folder-breadcrumb">
-              Viewing: <strong>{selectedFolderLabel}</strong>
-            </div>
+          <div className="dm-toolbar dm-drive-toolbar">
+            <nav className="dm-drive-breadcrumb" aria-label="Folder path">
+              {breadcrumb.map((crumb, index) => {
+                const isLast = index === breadcrumb.length - 1;
+                return (
+                  <React.Fragment key={`${crumb.id}-${index}`}>
+                    {index > 0 ? <span className="dm-drive-crumb-sep">/</span> : null}
+                    {isLast ? (
+                      <span className="dm-drive-crumb current">{crumb.name}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="dm-drive-crumb"
+                        onClick={() => selectBrowseFolder(crumb.id)}
+                      >
+                        {crumb.name}
+                      </button>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </nav>
             <label className="dm-field dm-search">
               <span>Search</span>
               <input
@@ -620,114 +677,115 @@ function AiGeneratedImages() {
             <div className="dm-empty">Loading…</div>
           ) : (
             <>
-              {viewingMidLevel && childFolders.length > 0 ? (
-                <div className="dm-folder-cards">
-                  {childFolders.map((child) => {
-                    const count = (child.documentCount || 0) + (child.productImageCount || 0);
-                    return (
-                      <button
-                        key={child._id}
-                        type="button"
-                        className="dm-folder-card"
-                        onClick={() => selectBrowseFolder(String(child._id))}
-                      >
-                        <div className="dm-folder-card-preview">
-                          {child.previewUrl ? (
-                            <img src={documentsAPI.fileUrl(child.previewUrl)} alt="" />
-                          ) : (
-                            <span className="dm-folder-card-icon">{folderIcon(child.folderKind)}</span>
-                          )}
-                        </div>
-                        <div className="dm-folder-card-body">
-                          <strong>{child.name}</strong>
-                          <span className="dm-meta">
-                            {child.folderKind === 'sku' ? 'SKU' : child.folderKind === 'subcategory' ? 'Subcategory' : 'Folder'}
-                            {' · '}
-                            {count} image{count === 1 ? '' : 's'}
+              {showFolderGrid ? (
+                <section className="dm-drive-section">
+                  <h3 className="dm-drive-section-title">Folders</h3>
+                  <div className="dm-drive-folder-grid">
+                    {driveFolders.map((child) => {
+                      const count = (child.documentCount || 0) + (child.productImageCount || 0);
+                      return (
+                        <button
+                          key={child._id}
+                          type="button"
+                          className="dm-drive-folder"
+                          onDoubleClick={() => selectBrowseFolder(String(child._id))}
+                          onClick={() => selectBrowseFolder(String(child._id))}
+                          title={child.description || child.name}
+                        >
+                          <span className="dm-drive-folder-icon" aria-hidden="true">
+                            {folderIcon(child.folderKind)}
                           </span>
-                          {child.description ? <span className="dm-meta">{child.description}</span> : null}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                          <span className="dm-drive-folder-name">{child.name}</span>
+                          <span className="dm-drive-folder-meta">
+                            {count} item{count === 1 ? '' : 's'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
               ) : null}
 
-              {allImages.length === 0 && !(viewingMidLevel && childFolders.length) ? (
+              {showFilesSection ? (
+                <section className="dm-drive-section">
+                  {showFolderGrid ? <h3 className="dm-drive-section-title">Files</h3> : null}
+                  <div className="dm-grid">
+                    {allImages.map((doc) => (
+                      <div key={doc._id} className="dm-image-card">
+                        <div className="dm-image-preview">
+                          <img src={documentsAPI.fileUrl(doc.thumbnailUrl || doc.fileUrl)} alt={doc.title || doc.sku} />
+                        </div>
+                        <div className="dm-image-body">
+                          <strong>{doc.sku || 'No SKU'}</strong>
+                          <span className="dm-meta">{doc.productName || '—'}</span>
+                          <span className="dm-meta">
+                            {doc.category || '—'}
+                            {doc.subCategory ? ` / ${doc.subCategory}` : ''}
+                            {doc.brand ? ` · ${doc.brand}` : ''}
+                          </span>
+                          <span className="dm-meta">
+                            {doc.kind === 'product'
+                              ? 'Product catalog'
+                              : doc.folderId
+                                ? (folderById[String(doc.folderId)]?.name || 'Folder')
+                                : 'Unfiled'}
+                          </span>
+                          {doc.kind !== 'product' ? (
+                            <span className="dm-meta">{formatDateTime(doc.createdAt)} · by {doc.uploadedBy || 'AI'}</span>
+                          ) : null}
+                          <span className={`dm-badge ${doc.kind === 'product' ? 'catalog' : 'ai'}`}>
+                            {doc.kind === 'product' ? 'Catalog' : `AI v${doc.version || 1}`}
+                          </span>
+                        </div>
+                        <div className="dm-image-actions">
+                          <button type="button" className="dm-btn" onClick={() => setPreview(doc)}>Preview</button>
+                          <button type="button" className="dm-btn" onClick={() => handleDownload(doc)}>
+                            {doc.kind === 'product' ? 'Open' : 'Download'}
+                          </button>
+                          <button type="button" className="dm-btn" onClick={() => handleShare(doc)}>Share</button>
+                          {doc.kind !== 'product' ? (
+                            <>
+                              <button
+                                type="button"
+                                className="dm-btn"
+                                onClick={() => setMoveDocId(moveDocId === doc._id ? null : doc._id)}
+                              >
+                                Move
+                              </button>
+                              <button type="button" className="dm-btn dm-btn-danger" onClick={() => handleDelete(doc)}>Delete</button>
+                            </>
+                          ) : null}
+                        </div>
+                        {moveDocId === doc._id ? (
+                          <div className="dm-move-menu" style={{ padding: '0 0.85rem 0.85rem' }}>
+                            <button type="button" className="dm-btn" onClick={() => handleMoveDocument(doc._id, null)}>Unfiled</button>
+                            {moveTargets.map((f) => (
+                              <button
+                                key={f._id}
+                                type="button"
+                                className="dm-btn"
+                                disabled={String(doc.folderId || '') === String(f._id)}
+                                onClick={() => handleMoveDocument(doc._id, f._id)}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {!showFolderGrid && !showFilesSection ? (
                 <div className="dm-empty">
-                  <h3>No images{selectedFolder !== 'all' ? ` in ${selectedFolderLabel}` : ''}</h3>
+                  <h3>No items{selectedFolder !== 'all' ? ` in ${selectedFolderLabel}` : ''}</h3>
                   <p>
                     {viewingSku
                       ? 'This SKU has no images yet. Upload from desktop, or generate in Utilities → Image Generator and Save.'
                       : 'Sync catalog folders, upload from desktop, or generate in Utilities → Image Generator and Save.'}
                   </p>
-                </div>
-              ) : allImages.length > 0 ? (
-                <div className="dm-grid">
-                  {allImages.map((doc) => (
-                    <div key={doc._id} className="dm-image-card">
-                      <div className="dm-image-preview">
-                        <img src={documentsAPI.fileUrl(doc.thumbnailUrl || doc.fileUrl)} alt={doc.title || doc.sku} />
-                      </div>
-                      <div className="dm-image-body">
-                        <strong>{doc.sku || 'No SKU'}</strong>
-                        <span className="dm-meta">{doc.productName || '—'}</span>
-                        <span className="dm-meta">
-                          {doc.category || '—'}
-                          {doc.subCategory ? ` / ${doc.subCategory}` : ''}
-                          {doc.brand ? ` · ${doc.brand}` : ''}
-                        </span>
-                        <span className="dm-meta">
-                          {doc.kind === 'product'
-                            ? 'Product catalog'
-                            : doc.folderId
-                              ? (folderById[String(doc.folderId)]?.name || 'Folder')
-                              : 'Unfiled'}
-                        </span>
-                        {doc.kind !== 'product' ? (
-                          <span className="dm-meta">{formatDateTime(doc.createdAt)} · by {doc.uploadedBy || 'AI'}</span>
-                        ) : null}
-                        <span className={`dm-badge ${doc.kind === 'product' ? 'catalog' : 'ai'}`}>
-                          {doc.kind === 'product' ? 'Catalog' : `AI v${doc.version || 1}`}
-                        </span>
-                      </div>
-                      <div className="dm-image-actions">
-                        <button type="button" className="dm-btn" onClick={() => setPreview(doc)}>Preview</button>
-                        <button type="button" className="dm-btn" onClick={() => handleDownload(doc)}>
-                          {doc.kind === 'product' ? 'Open' : 'Download'}
-                        </button>
-                        <button type="button" className="dm-btn" onClick={() => handleShare(doc)}>Share</button>
-                        {doc.kind !== 'product' ? (
-                          <>
-                            <button
-                              type="button"
-                              className="dm-btn"
-                              onClick={() => setMoveDocId(moveDocId === doc._id ? null : doc._id)}
-                            >
-                              Move
-                            </button>
-                            <button type="button" className="dm-btn dm-btn-danger" onClick={() => handleDelete(doc)}>Delete</button>
-                          </>
-                        ) : null}
-                      </div>
-                      {moveDocId === doc._id ? (
-                        <div className="dm-move-menu" style={{ padding: '0 0.85rem 0.85rem' }}>
-                          <button type="button" className="dm-btn" onClick={() => handleMoveDocument(doc._id, null)}>Unfiled</button>
-                          {moveTargets.map((f) => (
-                            <button
-                              key={f._id}
-                              type="button"
-                              className="dm-btn"
-                              disabled={String(doc.folderId || '') === String(f._id)}
-                              onClick={() => handleMoveDocument(doc._id, f._id)}
-                            >
-                              {f.label}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
                 </div>
               ) : null}
             </>

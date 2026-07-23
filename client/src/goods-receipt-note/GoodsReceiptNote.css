@@ -214,6 +214,22 @@
   max-width: 400px;
 }
 
+.grn-date-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.grn-date-filter input[type="date"] {
+  flex: 0 0 auto;
+  min-width: 140px;
+  max-width: 170px;
+  padding: 0.5rem 0.55rem;
+  font-size: 0.95rem;
+}
+
 .grn-table-wrap {
   overflow-x: auto;
   background: white;
