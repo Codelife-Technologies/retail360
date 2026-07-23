@@ -96,8 +96,14 @@ const purchaseSchema = new mongoose.Schema({
   },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'paid', 'partial'],
-    default: 'pending'
+    enum: ['paid', 'unpaid'],
+    default: 'unpaid',
+    set: function normalizePurchasePaymentStatus(value) {
+      const raw = String(value || 'unpaid').trim().toLowerCase();
+      if (raw === 'paid') return 'paid';
+      // legacy: pending / partial
+      return 'unpaid';
+    },
   },
   notes: {
     type: String,
@@ -105,6 +111,12 @@ const purchaseSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true
+});
+
+purchaseSchema.pre('validate', function coercePaymentStatus(next) {
+  // Coerce legacy paymentStatus (pending/partial) before enum validation
+  this.set('paymentStatus', this.get('paymentStatus') || 'unpaid');
+  next();
 });
 
 // Pre-save hook to calculate totals

@@ -101,41 +101,73 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
     setDeliveryInfo((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = async (e) => {
+  const buildPayload = () => {
+    const payloadItems = lineItems.map((line) => ({
+      product: line.product,
+      sku: line.sku,
+      productName: line.productName,
+      category: line.category,
+      hsnCode: line.hsnCode,
+      unitOfMeasure: line.unitOfMeasure,
+      orderedQty: line.orderedQty,
+      receivedQty: line.receivedQty,
+      acceptedQty: line.acceptedQty,
+      rejectedQty: line.rejectedQty,
+      unitCost: line.unitCost,
+      taxPercent: line.taxPercent,
+      inspectionStatus: 'pending',
+    }));
+
+    return {
+      warehouse: warehouse || undefined,
+      receivingOfficer,
+      createdByName,
+      deliveryInfo,
+      items: payloadItems,
+      costCenter: selectedPo?.costCenter,
+    };
+  };
+
+  const createGrn = async () => {
+    if (!poId || !selectedPo) {
+      alert('Select a Purchase Order');
+      return null;
+    }
+    const res = await grnAPI.createFromPO(poId, buildPayload());
+    return res.data;
+  };
+
+  const handleSaveDraft = async (e) => {
     e.preventDefault();
+    try {
+      setLoading('draft');
+      const grn = await createGrn();
+      if (grn?._id) onCreated(grn._id, { confirmed: false });
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to save GRN draft');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmReceipt = async () => {
     if (!poId || !selectedPo) {
       alert('Select a Purchase Order');
       return;
     }
+    if (!window.confirm('Confirm receipt? This will create the GRN and update inventory, the PO, and create a purchase record.')) {
+      return;
+    }
     try {
-      setLoading(true);
-      const payloadItems = lineItems.map((line) => ({
-        product: line.product,
-        sku: line.sku,
-        productName: line.productName,
-        category: line.category,
-        hsnCode: line.hsnCode,
-        unitOfMeasure: line.unitOfMeasure,
-        orderedQty: line.orderedQty,
-        receivedQty: line.receivedQty,
-        acceptedQty: line.acceptedQty,
-        rejectedQty: line.rejectedQty,
-        unitCost: line.unitCost,
-        taxPercent: line.taxPercent,
-        inspectionStatus: 'pending',
-      }));
-
-      const res = await grnAPI.createFromPO(poId, {
-        warehouse: warehouse || undefined,
-        receivingOfficer,
-        createdByName,
-        deliveryInfo,
-        items: payloadItems,
-        costCenter: selectedPo.costCenter,
+      setLoading('confirm');
+      const grn = await createGrn();
+      if (!grn?._id) return;
+      await grnAPI.submitInspection(grn._id, {
+        performedBy: receivingOfficer || createdByName || 'User',
       });
-      onCreated(res.data._id);
+      onCreated(grn._id, { confirmed: true });
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to create GRN');
+      alert(err.response?.data?.error || 'Failed to confirm receipt');
     } finally {
       setLoading(false);
     }
@@ -146,12 +178,12 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
       <div className="grn-page-header">
         <div>
           <h2>Create Goods Receipt Note</h2>
-          <p>Select a PO to load full order details — edit receipt quantities inline, then create GRN</p>
+          <p>Select a PO to load full order details — edit receipt quantities, then save as draft or confirm receipt</p>
         </div>
         <button type="button" className="btn-secondary" onClick={onCancel}>Back</button>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSaveDraft}>
         <div className="grn-form-card">
           {loadError && <p className="grn-alert">{loadError}</p>}
 
@@ -209,9 +241,23 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
 
         {selectedPo && (
           <div className="form-actions grn-create-actions">
-            <button type="button" onClick={onCancel}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? 'Creating…' : 'Create GRN Draft'}
+            <button type="button" onClick={onCancel} disabled={!!loading}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn-secondary"
+              disabled={!!loading}
+            >
+              {loading === 'draft' ? 'Saving…' : 'Save Draft'}
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!!loading}
+              onClick={handleConfirmReceipt}
+            >
+              {loading === 'confirm' ? 'Confirming…' : 'Confirm Receipt'}
             </button>
           </div>
         )}

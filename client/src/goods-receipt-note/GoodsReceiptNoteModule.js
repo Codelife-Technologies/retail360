@@ -42,7 +42,7 @@ function GoodsReceiptNoteModule({ onNavigate: appNavigate }) {
 
       <nav className="grn-module-nav">
         <button type="button" className={view === 'dashboard' ? 'active' : ''} onClick={goDashboard}>
-          Dashboard
+          GRNs
         </button>
         <button
           type="button"
@@ -63,10 +63,6 @@ function GoodsReceiptNoteModule({ onNavigate: appNavigate }) {
       {view === 'dashboard' && (
         <GrnDashboard
           onNavigate={setView}
-          onSelectGrn={(id) => {
-            setSelectedGrnId(id);
-            setView('view');
-          }}
           onCreateFromPo={(poId) => {
             setPreselectedPoId(poId);
             setView('create');
@@ -78,7 +74,11 @@ function GoodsReceiptNoteModule({ onNavigate: appNavigate }) {
         <CreateGrn
           preselectedPoId={preselectedPoId}
           onCancel={goDashboard}
-          onCreated={(id) => {
+          onCreated={(id, options = {}) => {
+            if (options.confirmed) {
+              goDashboard();
+              return;
+            }
             setSelectedGrnId(id);
             setView('view');
           }}

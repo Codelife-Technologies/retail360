@@ -1,5 +1,6 @@
 import { DEFAULT_BUYER, DEFAULT_PO_TERMS } from '../config/buyerCompany';
 import { computePurchaseOrderTotals, formatINR, resolveProduct } from './purchaseOrderCalculations';
+import { normalizePoStatus } from '../types/purchaseOrderTypes';
 
 function esc(str) {
   if (str == null) return '';
@@ -126,7 +127,7 @@ export function generatePurchaseOrderPrintHtml(po, products, helpers) {
     </div>
     <div style="text-align:right;">
       <div><strong>${esc(po.poNumber || '')}</strong></div>
-      <div class="status">${esc(po.status || 'pending')}</div>
+      <div class="status">${esc(normalizePoStatus(po.status))}</div>
     </div>
   </div>
 

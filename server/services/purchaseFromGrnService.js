@@ -94,7 +94,7 @@ async function createPurchaseFromGrn(grnInput) {
     tax,
     defaultTaxRate: 0,
     total: subtotal + tax,
-    paymentStatus: 'pending',
+    paymentStatus: 'unpaid',
     notes: `Auto-created from GRN ${grn.grnNumber || grn._id}${
       grn.purchaseOrderNumber ? ` (PO ${grn.purchaseOrderNumber})` : ''
     }`,

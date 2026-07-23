@@ -30,7 +30,7 @@ import {
   getDesignatedSupplierId,
   getVendorOptionsForProduct,
 } from '../utils/purchaseOrderVendorSplit';
-import { UOM_OPTIONS } from '../types/purchaseOrderTypes';
+import { UOM_OPTIONS, normalizePoStatus } from '../types/purchaseOrderTypes';
 import { isPoEligibleForGrn } from '../goods-receipt-note/types/grn.types';
 import PoProductVendorAssign from './PoProductVendorAssign';
 import PoShareActions from './PoShareActions';
@@ -312,7 +312,7 @@ function PurchaseOrders({ onNavigate }) {
         purchaseRequisitionNumber: draft.purchaseRequisitionNumber || '',
         notes: draft.notes || '',
         deliveryLocation: draft.deliveryLocation || '',
-        status: draft.status || 'draft',
+        status: draft.status === 'approved' ? 'approved' : 'pending',
         items: enrichedItems,
         supplier: '',
       });
@@ -536,7 +536,7 @@ function PurchaseOrders({ onNavigate }) {
         purchaseRequisitionNumber: draft.purchaseRequisitionNumber || '',
         notes: draft.notes || '',
         deliveryLocation: draft.deliveryLocation || '',
-        status: draft.status || 'draft',
+        status: draft.status === 'approved' ? 'approved' : 'pending',
         items: enrichedItems,
         supplier: '',
       });
@@ -1102,8 +1102,8 @@ function PurchaseOrders({ onNavigate }) {
                       </td>
                       <td>{new Date(po.orderDate).toLocaleDateString()}</td>
                       <td>
-                        <span className={`status-badge status-${po.status}`}>
-                          {po.status}
+                        <span className={`status-badge status-${normalizePoStatus(po.status)}`}>
+                          {normalizePoStatus(po.status)}
                         </span>
                       </td>
                       <td>{itemCount}</td>

@@ -1318,7 +1318,15 @@ async function fetchPurchasesForReport(filters = {}) {
   const { startDate, endDate, supplier, location, vendorLocation, paymentStatus } = filters;
   const query = {};
 
-  if (paymentStatus) query.paymentStatus = paymentStatus;
+  if (paymentStatus) {
+    const raw = String(paymentStatus).trim().toLowerCase();
+    if (raw === 'paid') query.paymentStatus = 'paid';
+    else if (raw === 'unpaid' || raw === 'pending' || raw === 'partial') {
+      query.paymentStatus = { $in: ['unpaid', 'pending', 'partial'] };
+    } else {
+      query.paymentStatus = paymentStatus;
+    }
+  }
 
   const vendorLoc = String(vendorLocation || '').trim();
   if (vendorLoc) {
@@ -2118,7 +2126,15 @@ router.get('/purchases/summary', async (req, res) => {
     
     if (supplier) query.supplier = supplier;
     if (location) query.location = location;
-    if (paymentStatus) query.paymentStatus = paymentStatus;
+    if (paymentStatus) {
+      const raw = String(paymentStatus).trim().toLowerCase();
+      if (raw === 'paid') query.paymentStatus = 'paid';
+      else if (raw === 'unpaid' || raw === 'pending' || raw === 'partial') {
+        query.paymentStatus = { $in: ['unpaid', 'pending', 'partial'] };
+      } else {
+        query.paymentStatus = paymentStatus;
+      }
+    }
     
     const dateQuery = buildDateQuery(startDate, endDate);
     if (dateQuery) query.purchaseDate = dateQuery;
@@ -2141,7 +2157,7 @@ router.get('/purchases/summary', async (req, res) => {
     // Calculate statistics
     const productMap = {};
     const supplierMap = {};
-    const paymentStatusBreakdown = { pending: 0, paid: 0, partial: 0 };
+    const paymentStatusBreakdown = { unpaid: 0, paid: 0 };
     
     purchases.forEach(purchase => {
       // Product statistics
@@ -2171,7 +2187,8 @@ router.get('/purchases/summary', async (req, res) => {
       supplierMap[supplierId].expenditure += purchase.total || 0;
       
       // Status breakdown
-      paymentStatusBreakdown[purchase.paymentStatus] = (paymentStatusBreakdown[purchase.paymentStatus] || 0) + 1;
+      const payStatus = purchase.paymentStatus === 'paid' ? 'paid' : 'unpaid';
+      paymentStatusBreakdown[payStatus] += 1;
     });
     
     const topProducts = Object.values(productMap)
@@ -2209,7 +2226,15 @@ router.get('/purchases/detailed', async (req, res) => {
     
     if (supplier) query.supplier = supplier;
     if (location) query.location = location;
-    if (paymentStatus) query.paymentStatus = paymentStatus;
+    if (paymentStatus) {
+      const raw = String(paymentStatus).trim().toLowerCase();
+      if (raw === 'paid') query.paymentStatus = 'paid';
+      else if (raw === 'unpaid' || raw === 'pending' || raw === 'partial') {
+        query.paymentStatus = { $in: ['unpaid', 'pending', 'partial'] };
+      } else {
+        query.paymentStatus = paymentStatus;
+      }
+    }
     
     const dateQuery = buildDateQuery(startDate, endDate);
     if (dateQuery) query.purchaseDate = dateQuery;

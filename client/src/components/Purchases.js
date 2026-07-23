@@ -65,7 +65,7 @@ function Purchases() {
     items: [],
     tax: 0,
     defaultTaxRate: 0,
-    paymentStatus: 'pending',
+    paymentStatus: 'unpaid',
     notes: '',
   });
   const [newItem, setNewItem] = useState({
@@ -377,7 +377,7 @@ function Purchases() {
       items: purchase.items || [],
       tax: purchase.tax || 0,
       defaultTaxRate: purchase.defaultTaxRate || 0,
-      paymentStatus: purchase.paymentStatus || 'pending',
+      paymentStatus: purchase.paymentStatus === 'paid' ? 'paid' : 'unpaid',
       notes: purchase.notes || '',
     });
     setShowModal(true);
@@ -412,7 +412,7 @@ function Purchases() {
       items: [],
       tax: 0,
       defaultTaxRate: 0,
-      paymentStatus: 'pending',
+      paymentStatus: 'unpaid',
       notes: '',
     });
     setNewItem({ product: '', quantity: 1, unitPrice: 0 });
@@ -662,8 +662,8 @@ function Purchases() {
                     <td>{new Date(purchase.purchaseDate).toLocaleDateString()}</td>
                     <td>{purchase.purchaseOrder?.poNumber || '-'}</td>
                     <td>
-                      <span className={`status-badge status-${purchase.paymentStatus}`}>
-                        {purchase.paymentStatus}
+                      <span className={`status-badge status-${purchase.paymentStatus === 'paid' ? 'paid' : 'unpaid'}`}>
+                        {purchase.paymentStatus === 'paid' ? 'paid' : 'unpaid'}
                       </span>
                     </td>
                     <td>{purchase.items?.length || 0}</td>
@@ -709,7 +709,7 @@ function Purchases() {
             { label: 'Location', value: viewingPurchase.location?.name },
             { label: 'Purchase Date', value: viewingPurchase.purchaseDate ? new Date(viewingPurchase.purchaseDate).toLocaleDateString() : '' },
             { label: 'PO Number', value: viewingPurchase.purchaseOrder?.poNumber },
-            { label: 'Payment Status', value: viewingPurchase.paymentStatus },
+            { label: 'Payment Status', value: viewingPurchase.paymentStatus === 'paid' ? 'paid' : 'unpaid' },
             { label: 'Subtotal', value: `₹${(viewingPurchase.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
             { label: 'Tax', value: `₹${(viewingPurchase.tax || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
             { label: 'Total', value: `₹${(viewingPurchase.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
@@ -842,9 +842,8 @@ function Purchases() {
                     value={formData.paymentStatus}
                     onChange={handleInputChange}
                   >
-                    <option value="pending">Pending</option>
+                    <option value="unpaid">Unpaid</option>
                     <option value="paid">Paid</option>
-                    <option value="partial">Partial</option>
                   </select>
                 </div>
               </div>

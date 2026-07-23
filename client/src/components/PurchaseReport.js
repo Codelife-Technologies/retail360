@@ -339,9 +339,8 @@ function PurchaseReport() {
                 onChange={handleFilterChange}
               >
                 <option value="">All Statuses</option>
-                <option value="pending">Pending</option>
+                <option value="unpaid">Unpaid</option>
                 <option value="paid">Paid</option>
-                <option value="partial">Partial</option>
               </select>
             </div>
             {view === 'summary' && (
@@ -452,8 +451,8 @@ function PurchaseReport() {
                       <div className="purchase-record-figures">
                         <span>{items.length} line{items.length === 1 ? '' : 's'}</span>
                         <span className="purchase-record-total">{formatMoney(purchase.total)}</span>
-                        <span className={`status-badge status-${purchase.paymentStatus || 'pending'}`}>
-                          {purchase.paymentStatus || 'pending'}
+                        <span className={`status-badge status-${purchase.paymentStatus === 'paid' ? 'paid' : 'unpaid'}`}>
+                          {purchase.paymentStatus === 'paid' ? 'paid' : 'unpaid'}
                         </span>
                       </div>
                     </button>
@@ -552,9 +551,8 @@ function PurchaseReport() {
                 <div className="stat-box">
                   <h4>Payment Status</h4>
                   <ul>
-                    <li>Pending: {summaryData.statistics.paymentStatusBreakdown.pending}</li>
-                    <li>Paid: {summaryData.statistics.paymentStatusBreakdown.paid}</li>
-                    <li>Partial: {summaryData.statistics.paymentStatusBreakdown.partial}</li>
+                    <li>Unpaid: {summaryData.statistics.paymentStatusBreakdown.unpaid || 0}</li>
+                    <li>Paid: {summaryData.statistics.paymentStatusBreakdown.paid || 0}</li>
                   </ul>
                 </div>
               </div>

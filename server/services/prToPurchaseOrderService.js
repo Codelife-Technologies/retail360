@@ -173,7 +173,7 @@ async function createPurchaseOrdersFromPr(pr) {
       needsVendorAssignment: group.needsVendorAssignment,
       purchaseRequisite: pr._id,
       orderDate: new Date(),
-      status: group.needsVendorAssignment ? 'draft' : 'pending',
+      status: 'pending',
       purchaseRequisitionNumber: pr.prNumber,
       deliveryLocation: locations.join(', '),
       notes: pr.notes || `Generated from Purchase Requisition ${pr.prNumber}`,
@@ -218,7 +218,7 @@ async function createPurchaseOrdersFromPr(pr) {
 function applySupplierTermsToPoDoc(poDoc, supplier) {
   poDoc.supplier = supplier._id;
   poDoc.needsVendorAssignment = false;
-  poDoc.status = poDoc.status === 'draft' ? 'pending' : poDoc.status;
+  if (poDoc.status !== 'approved') poDoc.status = 'pending';
   poDoc.supplierDetails = supplierToPartyDetails(supplier);
   poDoc.advancePercent = supplier.advancePercent ?? poDoc.advancePercent ?? 0;
   poDoc.creditDays = supplier.creditDays ?? poDoc.creditDays ?? 0;
@@ -292,7 +292,7 @@ async function findExistingVendorPoForPr(purchaseRequisiteId, vendorId, excludeP
     supplier: vendorId,
     needsVendorAssignment: { $ne: true },
     _id: { $ne: excludePoId },
-    status: { $nin: ['cancelled', 'closed'] },
+    status: { $in: ['pending', 'approved'] },
   });
 }
 

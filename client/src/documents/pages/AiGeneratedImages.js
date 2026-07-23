@@ -412,13 +412,32 @@ function AiGeneratedImages() {
   };
 
   const selectBrowseFolder = (key) => {
-    setSelectedFolder(key);
-    setPage(1);
+    const id = String(key);
     setMoveDocId(null);
-    if (key && key !== 'all' && key !== 'unfiled') {
+    setPage(1);
+
+    // Clicking the already-open folder closes it (back to parent / My Drive)
+    if (selectedFolder === id && id !== 'all') {
+      if (id === 'unfiled') {
+        setSelectedFolder('all');
+      } else {
+        const meta = folderById[id];
+        setSelectedFolder(meta?.parentId ? String(meta.parentId) : 'all');
+        setExpandedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+      return;
+    }
+
+    setSelectedFolder(id);
+
+    if (id && id !== 'all' && id !== 'unfiled') {
       setExpandedIds((prev) => {
         const next = new Set(prev);
-        let cursor = folderById[String(key)];
+        let cursor = folderById[id];
         const guard = new Set();
         while (cursor && !guard.has(String(cursor._id))) {
           guard.add(String(cursor._id));

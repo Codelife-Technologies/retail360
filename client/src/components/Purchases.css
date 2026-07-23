@@ -239,6 +239,11 @@
   color: #92400e;
 }
 
+.status-unpaid {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .status-paid {
   background: #d1fae5;
   color: #065f46;

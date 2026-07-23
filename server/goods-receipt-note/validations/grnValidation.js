@@ -18,17 +18,27 @@ const DEFAULT_APPROVAL_CHAIN = [
   { level: 5, role: 'Finance Team' },
 ];
 
-/** PO statuses that allow creating a GRN (excludes closed/cancelled/fully received) */
-const GRN_ELIGIBLE_PO_STATUSES = [
-  'draft',
-  'pending',
-  'pending_approval',
+/** PO statuses that allow creating a GRN */
+const GRN_ELIGIBLE_PO_STATUSES = ['pending', 'approved'];
+
+const PO_BLOCKED_FOR_GRN = [];
+
+const PO_APPROVED_LEGACY = new Set([
   'approved',
   'partially_received',
+  'fully_received',
   'received',
-];
+  'completed',
+  'closed',
+  'done',
+  'complete',
+  'finished',
+]);
 
-const PO_BLOCKED_FOR_GRN = ['closed', 'cancelled', 'fully_received', 'completed'];
+function normalizePoStatus(raw) {
+  const value = String(raw || 'pending').trim().toLowerCase();
+  return PO_APPROVED_LEGACY.has(value) ? 'approved' : 'pending';
+}
 
 function getPoLinePendingQty(line) {
   if (line.pendingQuantity != null) return Math.max(0, line.pendingQuantity);
@@ -37,8 +47,9 @@ function getPoLinePendingQty(line) {
 
 function isPoEligibleForGrn(po) {
   if (!po) return false;
-  if (PO_BLOCKED_FOR_GRN.includes(po.status)) return false;
-  if (!GRN_ELIGIBLE_PO_STATUSES.includes(po.status)) return false;
+  const status = normalizePoStatus(po.status);
+  if (PO_BLOCKED_FOR_GRN.includes(status)) return false;
+  if (!GRN_ELIGIBLE_PO_STATUSES.includes(status)) return false;
   return (po.items || []).some((line) => getPoLinePendingQty(line) > 0);
 }
 

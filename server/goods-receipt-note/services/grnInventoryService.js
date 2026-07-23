@@ -4,11 +4,8 @@ const PurchaseRequisite = require('../../models/PurchaseRequisite');
 const GoodsReceiptNote = require('../../models/GoodsReceiptNote');
 const { computeLineItem } = require('../validations/grnValidation');
 
-const PO_RECEIVED_STATUSES = ['fully_received', 'received', 'completed', 'closed'];
-
 function isPoFullyReceived(po) {
   if (!po?.items?.length) return false;
-  if (PO_RECEIVED_STATUSES.includes(po.status)) return true;
   return po.items.every((line) => (line.receivedQuantity || 0) >= line.quantity);
 }
 
@@ -102,25 +99,47 @@ async function applyInventoryUpdate(grn) {
 }
 
 async function updatePurchaseOrderReceipt(grn) {
-  const po = await PurchaseOrder.findById(grn.purchaseOrder);
+  const po = await PurchaseOrder.findById(grn.purchaseOrder).populate(
+    'items.product',
+    'title name sku'
+  );
   if (!po) return;
 
   for (const grnItem of grn.items) {
-    const poLine = po.items.find(
-      (li) => li.product.toString() === grnItem.product.toString()
-    );
+    const grnProductId = String(grnItem.product?._id || grnItem.product || '');
+    const poLine = po.items.find((li) => {
+      const lineProductId = String(li.product?._id || li.product || '');
+      return lineProductId && lineProductId === grnProductId;
+    });
     if (!poLine) continue;
     poLine.receivedQuantity = (poLine.receivedQuantity || 0) + (grnItem.acceptedQty || 0);
     poLine.pendingQuantity = Math.max(0, poLine.quantity - poLine.receivedQuantity);
   }
 
+  // Older POs may lack itemName; backfill so validate doesn't fail on save.
+  for (const poLine of po.items) {
+    if (String(poLine.itemName || '').trim()) continue;
+    const product = poLine.product && typeof poLine.product === 'object' ? poLine.product : null;
+    const lineProductId = String(product?._id || poLine.product || '');
+    const grnMatch = grn.items.find(
+      (gi) => String(gi.product?._id || gi.product || '') === lineProductId
+    );
+    poLine.itemName = String(
+      product?.title
+      || product?.name
+      || grnMatch?.productName
+      || poLine.sku
+      || 'Item'
+    ).trim();
+  }
+
   const allReceived = po.items.every(
     (li) => (li.receivedQuantity || 0) >= li.quantity
   );
-  const anyReceived = po.items.some((li) => (li.receivedQuantity || 0) > 0);
-
-  if (allReceived) po.status = 'completed';
-  else if (anyReceived) po.status = 'partially_received';
+  // PO workflow statuses are only pending / approved — do not change status on receipt.
+  if (allReceived && po.status === 'pending') {
+    po.status = 'approved';
+  }
 
   await po.save();
   await tryCloseLinkedPurchaseRequisition(po._id);

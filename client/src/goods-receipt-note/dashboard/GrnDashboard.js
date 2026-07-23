@@ -1,43 +1,25 @@
-import React from 'react';
-import { formatINR } from '../types/grn.types';
+import React, { useState } from 'react';
+import { formatINR, GRN_STATUS_LABELS } from '../types/grn.types';
 import GrnStatusBadge from '../components/GrnStatusBadge';
 import { useGrnDashboard, useGrnList } from '../hooks/useGrnDashboard';
 import { getCurrentMonthDateRange } from '../../utils/monthDateRange';
+import DetailModal from '../../components/DetailModal';
 
-function GrnDashboard({ onNavigate, onSelectGrn, onCreateFromPo }) {
-  const { stats, loading, refresh } = useGrnDashboard();
+function GrnDashboard({ onNavigate, onCreateFromPo }) {
+  const { stats, refresh } = useGrnDashboard();
   const { grns, loading: listLoading, filters, setFilters, refresh: refreshList } = useGrnList();
+  const [viewingGrn, setViewingGrn] = useState(null);
 
   const upcomingPos = !filters.status ? (stats?.upcomingPos || []) : [];
   const showUpcomingOnly = filters.status === 'upcoming';
   const visibleGrns = showUpcomingOnly ? [] : grns;
 
-  const kpis = stats
-    ? [
-        { label: 'Upcoming POs', value: stats.upcomingPoCount ?? 0, cls: 'upcoming', status: 'upcoming' },
-        { label: 'Total GRNs', value: stats.totalGrns, cls: '', status: '' },
-        { label: 'Pending Receipt', value: stats.pendingReceipt, cls: 'warn', status: 'draft' },
-        { label: 'Completed', value: stats.completedReceipts, cls: 'ok', status: 'closed' },
-        { label: 'Partially Received', value: stats.partiallyReceived, cls: 'info', status: 'partially_received' },
-        { label: 'Fully Received', value: stats.fullyReceived, cls: 'ok', status: 'fully_received' },
-        { label: 'Rejected', value: stats.rejectedReceipts, cls: 'danger', status: 'cancelled' },
-        { label: 'Inventory Value Received', value: formatINR(stats.inventoryValueReceived), cls: 'primary', status: 'fully_received' },
-        { label: 'Monthly Received Value', value: formatINR(stats.monthlyReceivedValue), cls: 'primary', status: '' },
-      ]
-    : [];
-
-  const handleKpiClick = (status) => {
-    setFilters((f) => ({ ...f, status: status || '' }));
-    const el = document.querySelector('.grn-list-section');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   return (
     <div className="grn-dashboard">
       <div className="grn-page-header">
         <div>
-          <h2>GRN Dashboard</h2>
-          <p>Goods Receipt Notes — official receipt confirmation & inventory updates</p>
+          <h2>Goods Receipt Notes</h2>
+          <p>Official receipt confirmation & inventory updates</p>
         </div>
         <div className="grn-header-actions">
           <button type="button" className="btn-secondary" onClick={() => { refresh(); refreshList(); }}>
@@ -48,61 +30,6 @@ function GrnDashboard({ onNavigate, onSelectGrn, onCreateFromPo }) {
           </button>
         </div>
       </div>
-
-      {loading ? (
-        <div className="grn-skeleton">Loading dashboard…</div>
-      ) : (
-        <>
-          <div className="grn-kpi-grid">
-            {kpis.map((k) => (
-              <div
-                key={k.label}
-                className={`grn-kpi-card ${k.cls} clickable`}
-                role="button"
-                tabIndex={0}
-                title={`Filter: ${k.label}`}
-                onClick={() => handleKpiClick(k.status)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleKpiClick(k.status);
-                  }
-                }}
-              >
-                <span className="grn-kpi-label">{k.label}</span>
-                <span className="grn-kpi-value">{k.value}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="grn-charts-row">
-            <div className="grn-chart-card">
-              <h4>Supplier-wise Receipts</h4>
-              <ul className="grn-mini-list">
-                {(stats?.supplierWise || []).slice(0, 6).map((s) => (
-                  <li key={s.name}><span>{s.name}</span><strong>{s.count}</strong></li>
-                ))}
-              </ul>
-            </div>
-            <div className="grn-chart-card">
-              <h4>Warehouse-wise</h4>
-              <ul className="grn-mini-list">
-                {(stats?.warehouseWise || []).slice(0, 6).map((w) => (
-                  <li key={w.name}><span>{w.name}</span><strong>{w.count}</strong></li>
-                ))}
-              </ul>
-            </div>
-            <div className="grn-chart-card">
-              <h4>Category-wise Receipts</h4>
-              <ul className="grn-mini-list">
-                {(stats?.categoryWise || []).slice(0, 6).map((c) => (
-                  <li key={c.name}><span>{c.name}</span><strong>{c.qty} units</strong></li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </>
-      )}
 
       <div className="grn-list-section">
         <div className="grn-filters">
@@ -120,7 +47,6 @@ function GrnDashboard({ onNavigate, onSelectGrn, onCreateFromPo }) {
             <option value="draft">Draft</option>
             <option value="partially_received">Partially Received</option>
             <option value="fully_received">Fully Received</option>
-            <option value="closed">Closed</option>
             <option value="cancelled">Cancelled</option>
           </select>
           <label className="grn-date-filter">
@@ -208,7 +134,7 @@ function GrnDashboard({ onNavigate, onSelectGrn, onCreateFromPo }) {
                     <tr><td colSpan="9" className="grn-empty">No GRNs found</td></tr>
                   ) : (
                     visibleGrns.map((g) => (
-                      <tr key={g._id} className="clickable-row" onClick={() => onSelectGrn(g._id)}>
+                      <tr key={g._id} className="clickable-row" onClick={() => setViewingGrn(g)}>
                         <td className="mono">{g.grnNumber}</td>
                         <td>{g.grnDate ? new Date(g.grnDate).toLocaleDateString('en-IN') : '—'}</td>
                         <td><GrnStatusBadge status={g.receiptStatus} /></td>
@@ -227,6 +153,81 @@ function GrnDashboard({ onNavigate, onSelectGrn, onCreateFromPo }) {
           </table>
         </div>
       </div>
+
+      {viewingGrn && (
+        <DetailModal
+          title={`GRN ${viewingGrn.grnNumber || ''}`}
+          fields={[
+            { label: 'GRN Number', value: viewingGrn.grnNumber },
+            {
+              label: 'Date',
+              value: viewingGrn.grnDate
+                ? new Date(viewingGrn.grnDate).toLocaleDateString('en-IN')
+                : '',
+            },
+            {
+              label: 'Status',
+              value: GRN_STATUS_LABELS[viewingGrn.receiptStatus] || viewingGrn.receiptStatus,
+            },
+            { label: 'PO Number', value: viewingGrn.purchaseOrderNumber },
+            { label: 'PR Number', value: viewingGrn.purchaseRequisitionNumber },
+            { label: 'GIS', value: viewingGrn.gisNumber },
+            {
+              label: 'Supplier',
+              value: viewingGrn.supplierDetails?.name || viewingGrn.supplier?.name,
+            },
+            {
+              label: 'Warehouse',
+              value: viewingGrn.warehouse?.name
+                || viewingGrn.locationCode
+                || viewingGrn.warehouse?.code,
+            },
+            { label: 'Grand Total', value: formatINR(viewingGrn.grandTotal) },
+          ]}
+          onClose={() => setViewingGrn(null)}
+        >
+          {viewingGrn.items?.length > 0 && (
+            <div className="detail-view-section">
+              <h3>Products</h3>
+              <div className="grn-detail-items-wrap">
+                <table className="detail-view-items-table">
+                  <thead>
+                    <tr>
+                      <th>SKU</th>
+                      <th>Product</th>
+                      <th>Ordered</th>
+                      <th>Received</th>
+                      <th>Accepted</th>
+                      <th>Rejected</th>
+                      <th>Unit Cost</th>
+                      <th>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewingGrn.items.map((item, idx) => (
+                      <tr key={item._id || idx}>
+                        <td>{item.sku || item.product?.sku || '—'}</td>
+                        <td>
+                          {item.productName
+                            || item.product?.title
+                            || item.product?.name
+                            || '—'}
+                        </td>
+                        <td>{item.orderedQty ?? 0}</td>
+                        <td>{item.receivedQty ?? 0}</td>
+                        <td>{item.acceptedQty ?? 0}</td>
+                        <td>{item.rejectedQty ?? 0}</td>
+                        <td>{formatINR(item.unitCost)}</td>
+                        <td>{formatINR(item.lineAmount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </DetailModal>
+      )}
     </div>
   );
 }

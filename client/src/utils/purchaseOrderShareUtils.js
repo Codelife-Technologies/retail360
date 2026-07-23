@@ -1,4 +1,5 @@
 import { formatINR } from './purchaseOrderCalculations';
+import { normalizePoStatus } from '../types/purchaseOrderTypes';
 
 function resolveProductName(item, products = []) {
   const productId = item.product?._id || item.product;
@@ -15,7 +16,7 @@ export function buildPurchaseOrderShareMessage(po, products = []) {
     `Purchase Order: ${po.poNumber}`,
     `Supplier: ${supplierName}`,
     `Order Date: ${po.orderDate ? new Date(po.orderDate).toLocaleDateString('en-IN') : '—'}`,
-    `Status: ${po.status || 'pending'}`,
+    `Status: ${normalizePoStatus(po.status)}`,
     '',
     'Items:',
   ];

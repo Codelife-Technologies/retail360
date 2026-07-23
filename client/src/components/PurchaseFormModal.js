@@ -11,7 +11,7 @@ const emptyForm = () => ({
   items: [emptyLine()],
   tax: 0,
   defaultTaxRate: 0,
-  paymentStatus: 'pending',
+    paymentStatus: 'unpaid',
   notes: '',
 });
 
@@ -302,9 +302,8 @@ function PurchaseFormModal({ onClose, onSaved }) {
             <div className="form-group">
               <label>Payment Status</label>
               <select name="paymentStatus" value={formData.paymentStatus} onChange={handleInputChange}>
-                <option value="pending">Pending</option>
+                <option value="unpaid">Unpaid</option>
                 <option value="paid">Paid</option>
-                <option value="partial">Partial</option>
               </select>
             </div>
           </div>

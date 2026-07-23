@@ -563,3 +563,8 @@ td.excess { color: #d97706; font-weight: 600; }
   gap: 0.75rem;
   margin-top: 1.5rem;
 }
+
+.grn-detail-items-wrap {
+  overflow: auto;
+  margin-top: 0.5rem;
+}

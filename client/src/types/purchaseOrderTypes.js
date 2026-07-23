@@ -87,17 +87,28 @@
  * @property {string[]} termsAndConditions
  */
 
-/** ERP-compatible purchase order statuses */
+/** Purchase order statuses */
 export const PO_STATUS_OPTIONS = [
-  { value: 'draft', label: 'Draft' },
   { value: 'pending', label: 'Pending' },
-  { value: 'pending_approval', label: 'Pending Approval' },
   { value: 'approved', label: 'Approved' },
-  { value: 'partially_received', label: 'Partially Received' },
-  { value: 'fully_received', label: 'Fully Received' },
-  { value: 'received', label: 'Received (Legacy)' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'cancelled', label: 'Cancelled' },
 ];
+
+const PO_APPROVED_LEGACY = new Set([
+  'approved',
+  'partially_received',
+  'fully_received',
+  'received',
+  'completed',
+  'closed',
+  'done',
+  'complete',
+  'finished',
+]);
+
+/** Normalize any legacy PO status to pending | approved */
+export function normalizePoStatus(raw) {
+  const value = String(raw || 'pending').trim().toLowerCase();
+  return PO_APPROVED_LEGACY.has(value) ? 'approved' : 'pending';
+}
 
 export const UOM_OPTIONS = ['PCS', 'KG', 'BOX', 'SET', 'PAIR', 'MTR', 'LTR', 'NOS'];

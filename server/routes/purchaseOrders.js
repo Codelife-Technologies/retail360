@@ -25,7 +25,7 @@ const PURCHASE_ORDER_HEADERS = [
   { key: 'supplier', label: 'Supplier Name *' },
   { key: 'orderDate', label: 'Order Date (YYYY-MM-DD)' },
   { key: 'expectedDeliveryDate', label: 'Expected Delivery Date (YYYY-MM-DD)' },
-  { key: 'status', label: 'Status (pending/approved/received/closed/cancelled)' },
+  { key: 'status', label: 'Status (pending/approved)' },
   { key: 'sku', label: 'Product SKU' },
   { key: 'productName', label: 'Product Name' },
   { key: 'quantity', label: 'Quantity *' },
@@ -34,22 +34,26 @@ const PURCHASE_ORDER_HEADERS = [
   { key: 'notes', label: 'Notes' }
 ];
 
-const PO_STATUS_ENUM = [
-  'draft', 'pending', 'pending_approval', 'approved',
-  'partially_received', 'fully_received', 'received', 'completed',
-  'closed', 'cancelled',
-];
+const PO_STATUS_ENUM = ['pending', 'approved'];
 
 const PO_STATUS_ALIASES = {
-  done: 'completed',
-  complete: 'completed',
-  finished: 'completed',
-  finish: 'completed',
-  'fully received': 'fully_received',
-  'partially received': 'partially_received',
-  'pending approval': 'pending_approval',
-  cancel: 'cancelled',
-  canceled: 'cancelled',
+  draft: 'pending',
+  pending_approval: 'pending',
+  'pending approval': 'pending',
+  cancel: 'pending',
+  canceled: 'pending',
+  cancelled: 'pending',
+  done: 'approved',
+  complete: 'approved',
+  completed: 'approved',
+  finished: 'approved',
+  finish: 'approved',
+  closed: 'approved',
+  received: 'approved',
+  fully_received: 'approved',
+  'fully received': 'approved',
+  partially_received: 'approved',
+  'partially received': 'approved',
 };
 
 function normalizePoStatus(raw) {
@@ -193,6 +197,29 @@ async function buildPurchaseOrderSearchOr(search) {
   return or;
 }
 
+function expandPoStatusFilter(status) {
+  const normalized = normalizePoStatus(status);
+  if (!normalized) return status;
+  if (normalized === 'approved') {
+    return {
+      $in: [
+        'approved',
+        'partially_received',
+        'fully_received',
+        'received',
+        'completed',
+        'closed',
+        'done',
+        'complete',
+        'finished',
+      ],
+    };
+  }
+  return {
+    $in: ['pending', 'draft', 'pending_approval', 'cancelled', 'cancel', 'canceled'],
+  };
+}
+
 // GET all purchase orders (with pagination)
 router.get('/', async (req, res) => {
   try {
@@ -200,7 +227,7 @@ router.get('/', async (req, res) => {
     const query = {};
     
     if (status) {
-      query.status = status;
+      query.status = expandPoStatusFilter(status);
     }
     
     if (supplier) {
@@ -409,7 +436,8 @@ router.post('/import', upload.single('file'), async (req, res) => {
         }
 
         const statusRaw = (
-          first['Status (pending/approved/received/closed/cancelled)']
+          first['Status (pending/approved)']
+          || first['Status (pending/approved/received/closed/cancelled)']
           || first['Status (pending/approved/received/cancelled)']
           || first['Status']
           || 'pending'

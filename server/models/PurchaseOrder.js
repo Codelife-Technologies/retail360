@@ -54,9 +54,16 @@ const purchaseOrderItemSchema = new mongoose.Schema({
 }, { _id: false });
 
 purchaseOrderItemSchema.pre('validate', function validatePoItem(next) {
-  const hasName = Boolean(String(this.itemName || '').trim());
-  if (!hasName) {
-    return next(new Error('Each PO line needs a title (SKU is optional)'));
+  if (!String(this.itemName || '').trim()) {
+    const product = this.product && typeof this.product === 'object' ? this.product : null;
+    const fallback = String(
+      product?.title || product?.name || this.sku || ''
+    ).trim();
+    if (fallback) {
+      this.itemName = fallback;
+    } else {
+      return next(new Error('Each PO line needs a title (SKU is optional)'));
+    }
   }
   next();
 });
@@ -73,12 +80,24 @@ const purchaseOrderSchema = new mongoose.Schema({
   expectedDeliveryDate: { type: Date },
   status: {
     type: String,
-    enum: [
-      'draft', 'pending', 'pending_approval', 'approved',
-      'partially_received', 'fully_received', 'received', 'completed',
-      'closed', 'cancelled'
-    ],
-    default: 'pending'
+    enum: ['pending', 'approved'],
+    default: 'pending',
+    set: function normalizePurchaseOrderStatus(value) {
+      const raw = String(value || 'pending').trim().toLowerCase();
+      const approved = new Set([
+        'approved',
+        'partially_received',
+        'fully_received',
+        'received',
+        'completed',
+        'closed',
+        'done',
+        'complete',
+        'finished',
+      ]);
+      if (approved.has(raw)) return 'approved';
+      return 'pending';
+    },
   },
   revisionNumber: { type: String, trim: true, default: '0' },
   currency: { type: String, trim: true, default: 'INR' },
@@ -119,6 +138,8 @@ const purchaseOrderSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 purchaseOrderSchema.pre('validate', function validateSupplier(next) {
+  // Coerce legacy statuses (completed, received, etc.) before enum validation
+  this.set('status', this.get('status') || 'pending');
   if (!this.supplier && !this.needsVendorAssignment) {
     this.invalidate('supplier', 'Supplier is required unless vendor assignment is pending');
   }

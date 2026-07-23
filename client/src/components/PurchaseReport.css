@@ -402,6 +402,11 @@
   color: #92400e;
 }
 
+.status-badge.status-unpaid {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .status-badge.status-paid {
   background: #d1fae5;
   color: #065f46;

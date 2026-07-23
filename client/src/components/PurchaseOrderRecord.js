@@ -3,6 +3,7 @@ import { purchaseOrdersAPI } from '../services/api';
 import DetailModal from './DetailModal';
 import { formatINR } from '../utils/purchaseOrderCalculations';
 import { getCurrentMonthDateRange } from '../utils/monthDateRange';
+import { normalizePoStatus, PO_STATUS_OPTIONS } from '../types/purchaseOrderTypes';
 import './PurchaseOrderRecord.css';
 
 function resolvePoLineSku(item) {
@@ -69,7 +70,7 @@ function PurchaseOrderRecord() {
             ? 'Assign vendor'
             : po.supplier?.name || '—',
           orderDate: po.orderDate,
-          status: po.status || '—',
+          status: normalizePoStatus(po.status),
           sku: resolvePoLineSku(item) || '—',
           title: resolvePoLineTitle(item) || '—',
           quantity: qty,
@@ -116,12 +117,7 @@ function PurchaseOrderRecord() {
     [filteredItems]
   );
 
-  const statusOptions = useMemo(() => {
-    const set = new Set(
-      orderedItems.map((row) => row.status).filter((s) => s && s !== '—')
-    );
-    return [...set].sort((a, b) => String(a).localeCompare(String(b)));
-  }, [orderedItems]);
+  const statusOptions = PO_STATUS_OPTIONS.map((opt) => opt.value);
 
   return (
     <div className="purchase-order-record">
@@ -280,7 +276,7 @@ function PurchaseOrderRecord() {
                 ? new Date(viewingPO.expectedDeliveryDate).toLocaleDateString()
                 : '',
             },
-            { label: 'Status', value: viewingPO.status },
+            { label: 'Status', value: normalizePoStatus(viewingPO.status) },
             { label: 'Grand Total', value: formatINR(viewingPO.total) },
             { label: 'Notes', value: viewingPO.notes, full: true },
           ]}

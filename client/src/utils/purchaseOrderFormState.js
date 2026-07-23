@@ -1,5 +1,6 @@
 import { DEFAULT_BUYER, DEFAULT_PO_TERMS } from '../config/buyerCompany';
 import { companyProfileToPoDefaults } from './companyProfileUtils';
+import { normalizePoStatus } from '../types/purchaseOrderTypes';
 
 /** Empty nested object helpers for PO form */
 const emptyParty = () => ({
@@ -102,7 +103,7 @@ export function purchaseOrderToFormData(po) {
     supplier: po.supplier?._id || po.supplier || '',
     orderDate: dateStr(po.orderDate) || base.orderDate,
     expectedDeliveryDate: dateStr(po.expectedDeliveryDate),
-    status: po.status || 'pending',
+    status: normalizePoStatus(po.status),
     items: po.items || [],
     tax: po.tax || 0,
     defaultTaxRate: po.defaultTaxRate || 0,
@@ -148,6 +149,9 @@ function cleanSignatory(sig) {
 
 export function sanitizePurchaseOrderPayload(data) {
   const payload = { ...data };
+  if (payload.status != null) {
+    payload.status = normalizePoStatus(payload.status);
+  }
   const dateFields = ['expectedDeliveryDate', 'paymentDueDate'];
   dateFields.forEach((f) => {
     if (!payload[f]) delete payload[f];

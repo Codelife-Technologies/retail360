@@ -1,5 +1,5 @@
 /**
- * @typedef {'draft'|'pending_inspection'|'partially_received'|'fully_received'|'approved'|'closed'|'cancelled'} GrnReceiptStatus
+ * @typedef {'draft'|'pending_inspection'|'partially_received'|'fully_received'|'approved'|'cancelled'} GrnReceiptStatus
  */
 
 export const GRN_STATUS_LABELS = {
@@ -9,7 +9,6 @@ export const GRN_STATUS_LABELS = {
   partially_received: 'Partially Received',
   fully_received: 'Fully Received',
   approved: 'Approved',
-  closed: 'Closed',
   cancelled: 'Cancelled',
 };
 
@@ -31,16 +30,26 @@ export const ATTACHMENT_CATEGORIES = [
   { value: 'other', label: 'Other' },
 ];
 
-export const GRN_ELIGIBLE_PO_STATUSES = [
-  'draft',
-  'pending',
-  'pending_approval',
+export const GRN_ELIGIBLE_PO_STATUSES = ['pending', 'approved'];
+
+export const PO_BLOCKED_FOR_GRN = [];
+
+const PO_APPROVED_LEGACY = new Set([
   'approved',
   'partially_received',
+  'fully_received',
   'received',
-];
+  'completed',
+  'closed',
+  'done',
+  'complete',
+  'finished',
+]);
 
-export const PO_BLOCKED_FOR_GRN = ['closed', 'cancelled', 'fully_received', 'completed'];
+function normalizePoStatusForGrn(raw) {
+  const value = String(raw || 'pending').trim().toLowerCase();
+  return PO_APPROVED_LEGACY.has(value) ? 'approved' : 'pending';
+}
 
 export function getPoLinePendingQty(line) {
   if (line?.pendingQuantity != null) return Math.max(0, line.pendingQuantity);
@@ -50,8 +59,9 @@ export function getPoLinePendingQty(line) {
 /** @param {object} po Purchase order document */
 export function isPoEligibleForGrn(po) {
   if (!po) return false;
-  if (PO_BLOCKED_FOR_GRN.includes(po.status)) return false;
-  if (!GRN_ELIGIBLE_PO_STATUSES.includes(po.status)) return false;
+  const status = normalizePoStatusForGrn(po.status);
+  if (PO_BLOCKED_FOR_GRN.includes(status)) return false;
+  if (!GRN_ELIGIBLE_PO_STATUSES.includes(status)) return false;
   return (po.items || []).some((line) => getPoLinePendingQty(line) > 0);
 }
 

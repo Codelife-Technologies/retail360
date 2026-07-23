@@ -20,6 +20,16 @@ const upload = multer({
 
 const { generatePurchaseNumber } = require('../utils/generatePurchaseNumber');
 
+function expandPaymentStatusFilter(paymentStatus) {
+  if (!paymentStatus) return null;
+  const raw = String(paymentStatus).trim().toLowerCase();
+  if (raw === 'paid') return 'paid';
+  if (raw === 'unpaid' || raw === 'pending' || raw === 'partial') {
+    return { $in: ['unpaid', 'pending', 'partial'] };
+  }
+  return paymentStatus;
+}
+
 // GET all purchases (with pagination)
 router.get('/', requirePermission('purchases.view'), async (req, res) => {
   try {
@@ -34,8 +44,9 @@ router.get('/', requirePermission('purchases.view'), async (req, res) => {
       query.location = location;
     }
     
-    if (paymentStatus) {
-      query.paymentStatus = paymentStatus;
+    const paymentFilter = expandPaymentStatusFilter(paymentStatus);
+    if (paymentFilter) {
+      query.paymentStatus = paymentFilter;
     }
 
     applyDateRangeFilter(query, 'purchaseDate', fromDate, toDate);
@@ -72,7 +83,7 @@ const PURCHASE_TEMPLATE_HEADERS = [
   { key: 'supplier', label: 'Supplier Name *' },
   { key: 'locationCode', label: 'Location Code *' },
   { key: 'purchaseDate', label: 'Purchase Date (YYYY-MM-DD)' },
-  { key: 'paymentStatus', label: 'Payment Status (pending/paid/partial)' },
+  { key: 'paymentStatus', label: 'Payment Status (paid/unpaid)' },
   { key: 'sku', label: 'Product SKU *' },
   { key: 'quantity', label: 'Quantity *' },
   { key: 'unitPrice', label: 'Unit Price *' },
@@ -147,7 +158,8 @@ function buildPurchaseListQuery(queryParams = {}) {
   const query = {};
   if (supplier) query.supplier = supplier;
   if (location) query.location = location;
-  if (paymentStatus) query.paymentStatus = paymentStatus;
+  const paymentFilter = expandPaymentStatusFilter(paymentStatus);
+  if (paymentFilter) query.paymentStatus = paymentFilter;
   applyDateRangeFilter(query, 'purchaseDate', fromDate, toDate);
   return query;
 }
@@ -168,7 +180,7 @@ router.get('/template', requirePermission('purchases.view'), (req, res) => {
         supplier: 'Acme Supplies',
         locationCode: 'WH-01',
         purchaseDate: '2026-07-16',
-        paymentStatus: 'pending',
+        paymentStatus: 'unpaid',
         sku: 'SKU-001',
         quantity: 10,
         unitPrice: 250,
@@ -180,7 +192,7 @@ router.get('/template', requirePermission('purchases.view'), (req, res) => {
         supplier: 'Acme Supplies',
         locationCode: 'WH-01',
         purchaseDate: '2026-07-16',
-        paymentStatus: 'pending',
+        paymentStatus: 'unpaid',
         sku: 'SKU-002',
         quantity: 5,
         unitPrice: 800,
@@ -318,13 +330,16 @@ router.post('/import', requirePermission('purchases.create'), upload.single('fil
           });
         }
 
-        const paymentStatusRaw = (first['Payment Status (pending/paid/partial)'] || 'pending')
+        const paymentStatusRaw = (
+          first['Payment Status (paid/unpaid)']
+          || first['Payment Status (pending/paid/partial)']
+          || first['Payment Status']
+          || 'unpaid'
+        )
           .toString()
           .trim()
           .toLowerCase();
-        const paymentStatus = ['pending', 'paid', 'partial'].includes(paymentStatusRaw)
-          ? paymentStatusRaw
-          : 'pending';
+        const paymentStatus = paymentStatusRaw === 'paid' ? 'paid' : 'unpaid';
 
         const subtotal = items.reduce((sum, item) => sum + item.total, 0);
         const tax = parsePurchaseImportNumber(first.Tax) || 0;
@@ -442,7 +457,7 @@ router.post('/', requirePermission('purchases.create'), async (req, res) => {
     if (purchase.purchaseOrder) {
       await PurchaseOrder.findByIdAndUpdate(
         purchase.purchaseOrder,
-        { status: 'received' }
+        { status: 'approved' }
       );
     }
     
