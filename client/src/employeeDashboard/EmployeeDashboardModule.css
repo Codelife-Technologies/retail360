@@ -698,17 +698,9 @@
   margin: 0;
 }
 
-.ed-attendance-work-from label,
-.ed-attendance-notes label {
+.ed-attendance-work-from label {
   margin-bottom: 0.25rem;
   font-size: 0.8rem;
-}
-
-.ed-attendance-notes textarea {
-  min-height: 2rem;
-  padding: 0.4rem 0.55rem;
-  font-size: 0.875rem;
-  resize: vertical;
 }
 
 .ed-work-location-options {

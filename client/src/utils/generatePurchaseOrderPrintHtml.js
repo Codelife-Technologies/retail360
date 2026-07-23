@@ -45,7 +45,7 @@ export function generatePurchaseOrderPrintHtml(po, products, helpers) {
   const itemRows = totals.items
     .map((item) => {
       const fullProduct = resolveProduct(item, products);
-      const productName = fullProduct.title || fullProduct.name || 'Unknown';
+      const productName = fullProduct.title || fullProduct.name || item.itemName || 'New item';
       const sku = item.sku || fullProduct.sku || '-';
       const hsn = item.hsnCode || '-';
       const uom = item.unitOfMeasure || 'PCS';

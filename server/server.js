@@ -127,6 +127,8 @@ try {
   logger.backend.info('Reports routes loaded');
   const categoriesRoutes = require('./routes/categories');
   logger.backend.info('Categories routes loaded');
+  const hsnMastersRoutes = require('./routes/hsnMasters');
+  logger.backend.info('HSN masters routes loaded');
   const subcategoriesRoutes = require('./routes/subcategories');
   logger.backend.info('Subcategories routes loaded');
   const companyProfileRoutes = require('./routes/companyProfile');
@@ -181,6 +183,7 @@ try {
   app.use('/api/shipments', shipmentsRoutes);
   app.use('/api/reports', reportsRoutes);
   app.use('/api/categories', categoriesRoutes);
+  app.use('/api/hsn-masters', hsnMastersRoutes);
   app.use('/api/subcategories', subcategoriesRoutes);
   app.use('/api/company-profile', companyProfileRoutes);
   app.use('/api/hr', hrRoutes);

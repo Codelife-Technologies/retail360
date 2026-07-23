@@ -271,6 +271,7 @@
 .dm-badge.deleted { background: #fee2e2; color: #991b1b; }
 .dm-badge.ai { background: #ede9fe; color: #5b21b6; }
 .dm-badge.manual { background: #dbeafe; color: #1e40af; }
+.dm-badge.catalog { background: #ecfdf5; color: #047857; }
 .dm-badge.personal {
   background: #ffedd5;
   color: #9a3412;
@@ -592,6 +593,82 @@
   font-size: 0.8rem;
   color: #94a3b8;
   line-height: 1.4;
+}
+
+.dm-tree-node {
+  display: flex;
+  flex-direction: column;
+}
+
+.dm-tree-caret {
+  width: 1rem;
+  flex-shrink: 0;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.75rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dm-tree-caret.spacer {
+  visibility: hidden;
+  cursor: default;
+}
+
+.dm-folder-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.dm-folder-card {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.dm-folder-card:hover {
+  border-color: #c4b5fd;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+}
+
+.dm-folder-card-preview {
+  height: 120px;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.dm-folder-card-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dm-folder-card-icon {
+  font-size: 2rem;
+}
+
+.dm-folder-card-body {
+  padding: 0.75rem 0.85rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.dm-folder-card-body strong {
+  color: #0f172a;
+  font-size: 0.95rem;
 }
 
 .dm-main-panel {

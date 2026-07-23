@@ -9,6 +9,8 @@ const { exportToExcel } = require('../../utils/excelGenerator');
 const {
   resolveAttendanceScope,
   applyEmployeeScope,
+  applySelfEmployeeScope,
+  wantsSelfService,
   recordMatchesScope,
 } = require('../utils/attendanceAccess');
 
@@ -134,11 +136,16 @@ router.get('/today', async (req, res) => {
     if (!scope.canManageAll && !scope.employeeId) {
       return res.json(null);
     }
+    if (wantsSelfService(req) && !scope.employeeId) {
+      return res.json(null);
+    }
 
     const todayKey = getDateKeyInAppTz(new Date());
-    const employeeId = scope.canManageAll
-      ? req.query.employee || null
-      : scope.employeeId;
+    const employeeId = wantsSelfService(req)
+      ? scope.employeeId
+      : scope.canManageAll
+        ? req.query.employee || null
+        : scope.employeeId;
 
     let log = null;
     if (employeeId) {
@@ -161,11 +168,16 @@ router.get('/by-date', async (req, res) => {
     if (!scope.canManageAll && !scope.employeeId) {
       return res.json(null);
     }
+    if (wantsSelfService(req) && !scope.employeeId) {
+      return res.json(null);
+    }
 
     const requestedEmployeeId = req.query.employee;
-    const employeeId = scope.canManageAll
-      ? requestedEmployeeId || null
-      : scope.employeeId;
+    const employeeId = wantsSelfService(req)
+      ? scope.employeeId
+      : scope.canManageAll
+        ? requestedEmployeeId || null
+        : scope.employeeId;
 
     let log = null;
     if (employeeId) {
@@ -259,25 +271,54 @@ router.get('/monthly-report/export', async (req, res) => {
       return res.status(400).json({ error: 'Invalid month' });
     }
 
-    const fromDate = startOfDay(new Date(year, month - 1, 1));
-    const toDate = endOfDay(new Date(year, month, 0));
+    const fromKey = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const toKey = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const fromDate = zonedDateTimeToUtc(fromKey, '00:00:00');
+    const toDate = endOfDay(zonedDateTimeToUtc(toKey, '00:00:00'));
 
-    const employeeQuery = { status: 'Active' };
+    const employeeQuery = {};
     if (department) employeeQuery.department = department;
     if (req.query.employee) employeeQuery._id = req.query.employee;
+    else employeeQuery.status = 'Active';
 
     const employees = await Employee.find(employeeQuery)
-      .select('employeeId firstName lastName department designation')
+      .select('employeeId firstName lastName department designation status')
       .sort({ firstName: 1, lastName: 1 })
       .lean();
 
     const logQuery = {
       date: { $gte: fromDate, $lte: toDate },
-      employee: { $in: employees.map((emp) => emp._id) },
     };
     if (status) logQuery.status = status;
+    if (req.query.employee) {
+      logQuery.employee = req.query.employee;
+    } else if (department) {
+      logQuery.employee = { $in: employees.map((emp) => emp._id) };
+    }
 
     const logs = await DailyWorkLog.find(logQuery).sort({ date: 1 }).lean();
+
+    // Include any employees who have logs this month even if not in the Active roster
+    const employeeMap = new Map(employees.map((emp) => [String(emp._id), emp]));
+    const missingIds = [
+      ...new Set(
+        logs
+          .map((log) => String(log.employee))
+          .filter((id) => id && !employeeMap.has(id))
+      ),
+    ];
+    if (missingIds.length && !req.query.employee && !department) {
+      const missing = await Employee.find({ _id: { $in: missingIds } })
+        .select('employeeId firstName lastName department designation status')
+        .lean();
+      missing.forEach((emp) => employeeMap.set(String(emp._id), emp));
+    }
+
+    const orderedEmployees = [...employeeMap.values()].sort((a, b) =>
+      `${a.firstName || ''} ${a.lastName || ''}`.localeCompare(`${b.firstName || ''} ${b.lastName || ''}`)
+    );
+
     const logsByEmployee = new Map();
     logs.forEach((log) => {
       const key = String(log.employee);
@@ -286,7 +327,7 @@ router.get('/monthly-report/export', async (req, res) => {
     });
 
     const rows = [];
-    employees.forEach((emp) => {
+    orderedEmployees.forEach((emp) => {
       const employeeLogs = logsByEmployee.get(String(emp._id)) || [];
       const name = employeeDisplayName(emp);
       if (!employeeLogs.length) {
@@ -365,27 +406,54 @@ router.get('/monthly-report', async (req, res) => {
       return res.status(400).json({ error: 'Invalid month' });
     }
 
-    const fromDate = startOfDay(new Date(year, month - 1, 1));
-    const toDate = endOfDay(new Date(year, month, 0));
+    const fromKey = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const toKey = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const fromDate = zonedDateTimeToUtc(fromKey, '00:00:00');
+    const toDate = endOfDay(zonedDateTimeToUtc(toKey, '00:00:00'));
 
-    const employeeQuery = { status: 'Active' };
+    const employeeQuery = {};
     if (department) employeeQuery.department = department;
     if (req.query.employee) employeeQuery._id = req.query.employee;
+    else employeeQuery.status = 'Active';
 
     const employees = await Employee.find(employeeQuery)
-      .select('employeeId firstName lastName department designation')
+      .select('employeeId firstName lastName department designation status')
       .sort({ firstName: 1, lastName: 1 })
       .lean();
 
     const logQuery = {
       date: { $gte: fromDate, $lte: toDate },
-      employee: { $in: employees.map((emp) => emp._id) },
     };
     if (status) logQuery.status = status;
+    if (req.query.employee) {
+      logQuery.employee = req.query.employee;
+    } else if (department) {
+      logQuery.employee = { $in: employees.map((emp) => emp._id) };
+    }
 
     const logs = await DailyWorkLog.find(logQuery)
       .sort({ date: 1 })
       .lean();
+
+    const employeeMap = new Map(employees.map((emp) => [String(emp._id), emp]));
+    const missingIds = [
+      ...new Set(
+        logs
+          .map((log) => String(log.employee))
+          .filter((id) => id && !employeeMap.has(id))
+      ),
+    ];
+    if (missingIds.length && !req.query.employee && !department) {
+      const missing = await Employee.find({ _id: { $in: missingIds } })
+        .select('employeeId firstName lastName department designation status')
+        .lean();
+      missing.forEach((emp) => employeeMap.set(String(emp._id), emp));
+    }
+
+    const orderedEmployees = [...employeeMap.values()].sort((a, b) =>
+      `${a.firstName || ''} ${a.lastName || ''}`.localeCompare(`${b.firstName || ''} ${b.lastName || ''}`)
+    );
 
     const logsByEmployee = new Map();
     for (const log of logs) {
@@ -394,7 +462,7 @@ router.get('/monthly-report', async (req, res) => {
       logsByEmployee.get(key).push(log);
     }
 
-    const employeeReports = employees.map((employee) => {
+    const employeeReports = orderedEmployees.map((employee) => {
       const employeeLogs = logsByEmployee.get(String(employee._id)) || [];
       const submittedCount = employeeLogs.filter((log) => log.status === 'Submitted').length;
       const draftCount = employeeLogs.filter((log) => log.status === 'Draft').length;
@@ -462,7 +530,11 @@ router.get('/export', async (req, res) => {
     };
 
     if (status) query.status = status;
-    applyEmployeeScope(query, scope, req.query.employee);
+    if (wantsSelfService(req)) {
+      applySelfEmployeeScope(query, scope);
+    } else {
+      applyEmployeeScope(query, scope, req.query.employee);
+    }
 
     if (!scope.canManageAll && !scope.employeeId) {
       return res.status(403).json({ error: 'Access denied' });
@@ -534,7 +606,11 @@ router.get('/', async (req, res) => {
     };
 
     if (status) query.status = status;
-    applyEmployeeScope(query, scope, req.query.employee);
+    if (wantsSelfService(req)) {
+      applySelfEmployeeScope(query, scope);
+    } else {
+      applyEmployeeScope(query, scope, req.query.employee);
+    }
 
     if (!scope.canManageAll && !scope.employeeId) {
       if (page || limit) {

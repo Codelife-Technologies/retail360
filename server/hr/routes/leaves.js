@@ -9,6 +9,7 @@ const {
   getEmployeeLeaveBalances,
   validateLeaveBalance,
 } = require('../services/leaveBalanceService');
+const { syncAttendanceForApprovedLeave } = require('../services/leaveAttendanceSync');
 
 async function assertLeaveTypeAllowed(employeeId, leaveType) {
   const employee = await Employee.findById(employeeId).select('personalInfo.gender').lean();
@@ -187,6 +188,13 @@ router.post('/:id/approve', async (req, res) => {
       { status: 'Approved', reviewedAt: new Date(), reviewNotes: req.body.reviewNotes || '' },
       { new: true, runValidators: true }
     ).populate('employee', 'employeeId firstName lastName department');
+
+    try {
+      await syncAttendanceForApprovedLeave(leave);
+    } catch (syncError) {
+      console.error('Failed to sync leave attendance:', syncError.message);
+    }
+
     res.json(leave);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -195,9 +203,13 @@ router.post('/:id/approve', async (req, res) => {
 
 router.post('/:id/reject', async (req, res) => {
   try {
+    const reviewNotes = String(req.body.reviewNotes || '').trim();
+    if (!reviewNotes) {
+      return res.status(400).json({ error: 'Rejection reason is required' });
+    }
     const leave = await Leave.findByIdAndUpdate(
       req.params.id,
-      { status: 'Rejected', reviewedAt: new Date(), reviewNotes: req.body.reviewNotes || '' },
+      { status: 'Rejected', reviewedAt: new Date(), reviewNotes },
       { new: true, runValidators: true }
     ).populate('employee', 'employeeId firstName lastName department');
     if (!leave) return res.status(404).json({ error: 'Leave application not found' });

@@ -23,8 +23,8 @@ export const ACCESS_PACKS = [
   },
   {
     id: 'ai_images_view',
-    label: 'AI Images (view & organize)',
-    description: 'Browse AI Generated Images, folders, upload from desktop, move images',
+    label: 'Product images (view & organize)',
+    description: 'Browse Product images, folders, upload from desktop, move images',
     roleCode: 'ai_images_user',
     roleName: 'AI Images User',
     permissionCodes: [
@@ -93,13 +93,14 @@ export const ACCESS_PACKS = [
   {
     id: 'master_catalog',
     label: 'Master — Catalog only',
-    description: 'Products, Stock, Categories, Subcategories, Vendor Prices',
+    description: 'Products, Stock, Categories, HSN Tax, Subcategories, Vendor Prices',
     roleCode: 'master_catalog',
     roleName: 'Master Catalog',
     permissionCodes: [
       'products.view', 'products.create', 'products.update',
       'stock.view', 'stock.create', 'stock.update',
       'categories.view', 'categories.create', 'categories.update',
+      'hsnMasters.view', 'hsnMasters.create', 'hsnMasters.update',
       'subcategories.view', 'subcategories.create', 'subcategories.update',
       'prices.view', 'prices.create', 'prices.update',
     ],

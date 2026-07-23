@@ -239,9 +239,17 @@ async function updateGrn(id, body, performedBy = 'System') {
 async function submitForInspection(id, performedBy) {
   const grn = await GoodsReceiptNote.findById(id);
   if (!grn) throw new Error('GRN not found');
-  if (grn.inventoryUpdated) throw new Error('GRN receipt already finalized');
   if (['closed', 'cancelled'].includes(grn.receiptStatus)) {
     throw new Error(`Cannot finalize GRN in ${grn.receiptStatus} status`);
+  }
+
+  // Already finalized: still ensure a Purchase exists for the purchase report.
+  if (grn.inventoryUpdated) {
+    const purchase = await createPurchaseFromGrn(grn);
+    if (!purchase) {
+      throw new Error('GRN receipt already finalized and no accepted items to add to Purchase Report');
+    }
+    return GoodsReceiptNote.findById(id).populate(POPULATE);
   }
 
   const errors = validateGrnPayload(grn.toObject(), { isUpdate: true });
@@ -283,7 +291,15 @@ async function submitForInspection(id, performedBy) {
 
   await applyInventoryUpdate(grn);
   await updatePurchaseOrderReceipt(grn);
-  await createPurchaseFromGrn(grn);
+
+  try {
+    await createPurchaseFromGrn(grn);
+  } catch (error) {
+    // Inventory/PO already updated — surface a retryable error so Confirm receipt can backfill purchase.
+    throw new Error(
+      `Receipt saved and stock updated, but Purchase Report entry failed: ${error.message}. Click Confirm receipt again to create it.`
+    );
+  }
 
   await logGrnAudit({
     grnId: grn._id,

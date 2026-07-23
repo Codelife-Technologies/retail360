@@ -1,5 +1,6 @@
 const Purchase = require('../models/Purchase');
 const Price = require('../models/Price');
+const GoodsReceiptNote = require('../models/GoodsReceiptNote');
 const { generatePurchaseNumber } = require('../utils/generatePurchaseNumber');
 
 async function updatePricesFromPurchase(purchase) {
@@ -32,51 +33,132 @@ async function updatePricesFromPurchase(purchase) {
   }
 }
 
+function buildPurchaseItemsFromGrn(grn) {
+  return (grn.items || [])
+    .filter((line) => (Number(line.acceptedQty) || 0) > 0)
+    .map((line) => {
+      const quantity = Number(line.acceptedQty) || 0;
+      const unitPrice = Number(line.unitCost) || 0;
+      return {
+        product: line.product?._id || line.product,
+        quantity,
+        unitPrice,
+        total: Math.round(quantity * unitPrice * 100) / 100,
+      };
+    })
+    .filter((line) => line.product && line.quantity > 0);
+}
+
 /**
  * Creates a Purchase record when a GRN receipt is finalized and inventory is updated.
  * Stock is not updated again — GRN already applied accepted quantities.
+ * Idempotent: returns the existing purchase if one already exists for this GRN.
  */
-async function createPurchaseFromGrn(grn) {
-  if (!grn?.inventoryUpdated) return null;
+async function createPurchaseFromGrn(grnInput) {
+  if (!grnInput) return null;
 
-  const grnId = grn._id;
-  const existing = await Purchase.findOne({ goodsReceiptNote: grnId });
+  const grnId = grnInput._id || grnInput;
+  const grn =
+    grnInput.items && grnInput.supplier
+      ? grnInput
+      : await GoodsReceiptNote.findById(grnId);
+
+  if (!grn) return null;
+  if (!grn.inventoryUpdated) return null;
+
+  const existing = await Purchase.findOne({ goodsReceiptNote: grn._id });
   if (existing) return existing;
 
-  const items = (grn.items || [])
-    .filter((line) => (line.acceptedQty || 0) > 0)
-    .map((line) => ({
-      product: line.product?._id || line.product,
-      quantity: line.acceptedQty,
-      unitPrice: line.unitCost || 0,
-      total: (line.acceptedQty || 0) * (line.unitCost || 0),
-    }));
-
+  const items = buildPurchaseItemsFromGrn(grn);
   if (items.length === 0) return null;
 
+  if (!grn.supplier) {
+    throw new Error(`Cannot create purchase from GRN ${grn.grnNumber || grn._id}: supplier is missing`);
+  }
+  if (!grn.warehouse) {
+    throw new Error(`Cannot create purchase from GRN ${grn.grnNumber || grn._id}: warehouse/location is missing`);
+  }
+
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
-  const tax = grn.taxTotal || 0;
+  const tax = Number(grn.taxTotal) || 0;
 
   const purchase = new Purchase({
     purchaseNumber: await generatePurchaseNumber(),
-    purchaseOrder: grn.purchaseOrder?._id || grn.purchaseOrder,
-    goodsReceiptNote: grnId,
+    purchaseOrder: grn.purchaseOrder?._id || grn.purchaseOrder || undefined,
+    goodsReceiptNote: grn._id,
     supplier: grn.supplier?._id || grn.supplier,
     location: grn.warehouse?._id || grn.warehouse,
-    purchaseDate: grn.grnDate || new Date(),
+    purchaseDate: grn.grnDate || grn.inventoryUpdatedAt || new Date(),
     items,
     subtotal,
     tax,
     defaultTaxRate: 0,
     total: subtotal + tax,
     paymentStatus: 'pending',
-    notes: `Auto-created from GRN ${grn.grnNumber}${grn.purchaseOrderNumber ? ` (PO ${grn.purchaseOrderNumber})` : ''}`,
+    notes: `Auto-created from GRN ${grn.grnNumber || grn._id}${
+      grn.purchaseOrderNumber ? ` (PO ${grn.purchaseOrderNumber})` : ''
+    }`,
   });
 
-  await purchase.save();
-  await updatePricesFromPurchase(purchase);
+  try {
+    await purchase.save();
+  } catch (error) {
+    // Concurrent finalize — another request may have created the purchase first.
+    if (error?.code === 11000) {
+      const raced = await Purchase.findOne({ goodsReceiptNote: grn._id });
+      if (raced) return raced;
+    }
+    throw error;
+  }
 
+  await updatePricesFromPurchase(purchase);
   return purchase;
 }
 
-module.exports = { createPurchaseFromGrn };
+/**
+ * Backfill Purchase rows for finalized GRNs that never got a purchase record
+ * (e.g. older finalize flow, or purchase create failed after inventory update).
+ */
+async function backfillPurchasesFromFinalizedGrns({ limit = 200 } = {}) {
+  const existingGrnIds = await Purchase.distinct('goodsReceiptNote', {
+    goodsReceiptNote: { $ne: null },
+  });
+  const existingSet = new Set(existingGrnIds.map((id) => String(id)));
+
+  const finalized = await GoodsReceiptNote.find({ inventoryUpdated: true })
+    .sort({ inventoryUpdatedAt: -1, updatedAt: -1 })
+    .limit(limit);
+
+  let created = 0;
+  let skipped = 0;
+  const errors = [];
+
+  for (const grn of finalized) {
+    if (existingSet.has(String(grn._id))) {
+      skipped += 1;
+      continue;
+    }
+    try {
+      const purchase = await createPurchaseFromGrn(grn);
+      if (purchase) {
+        created += 1;
+        existingSet.add(String(grn._id));
+      } else {
+        skipped += 1;
+      }
+    } catch (error) {
+      errors.push({
+        grnId: String(grn._id),
+        grnNumber: grn.grnNumber,
+        error: error.message,
+      });
+    }
+  }
+
+  return { created, skipped, errors, scanned: finalized.length };
+}
+
+module.exports = {
+  createPurchaseFromGrn,
+  backfillPurchasesFromFinalizedGrns,
+};

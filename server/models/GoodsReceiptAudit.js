@@ -15,6 +15,7 @@ const goodsReceiptAuditSchema = new mongoose.Schema(
         'approved',
         'rejected',
         'returned',
+        'finalized',
         'inventory_updated',
         'closed',
         'cancelled',

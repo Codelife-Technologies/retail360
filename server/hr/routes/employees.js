@@ -4,6 +4,8 @@ const Employee = require('../models/Employee');
 const { paginate } = require('../../utils/pagination');
 const { generateNextEmployeeId } = require('../utils/employeeId');
 const { mergeDepartments } = require('../utils/departments');
+const Department = require('../models/Department');
+const { seedIfEmpty } = require('../utils/hrMasterSeed');
 const { syncPendingPayrollsForEmployee } = require('../utils/payrollSync');
 const {
   ensureUserForEmployee,
@@ -59,6 +61,15 @@ router.get('/', async (req, res) => {
 
 router.get('/departments/list', async (req, res) => {
   try {
+    await seedIfEmpty();
+    const masterRows = await Department.find({ isActive: true }).sort({ sortOrder: 1, name: 1 });
+    if (masterRows.length > 0) {
+      const fromEmployees = await Employee.distinct('department');
+      return res.json(mergeDepartments([
+        ...masterRows.map((row) => row.name),
+        ...fromEmployees,
+      ]));
+    }
     const departments = await Employee.distinct('department');
     res.json(mergeDepartments(departments));
   } catch (error) {

@@ -200,6 +200,16 @@
   box-shadow: 0 2px 8px var(--shadow, rgba(0, 0, 0, 0.1));
 }
 
+.hr-table-card-heading {
+  padding: 1rem 1.15rem 0.35rem;
+}
+
+.hr-table-card-heading h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  color: var(--text, #111827);
+}
+
 .hr-table {
   width: 100%;
   min-width: 900px;
@@ -1258,6 +1268,11 @@
   border-color: #d1d5db;
 }
 
+.legend-leave::before {
+  background: #93c5fd;
+  border-color: #1d4ed8;
+}
+
 .legend-pending::before {
   background: #fff;
   border-color: #9ca3af;
@@ -1343,9 +1358,18 @@
 }
 
 .attendance-calendar-day.state-leave {
-  background: #dbeafe;
-  border-color: #3b82f6;
-  color: #1e40af;
+  background: linear-gradient(160deg, #bfdbfe 0%, #93c5fd 100%);
+  border-color: #1d4ed8;
+  border-width: 2px;
+  color: #1e3a8a;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.15);
+}
+
+.attendance-calendar-day.state-leave .attendance-calendar-day-tag {
+  background: #1d4ed8;
+  color: #fff;
+  font-weight: 700;
 }
 
 .attendance-calendar-day.state-halfday {
@@ -1385,6 +1409,12 @@
 [data-theme="dark"] .attendance-calendar-day.state-weekoff {
   background: rgba(255, 255, 255, 0.05);
   color: #9ca3af;
+}
+
+[data-theme="dark"] .attendance-calendar-day.state-leave {
+  background: rgba(59, 130, 246, 0.35);
+  border-color: #60a5fa;
+  color: #bfdbfe;
 }
 
 [data-theme="dark"] .attendance-calendar {
@@ -1558,4 +1588,57 @@
   margin-top: 0.5rem;
   font-size: 0.88rem;
   color: var(--text-muted, #666);
+}
+
+.hr-masters-section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.hr-masters-section-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  font-size: 0.925rem;
+  cursor: pointer;
+}
+
+.hr-masters-section-tab.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.hr-masters-category {
+  text-transform: capitalize;
+}
+
+.hr-row-inactive {
+  opacity: 0.65;
+}
+
+.hr-form-span-2 {
+  grid-column: span 2;
+}
+
+.hr-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 500;
+  margin-top: 1.55rem;
+}
+
+@media (max-width: 768px) {
+  .hr-form-span-2 {
+    grid-column: span 1;
+  }
 }

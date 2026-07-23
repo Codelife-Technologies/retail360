@@ -16,13 +16,17 @@ export const hrEmployeesAPI = {
 
 export const hrAttendanceAPI = {
   getContext: () => api.get('/hr/attendance/context'),
-  getMarkDefaults: (employeeId) =>
+  getMarkDefaults: (employeeId, options = {}) =>
     api.get('/hr/attendance/mark-defaults', {
-      params: employeeId ? { employee: employeeId } : undefined,
+      params: {
+        ...(employeeId ? { employee: employeeId } : {}),
+        ...(options.forSelf ? { forSelf: true } : {}),
+      },
     }),
   getAll: (params) => api.get('/hr/attendance', { params }),
   getSummary: (params) => api.get('/hr/attendance/summary', { params }),
   getTrend: (params) => api.get('/hr/attendance/trend', { params }),
+  getEmployeeSummary: (params) => api.get('/hr/attendance/employee-summary', { params }),
   getById: (id) => api.get(`/hr/attendance/${id}`),
   create: (data) => api.post('/hr/attendance', data),
   update: (id, data) => api.put(`/hr/attendance/${id}`, data),
@@ -73,6 +77,23 @@ export const hrHolidaysAPI = {
   create: (data) => api.post('/hr/holidays', data),
   update: (id, data) => api.put(`/hr/holidays/${id}`, data),
   delete: (id) => api.delete(`/hr/holidays/${id}`),
+};
+
+export const hrMastersAPI = {
+  getSummary: () => api.get('/hr/masters/summary'),
+  seed: (data) => api.post('/hr/masters/seed', data || {}),
+  getDepartments: (params) => api.get('/hr/masters/departments', { params }),
+  createDepartment: (data) => api.post('/hr/masters/departments', data),
+  updateDepartment: (id, data) => api.put(`/hr/masters/departments/${id}`, data),
+  deleteDepartment: (id) => api.delete(`/hr/masters/departments/${id}`),
+  getDesignations: (params) => api.get('/hr/masters/designations', { params }),
+  createDesignation: (data) => api.post('/hr/masters/designations', data),
+  updateDesignation: (id, data) => api.put(`/hr/masters/designations/${id}`, data),
+  deleteDesignation: (id) => api.delete(`/hr/masters/designations/${id}`),
+  getPayrollComponents: (params) => api.get('/hr/masters/payroll-components', { params }),
+  createPayrollComponent: (data) => api.post('/hr/masters/payroll-components', data),
+  updatePayrollComponent: (id, data) => api.put(`/hr/masters/payroll-components/${id}`, data),
+  deletePayrollComponent: (id) => api.delete(`/hr/masters/payroll-components/${id}`),
 };
 
 export const hrTasksAPI = {

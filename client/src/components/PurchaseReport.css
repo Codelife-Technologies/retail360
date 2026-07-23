@@ -82,6 +82,62 @@
   box-sizing: border-box;
 }
 
+.report-filters-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.report-filters-header h3 {
+  margin: 0;
+}
+
+.report-filters .fin-period-bar {
+  margin-bottom: 1rem;
+}
+
+.btn-filters {
+  padding: 0.5rem 1.25rem;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #334155;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s;
+}
+
+.btn-filters:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.btn-filters.active {
+  background: #f5f3ff;
+  border-color: #6B3894;
+  color: #6B3894;
+}
+
+.filter-count-badge {
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #6B3894;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .report-filters h3 {
   margin-top: 0;
   margin-bottom: 1rem;
@@ -365,6 +421,200 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   width: 100%;
   box-sizing: border-box;
+}
+
+.purchase-report-intro {
+  margin-bottom: 1rem;
+}
+
+.purchase-report-intro h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.35rem;
+  color: #1e293b;
+}
+
+.purchase-report-intro p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.purchase-records-view {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 1.25rem 1.35rem 1.5rem;
+}
+
+.purchase-records-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.purchase-records-header h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+  color: #1e293b;
+}
+
+.purchase-records-meta {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.purchase-records-expand-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn-linkish {
+  border: none;
+  background: transparent;
+  color: #6B3894;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+
+.btn-linkish:hover {
+  text-decoration: underline;
+}
+
+.purchase-records-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.purchase-record-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.purchase-record-card.is-expanded {
+  border-color: #c4b5fd;
+  box-shadow: 0 2px 8px rgba(107, 56, 148, 0.08);
+}
+
+.purchase-record-summary {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(140px, 1.2fr) minmax(160px, 1.4fr) minmax(180px, 1fr);
+  gap: 0.75rem 1rem;
+  align-items: center;
+  text-align: left;
+  border: none;
+  background: #f8fafc;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+}
+
+.purchase-record-card.is-expanded .purchase-record-summary {
+  background: #f5f3ff;
+}
+
+.purchase-record-caret {
+  color: #64748b;
+  font-size: 0.85rem;
+  width: 1rem;
+}
+
+.purchase-record-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.purchase-record-number {
+  color: #0f172a;
+  font-size: 0.98rem;
+}
+
+.purchase-record-date {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+.purchase-record-parties {
+  color: #334155;
+  font-size: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.purchase-record-sep {
+  color: #94a3b8;
+}
+
+.purchase-record-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  justify-content: flex-end;
+  color: #475569;
+  font-size: 0.88rem;
+}
+
+.purchase-record-total {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.purchase-record-detail {
+  padding: 0.85rem 1rem 1rem;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.purchase-record-totals-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 0.75rem;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.purchase-record-empty-items {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.purchase-line-items-table {
+  margin: 0;
+  box-shadow: none;
+}
+
+.summary-view > h3 {
+  margin: 0 0 1rem;
+  font-size: 1.15rem;
+  color: #1e293b;
+}
+
+@media (max-width: 900px) {
+  .purchase-record-summary {
+    grid-template-columns: auto 1fr;
+  }
+
+  .purchase-record-parties,
+  .purchase-record-figures {
+    grid-column: 1 / -1;
+    padding-left: 1.5rem;
+    justify-content: flex-start;
+  }
 }
 
 @media (min-width: 1024px) {

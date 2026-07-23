@@ -39,6 +39,9 @@ function LeaveManagement() {
   const [formErrors, setFormErrors] = useState({});
   const [balances, setBalances] = useState([]);
   const [balanceLoading, setBalanceLoading] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
 
   const fetchLeaves = useCallback(async () => {
     try {
@@ -180,9 +183,13 @@ function LeaveManagement() {
   };
 
   const handleAction = async (leave, action) => {
+    if (action === 'reject') {
+      setRejectTarget(leave);
+      setRejectionReason('');
+      return;
+    }
     try {
       if (action === 'approve') await hrLeavesAPI.approve(leave._id, {});
-      else if (action === 'reject') await hrLeavesAPI.reject(leave._id, {});
       else if (action === 'cancel') await hrLeavesAPI.cancel(leave._id, {});
       fetchLeaves();
       const empId = leave.employee?._id || leave.employee;
@@ -191,6 +198,37 @@ function LeaveManagement() {
       }
     } catch (error) {
       alert(error.response?.data?.error || `Failed to ${action} leave`);
+    }
+  };
+
+  const closeRejectModal = () => {
+    if (rejecting) return;
+    setRejectTarget(null);
+    setRejectionReason('');
+  };
+
+  const handleConfirmReject = async (e) => {
+    e.preventDefault();
+    if (!rejectTarget) return;
+    const reason = rejectionReason.trim();
+    if (!reason) {
+      alert('Please enter a reason for rejection');
+      return;
+    }
+    try {
+      setRejecting(true);
+      await hrLeavesAPI.reject(rejectTarget._id, { reviewNotes: reason });
+      const empId = rejectTarget.employee?._id || rejectTarget.employee;
+      setRejectTarget(null);
+      setRejectionReason('');
+      fetchLeaves();
+      if (filters.employee === empId || formData.employee === empId) {
+        fetchBalances(empId);
+      }
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to reject leave');
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -314,12 +352,13 @@ function LeaveManagement() {
                 <th>Days</th>
                 <th>Reason</th>
                 <th>Status</th>
+                <th>Rejection Reason</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {leaves.length === 0 ? (
-                <tr><td colSpan={8} className="hr-empty">No leave applications found</td></tr>
+                <tr><td colSpan={9} className="hr-empty">No leave applications found</td></tr>
               ) : (
                 leaves.map((leave) => (
                   <tr key={leave._id}>
@@ -330,6 +369,11 @@ function LeaveManagement() {
                     <td>{leave.days}</td>
                     <td>{leave.reason}</td>
                     <td><HrStatusBadge status={leave.status} /></td>
+                    <td>
+                      {leave.status === 'Rejected' && leave.reviewNotes
+                        ? leave.reviewNotes
+                        : '—'}
+                    </td>
                     <td>
                       <div className="hr-actions-cell">
                         {leave.status === 'Pending' && (
@@ -350,6 +394,47 @@ function LeaveManagement() {
             </tbody>
           </table>
           <HrPagination pagination={pagination} onPageChange={setPage} />
+        </div>
+      )}
+
+      {rejectTarget && (
+        <div className="hr-modal-overlay" onClick={closeRejectModal}>
+          <div className="hr-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="hr-modal-header">
+              <h2>Reject Leave</h2>
+              <button type="button" className="hr-modal-close" onClick={closeRejectModal} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <form onSubmit={handleConfirmReject}>
+              <div className="hr-modal-body">
+                <p className="hr-page-subtitle" style={{ marginBottom: '0.75rem' }}>
+                  Reject leave for <strong>{employeeName(rejectTarget.employee)}</strong>
+                  {' '}({rejectTarget.leaveType}, {formatDate(rejectTarget.fromDate)} – {formatDate(rejectTarget.toDate)})
+                </p>
+                <div className="hr-form-group hr-form-group-full">
+                  <label htmlFor="leave-rejection-reason">Reason for rejection *</label>
+                  <textarea
+                    id="leave-rejection-reason"
+                    rows={4}
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="Explain why this leave is being rejected…"
+                    required
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div className="hr-modal-footer">
+                <button type="button" className="hr-btn hr-btn-secondary" onClick={closeRejectModal} disabled={rejecting}>
+                  Cancel
+                </button>
+                <button type="submit" className="hr-btn hr-btn-danger" disabled={rejecting}>
+                  {rejecting ? 'Rejecting…' : 'Confirm Reject'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

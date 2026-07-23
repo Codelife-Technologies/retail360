@@ -1,15 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
 import { hrAttendanceAPI, hrEmployeesAPI } from '../services/hrApi';
+import { useAuth } from '../../context/AuthContext';
 import HrKpiCard from '../components/HrKpiCard';
 import HrPagination from '../components/HrPagination';
 import HrStatusBadge from '../components/HrStatusBadge';
@@ -26,7 +17,6 @@ const emptyForm = () => ({
   checkIn: '',
   checkOut: '',
   status: 'Present',
-  notes: '',
 });
 
 const formatTodayLabel = () =>
@@ -37,16 +27,22 @@ const formatTodayLabel = () =>
     year: 'numeric',
   });
 
+function formatHoursTotal(hours) {
+  const n = Number(hours) || 0;
+  if (n <= 0) return '—';
+  return `${n.toFixed(1)} hrs`;
+}
+
 function Attendance() {
+  const { hasPermission } = useAuth();
   const [viewMode, setViewMode] = useState('daily');
   const [canManageAll, setCanManageAll] = useState(false);
   const [linkedEmployeeId, setLinkedEmployeeId] = useState(null);
   const [accessLoaded, setAccessLoaded] = useState(false);
   const [records, setRecords] = useState([]);
+  const [employeeSummaries, setEmployeeSummaries] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [summary, setSummary] = useState({ present: 0, absent: 0, late: 0, leave: 0 });
-  const [monthlyTrend, setMonthlyTrend] = useState([]);
-  const [trendError, setTrendError] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
@@ -100,23 +96,37 @@ function Attendance() {
     if (!accessLoaded) return;
     try {
       setLoading(true);
+
+      const summaryParams = viewMode === 'daily'
+        ? { date: filters.date }
+        : { month: filters.month, year: filters.year };
+
+      if (viewMode === 'monthly') {
+        const [summaryRes, employeeSummaryRes] = await Promise.all([
+          hrAttendanceAPI.getSummary(summaryParams),
+          hrAttendanceAPI.getEmployeeSummary({
+            month: filters.month,
+            year: filters.year,
+            search: canManageAll ? searchTerm : '',
+            employee: canManageAll ? filters.employee || undefined : linkedEmployeeId || undefined,
+            status: filters.status || undefined,
+          }),
+        ]);
+        setSummary(summaryRes.data || { present: 0, absent: 0, late: 0, leave: 0 });
+        setEmployeeSummaries(employeeSummaryRes.data?.employees || []);
+        setRecords([]);
+        setPagination(null);
+        return;
+      }
+
       const params = {
         search: canManageAll ? searchTerm : '',
         employee: canManageAll ? filters.employee : linkedEmployeeId || undefined,
         status: filters.status,
         page,
         limit: 20,
+        date: filters.date,
       };
-      if (viewMode === 'daily') {
-        params.date = filters.date;
-      } else {
-        params.month = filters.month;
-        params.year = filters.year;
-      }
-
-      const summaryParams = viewMode === 'daily'
-        ? { date: filters.date }
-        : { month: filters.month, year: filters.year };
 
       const [recordsRes, summaryRes] = await Promise.all([
         hrAttendanceAPI.getAll(params),
@@ -126,32 +136,11 @@ function Attendance() {
       setRecords(extractList(recordsRes));
       setPagination(extractPagination(recordsRes));
       setSummary(summaryRes.data || { present: 0, absent: 0, late: 0, leave: 0 });
-
-      if (viewMode === 'monthly') {
-        try {
-          setTrendError('');
-          const trendRes = await hrAttendanceAPI.getTrend({
-            month: filters.month,
-            year: filters.year,
-            employee: canManageAll ? (filters.employee || undefined) : linkedEmployeeId || undefined,
-          });
-          setMonthlyTrend(trendRes.data?.trend || []);
-        } catch (trendErr) {
-          console.error('Error fetching attendance trend:', trendErr);
-          setMonthlyTrend([]);
-          setTrendError(
-            trendErr.response?.status === 404
-              ? 'Trend API not available — restart the server to load the latest HR routes.'
-              : 'Could not load attendance trend.'
-          );
-        }
-      } else {
-        setMonthlyTrend([]);
-        setTrendError('');
-      }
+      setEmployeeSummaries([]);
     } catch (error) {
       console.error('Error fetching attendance:', error);
       setRecords([]);
+      setEmployeeSummaries([]);
     } finally {
       setLoading(false);
     }
@@ -161,14 +150,26 @@ function Attendance() {
     hrAttendanceAPI
       .getContext()
       .then((res) => {
-        setCanManageAll(Boolean(res.data?.canManageAll));
+        const fromApi = Boolean(res.data?.canManageAll);
+        const fromPermission =
+          hasPermission('hr.access') ||
+          hasPermission('admin.all') ||
+          hasPermission('hr.full') ||
+          hasPermission('hr.attendance.manage');
+        setCanManageAll(fromApi || fromPermission);
         setLinkedEmployeeId(res.data?.linkedEmployeeId || null);
       })
       .catch(() => {
-        setCanManageAll(false);
+        setCanManageAll(
+          hasPermission('hr.access') ||
+          hasPermission('admin.all') ||
+          hasPermission('hr.full') ||
+          hasPermission('hr.attendance.manage')
+        );
         setLinkedEmployeeId(null);
       })
       .finally(() => setAccessLoaded(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -212,7 +213,6 @@ function Attendance() {
       checkIn: record.checkIn || '',
       checkOut: record.checkOut || '',
       status: record.status || 'Present',
-      notes: record.notes || '',
     });
     setShowModal(true);
   };
@@ -229,7 +229,6 @@ function Attendance() {
         checkIn: formData.checkIn,
         checkOut: formData.checkOut,
         status: formData.status,
-        notes: formData.notes,
       };
       if (editingRecord) {
         await hrAttendanceAPI.update(editingRecord._id, payload);
@@ -253,8 +252,6 @@ function Attendance() {
     }
   };
 
-  const hasTrendActivity = monthlyTrend.some((day) => day.present + day.absent + day.leave > 0);
-
   if (!accessLoaded) {
     return <div className="hr-page"><div className="hr-loading">Loading attendance...</div></div>;
   }
@@ -275,6 +272,11 @@ function Attendance() {
     );
   }
 
+  const monthLabel = new Date(filters.year, filters.month - 1, 1).toLocaleString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+
   return (
     <div className="hr-page">
       <header className="hr-page-header">
@@ -282,8 +284,8 @@ function Attendance() {
           <h1>{canManageAll ? 'Attendance Management' : 'My Attendance'}</h1>
           <p className="hr-page-subtitle">
             {canManageAll
-              ? 'Track daily and monthly employee attendance'
-              : 'View your daily and monthly attendance records'}
+              ? 'Track daily attendance and monthly employee summaries'
+              : 'View your daily attendance and monthly summary'}
           </p>
         </div>
         {canManageAll && (
@@ -310,50 +312,12 @@ function Attendance() {
         </button>
       </div>
 
-      {viewMode === 'daily' && (
-        <div className="hr-kpi-grid">
-          <HrKpiCard icon="✅" label="Present" value={summary.present} variant="success" />
-          <HrKpiCard icon="❌" label="Absent" value={summary.absent} variant="danger" />
-          <HrKpiCard icon="⏰" label="Late / Half Day" value={summary.late} variant="warning" />
-          <HrKpiCard icon="🏖️" label="Leave" value={summary.leave} />
-        </div>
-      )}
-
-      {viewMode === 'monthly' && (
-        <div className="hr-chart-card hr-attendance-trend-card">
-          <h3>
-            Attendance Trend —{' '}
-            {new Date(filters.year, filters.month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
-            {filters.employee && employees.find((e) => e._id === filters.employee)
-              ? ` · ${employeeName(employees.find((e) => e._id === filters.employee))}`
-              : ''}
-          </h3>
-          {loading ? (
-            <p className="hr-loading">Loading trend...</p>
-          ) : trendError ? (
-            <p className="hr-empty">{trendError}</p>
-          ) : monthlyTrend.length === 0 ? (
-            <p className="hr-empty">No attendance data for this month</p>
-          ) : !hasTrendActivity ? (
-            <p className="hr-empty">No attendance marked for this month — mark attendance to see the trend.</p>
-          ) : (
-            <div className="hr-chart-container">
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={monthlyTrend} barGap={2} barCategoryGap="20%">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="label" tick={{ fontSize: 15 }} interval="preserveStartEnd" />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 15 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="present" fill="#10b981" name="Present" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="absent" fill="#ef4444" name="Absent" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="leave" fill="#3b82f6" name="Leave" radius={[2, 2, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
-      )}
+      <div className="hr-kpi-grid">
+        <HrKpiCard icon="✅" label="Present" value={summary.present} variant="success" />
+        <HrKpiCard icon="❌" label="Absent" value={summary.absent} variant="danger" />
+        <HrKpiCard icon="⏰" label="Late / Half Day" value={summary.late} variant="warning" />
+        <HrKpiCard icon="🏖️" label="Leave" value={summary.leave} />
+      </div>
 
       <div className="hr-filters-row">
         {canManageAll && (
@@ -419,6 +383,70 @@ function Attendance() {
 
       {loading ? (
         <div className="hr-loading">Loading attendance...</div>
+      ) : viewMode === 'monthly' ? (
+        <div className="hr-table-card">
+          <div className="hr-table-card-heading">
+            <h3>Employee Summary — {monthLabel}</h3>
+            <p className="hr-page-subtitle" style={{ margin: 0 }}>
+              Monthly totals per employee (no day-by-day detail)
+            </p>
+          </div>
+          <table className="hr-table">
+            <thead>
+              <tr>
+                <th>Employee</th>
+                <th>Present</th>
+                <th>Absent</th>
+                <th>Half Day</th>
+                <th>Leave</th>
+                <th>WFH</th>
+                <th>Holiday</th>
+                <th>Days Marked</th>
+                <th>Working Hours</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employeeSummaries.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="hr-empty">No attendance summary for this month</td>
+                </tr>
+              ) : (
+                employeeSummaries.map((row) => {
+                  const emp = {
+                    _id: row.employeeId,
+                    firstName: row.firstName,
+                    lastName: row.lastName,
+                    employeeId: row.employeeCode,
+                    photo: row.photo,
+                  };
+                  return (
+                    <tr key={String(row.employeeId)}>
+                      <td>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <HrEmployeeAvatar employee={emp} size={32} />
+                          <span>
+                            {employeeName(emp)}
+                            {row.employeeCode ? (
+                              <small style={{ display: 'block', color: '#6b7280' }}>{row.employeeCode}</small>
+                            ) : null}
+                          </span>
+                        </span>
+                      </td>
+                      <td>{row.present}</td>
+                      <td>{row.absent}</td>
+                      <td>{row.halfDay}</td>
+                      <td>{row.leave}</td>
+                      <td>{row.wfh}</td>
+                      <td>{row.holiday}</td>
+                      <td>{row.totalDays}</td>
+                      <td>{formatHoursTotal(row.workingHours)}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <div className="hr-table-card">
           <table className="hr-table">

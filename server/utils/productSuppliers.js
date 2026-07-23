@@ -138,7 +138,9 @@ async function linkProductsToSupplier(supplierId, productIds = [], ProductModel)
 async function linkPurchaseOrderProductsToSupplier(po, ProductModel) {
   if (!po?.supplier) return { linked: 0, skipped: 0 };
   const supplierId = po.supplier._id || po.supplier;
-  const productIds = (po.items || []).map((item) => item.product);
+  const productIds = (po.items || [])
+    .map((item) => item.product)
+    .filter(Boolean);
   return linkProductsToSupplier(supplierId, productIds, ProductModel);
 }
 

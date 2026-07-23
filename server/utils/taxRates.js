@@ -4,6 +4,25 @@ const CATEGORY_TAX_RATES = {
   gemstone: 5,
 };
 
+function getProductHsnCode(product) {
+  if (!product) return '';
+  if (product.hsnCode) return String(product.hsnCode).trim();
+  const cat = product.category;
+  if (cat && typeof cat === 'object' && cat.hsnCode) return String(cat.hsnCode).trim();
+  return '';
+}
+
+function findHsnMaster(hsnCode, hsnMasters = []) {
+  const code = String(hsnCode || '').trim().toUpperCase();
+  if (!code) return null;
+  return (
+    (hsnMasters || []).find(
+      (row) =>
+        String(row.hsnCode || '').trim().toUpperCase() === code && row.isActive !== false
+    ) || null
+  );
+}
+
 function getCategoryName(product) {
   if (!product) return '';
   const cat = product.category;
@@ -33,15 +52,33 @@ function getTaxRateForCategory(categoryName, defaultRate = 0) {
   return CATEGORY_TAX_RATES[key] !== undefined ? CATEGORY_TAX_RATES[key] : fallback;
 }
 
-function computeCategoryTax(items, products, defaultRate = 0) {
+function getTaxRateForProduct(product, defaultRate = 0, hsnMasters = []) {
+  const fallback = Number(defaultRate) || 0;
+  const hsn = getProductHsnCode(product);
+  if (hsn && Array.isArray(hsnMasters) && hsnMasters.length > 0) {
+    const row = findHsnMaster(hsn, hsnMasters);
+    if (row && row.gstRate != null && row.gstRate !== '') {
+      const rate = Number(row.gstRate);
+      if (Number.isFinite(rate)) return rate;
+    }
+  }
+  const cat = product?.category;
+  if (cat && typeof cat === 'object' && cat.gstRate != null && cat.gstRate !== '') {
+    const rate = Number(cat.gstRate);
+    if (Number.isFinite(rate)) return rate;
+  }
+  return getTaxRateForCategory(getCategoryName(product), fallback);
+}
+
+function computeCategoryTax(items, products, defaultRate = 0, hsnMasters = []) {
   if (!Array.isArray(items)) return 0;
   return items.reduce((sum, item) => {
     const productId = item.product?._id || item.product;
     const fullProduct =
-      (products || []).find((p) => p._id.toString() === productId.toString()) ||
+      (products || []).find((p) => String(p._id) === String(productId)) ||
       item.product ||
       {};
-    const rate = getTaxRateForCategory(getCategoryName(fullProduct), defaultRate);
+    const rate = getTaxRateForProduct(fullProduct, defaultRate, hsnMasters);
     const lineTotal =
       item.total != null ? item.total : (item.quantity || 0) * (item.unitPrice || 0);
     return sum + (lineTotal * rate) / 100;
@@ -53,5 +90,8 @@ module.exports = {
   getCategoryName,
   normalizeCategoryKey,
   getTaxRateForCategory,
+  getTaxRateForProduct,
+  getProductHsnCode,
+  findHsnMaster,
   computeCategoryTax,
 };

@@ -272,6 +272,17 @@ export const categoriesAPI = {
   getSubcategories: (categoryId) => api.get(`/categories/${categoryId}/subcategories`),
 };
 
+// HSN Tax Master API
+export const hsnMastersAPI = {
+  getAll: (params) => api.get('/hsn-masters', { params }),
+  getActive: () => api.get('/hsn-masters/active'),
+  getById: (id) => api.get(`/hsn-masters/${id}`),
+  getByCode: (code) => api.get(`/hsn-masters/by-code/${encodeURIComponent(code)}`),
+  create: (data) => api.post('/hsn-masters', data),
+  update: (id, data) => api.put(`/hsn-masters/${id}`, data),
+  delete: (id) => api.delete(`/hsn-masters/${id}`),
+};
+
 // Subcategories API
 export const subcategoriesAPI = {
   getAll: (params) => api.get('/subcategories', { params }),

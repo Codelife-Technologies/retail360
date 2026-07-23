@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { hrEmployeesAPI } from '../services/hrApi';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { hrEmployeesAPI, hrMastersAPI } from '../services/hrApi';
 import HrPagination from '../components/HrPagination';
 import HrStatusBadge from '../components/HrStatusBadge';
 import HrEmployeeAvatar from '../components/HrEmployeeAvatar';
@@ -144,6 +144,7 @@ const emptyForm = () => ({
 function EmployeeMaster() {
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [designations, setDesignations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({ department: '', status: '', employmentType: '' });
@@ -190,7 +191,25 @@ function EmployeeMaster() {
       .getDepartments()
       .then((res) => setDepartments(mergeDepartments(res.data || [])))
       .catch(() => setDepartments(mergeDepartments([])));
+
+    hrMastersAPI
+      .getDesignations({ activeOnly: 'true' })
+      .then((res) => setDesignations(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setDesignations([]));
   }, []);
+
+  const designationOptions = useMemo(() => {
+    const names = designations
+      .filter((row) => {
+        if (!formData.department) return true;
+        return !row.department || row.department === formData.department;
+      })
+      .map((row) => row.name);
+    if (formData.designation && !names.includes(formData.designation)) {
+      names.unshift(formData.designation);
+    }
+    return [...new Set(names)];
+  }, [designations, formData.department, formData.designation]);
 
   useEffect(() => {
     const timer = setTimeout(() => setPage(1), 300);
@@ -329,6 +348,11 @@ function EmployeeMaster() {
       await hrEmployeesAPI.delete(emp._id);
       fetchEmployees();
       setShowViewModal(false);
+      setShowModal(false);
+      setEditingEmployee(null);
+      if (viewingEmployee?._id === emp._id) {
+        setViewingEmployee(null);
+      }
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to delete employee');
     }
@@ -435,12 +459,13 @@ function EmployeeMaster() {
                 <th className="sortable" onClick={() => handleSort('joiningDate')}>
                   Joining Date{sortIndicator('joiningDate')}
                 </th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {employees.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="hr-empty">No employees found</td>
+                  <td colSpan={9} className="hr-empty">No employees found</td>
                 </tr>
               ) : (
                 employees.map((emp) => (
@@ -453,6 +478,24 @@ function EmployeeMaster() {
                     <td>{emp.email}</td>
                     <td>{emp.phone}</td>
                     <td>{formatDate(emp.joiningDate)}</td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <div className="hr-actions-cell">
+                        <button
+                          type="button"
+                          className="hr-btn hr-btn-secondary hr-btn-sm"
+                          onClick={() => openEdit(emp)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="hr-btn hr-btn-danger hr-btn-sm"
+                          onClick={() => handleDelete(emp)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -527,8 +570,19 @@ function EmployeeMaster() {
                     </div>
                     <div className="hr-form-group">
                       <label>Designation <span className="required">*</span></label>
-                      <input value={formData.designation} onChange={(e) => updateField('designation', e.target.value)} />
+                      <select
+                        value={formData.designation}
+                        onChange={(e) => updateField('designation', e.target.value)}
+                      >
+                        <option value="">Select designation</option>
+                        {designationOptions.map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
                       {formErrors.designation && <span className="hr-form-error">{formErrors.designation}</span>}
+                      <small className="hr-field-hint">
+                        Manage designations under HR → HR Masters.
+                      </small>
                     </div>
                     <div className="hr-form-group">
                       <label>Joining Date <span className="required">*</span></label>

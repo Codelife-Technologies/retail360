@@ -24,6 +24,7 @@ export function canViewMaster(hasPermission) {
     'products.view',
     'stock.view',
     'categories.view',
+    'hsnMasters.view',
     'subcategories.view',
     'prices.view',
     'suppliers.view',

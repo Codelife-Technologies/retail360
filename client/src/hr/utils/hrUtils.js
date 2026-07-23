@@ -161,10 +161,11 @@ export const HR_PERIOD_OPTIONS = [
   { id: 'today', label: 'Today' },
   { id: 'yesterday', label: 'Yesterday' },
   { id: 'week', label: 'This Week' },
+  { id: 'month', label: 'This Month' },
   { id: 'custom', label: 'Custom' },
 ];
 
-/** Resolve from/to dates for Today / Yesterday / This Week presets. */
+/** Resolve from/to dates for Today / Yesterday / This Week / This Month presets. */
 export function getHrPeriodRange(period) {
   const today = toInputDate(new Date());
   if (period === 'today') {
@@ -179,6 +180,15 @@ export function getHrPeriodRange(period) {
   if (period === 'week') {
     return getCurrentWeekRange();
   }
+  if (period === 'month') {
+    if (!today) return { fromDate: '', toDate: '' };
+    const [y, m] = today.split('-');
+    const lastDay = new Date(Number(y), Number(m), 0).getDate();
+    return {
+      fromDate: `${y}-${m}-01`,
+      toDate: `${y}-${m}-${String(lastDay).padStart(2, '0')}`,
+    };
+  }
   return null;
 }
 
@@ -186,6 +196,7 @@ export function formatHrPeriodLabel(period, fromDate, toDate) {
   if (period === 'today') return 'Today';
   if (period === 'yesterday') return 'Yesterday';
   if (period === 'week') return 'This Week';
+  if (period === 'month') return 'This Month';
   if (fromDate && toDate) return `${formatDate(fromDate)} – ${formatDate(toDate)}`;
   return 'Custom Range';
 }

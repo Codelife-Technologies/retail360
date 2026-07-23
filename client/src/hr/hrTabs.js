@@ -1,6 +1,7 @@
 export const HR_TABS = [
   { id: 'hr-dashboard', label: 'HR Dashboard', icon: '📊', permission: 'hr.access' },
   { id: 'employee-master', label: 'Employee Master', icon: '👥', permission: 'hr.access' },
+  { id: 'hr-masters', label: 'HR Masters', icon: '🗂️', permission: 'hr.access' },
   { id: 'employee-tasks', label: 'Assign Task', icon: '✅', permission: 'hr.access' },
   { id: 'work-logs', label: 'Work Logs', icon: '📝', permission: 'hr.access' },
   { id: 'attendance', label: 'Attendance', icon: '🕐', permission: 'hr.access' },

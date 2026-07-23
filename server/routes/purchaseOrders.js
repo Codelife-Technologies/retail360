@@ -9,6 +9,10 @@ const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
 const { linkPurchaseOrderProductsToSupplier } = require('../utils/productSuppliers');
 const { findProductBySkuForImport } = require('../utils/saleImportUtils');
+const {
+  generatePONumber,
+  createPoNumberAllocator,
+} = require('../utils/generatePoNumber');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -21,7 +25,8 @@ const PURCHASE_ORDER_HEADERS = [
   { key: 'orderDate', label: 'Order Date (YYYY-MM-DD)' },
   { key: 'expectedDeliveryDate', label: 'Expected Delivery Date (YYYY-MM-DD)' },
   { key: 'status', label: 'Status (pending/approved/received/closed/cancelled)' },
-  { key: 'sku', label: 'Product SKU *' },
+  { key: 'sku', label: 'Product SKU' },
+  { key: 'productName', label: 'Product Name' },
   { key: 'quantity', label: 'Quantity *' },
   { key: 'unitPrice', label: 'Unit Price (Amount) *' },
   { key: 'tax', label: 'Tax' },
@@ -174,6 +179,8 @@ async function buildPurchaseOrderSearchOr(search) {
     { notes: regex },
     { department: regex },
     { costCenter: regex },
+    { 'items.sku': regex },
+    { 'items.itemName': regex },
   ];
 
   if (matchingSuppliers.length) {
@@ -184,34 +191,6 @@ async function buildPurchaseOrderSearchOr(search) {
   }
 
   return or;
-}
-
-// Helper function to generate PO number
-async function generatePONumber() {
-  const allocator = createPoNumberAllocator();
-  return allocator();
-}
-
-// Assigns unique PO numbers within a batch import (avoids duplicate key on poNumber)
-function createPoNumberAllocator() {
-  let prefix = null;
-  let nextSeq = null;
-
-  return async function allocatePoNumber() {
-    if (prefix == null) {
-      const today = new Date();
-      const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-      prefix = `PO-${dateStr}-`;
-      const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const lastPO = await PurchaseOrder.findOne({
-        poNumber: { $regex: `^${escaped}` },
-      }).sort({ poNumber: -1 });
-      nextSeq = lastPO ? parseInt(lastPO.poNumber.split('-')[2], 10) + 1 : 1;
-    }
-    const poNumber = `${prefix}${String(nextSeq).padStart(3, '0')}`;
-    nextSeq += 1;
-    return poNumber;
-  };
 }
 
 // GET all purchase orders (with pagination)
@@ -262,6 +241,7 @@ router.get('/template', (req, res) => {
         expectedDeliveryDate: '2026-06-30',
         status: 'pending',
         sku: 'PROD-001',
+        productName: '',
         quantity: 10,
         unitPrice: 250,
         tax: 0,
@@ -274,6 +254,7 @@ router.get('/template', (req, res) => {
         expectedDeliveryDate: '2026-06-30',
         status: 'pending',
         sku: 'PROD-002',
+        productName: '',
         quantity: 5,
         unitPrice: 800,
         tax: 0,
@@ -286,6 +267,7 @@ router.get('/template', (req, res) => {
         expectedDeliveryDate: '2026-07-10',
         status: 'pending',
         sku: 'PROD-003',
+        productName: '',
         quantity: 8,
         unitPrice: 150,
         tax: 0,
@@ -298,6 +280,7 @@ router.get('/template', (req, res) => {
         expectedDeliveryDate: '2026-07-25',
         status: 'approved',
         sku: 'PROD-001',
+        productName: 'New item without SKU example',
         quantity: 4,
         unitPrice: 260,
         tax: 0,
@@ -440,16 +423,19 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
         const items = [];
         for (const { row, rowNum } of entries) {
-          const sku = String(getPoImportCell(row, 'Product SKU *', 'Product SKU', 'SKU') || '').trim();
+          const sku = String(getPoImportCell(row, 'Product SKU', 'Product SKU *', 'SKU') || '').trim();
+          const productName = String(
+            getPoImportCell(row, 'Product Name', 'Item Name', 'Product Title') || ''
+          ).trim();
           const quantity = parseFloat(row['Quantity *']);
           const unitPrice = parseFloat(row['Unit Price (Amount) *']);
 
-          if (!sku) {
+          if (!sku && !productName) {
             skipped++;
             poErrors.push({
               row: rowNum,
-              field: 'Product SKU *',
-              message: `${label}: Product SKU is required — line not added`,
+              field: 'Product SKU / Product Name',
+              message: `${label}: provide Product SKU or Product Name — line not added`,
             });
             continue;
           }
@@ -459,7 +445,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
             poErrors.push({
               row: rowNum,
               field: 'Quantity *',
-              message: `${label}: SKU '${sku}' — quantity must be greater than 0 — line not added`,
+              message: `${label}: ${sku || productName} — quantity must be greater than 0 — line not added`,
             });
             continue;
           }
@@ -469,35 +455,46 @@ router.post('/import', upload.single('file'), async (req, res) => {
             poErrors.push({
               row: rowNum,
               field: 'Unit Price (Amount) *',
-              message: `${label}: SKU '${sku}' — unit price must be a valid number — line not added`,
+              message: `${label}: ${sku || productName} — unit price must be a valid number — line not added`,
             });
             continue;
           }
 
-          const product = await findProductBySkuForImport(sku);
-          if (!product) {
-            skipped++;
-            poErrors.push({
-              row: rowNum,
-              field: 'Product SKU *',
-              message: `Product not available — SKU '${sku}' was not added to ${label} (not found in Product Master; check spelling, leading zeros, or add the product first)`,
+          if (sku) {
+            const product = await findProductBySkuForImport(sku);
+            if (!product) {
+              skipped++;
+              poErrors.push({
+                row: rowNum,
+                field: 'Product SKU',
+                message: `Product not available — SKU '${sku}' was not added to ${label} (not found in Product Master; check spelling, leading zeros, or use Product Name for a new item)`,
+              });
+              continue;
+            }
+            items.push({
+              product: product._id,
+              sku: product.sku || sku,
+              itemName: productName || product.title || product.name || '',
+              quantity,
+              unitPrice,
+              total: quantity * unitPrice,
             });
-            continue;
+          } else {
+            items.push({
+              itemName: productName,
+              sku: '',
+              quantity,
+              unitPrice,
+              total: quantity * unitPrice,
+            });
           }
-
-          items.push({
-            product: product._id,
-            quantity,
-            unitPrice,
-            total: quantity * unitPrice,
-          });
         }
 
         if (items.length === 0) {
           poErrors.push({
             row: firstRowNum,
             field: label,
-            message: `${label} was not created — no valid products found (all SKUs missing or invalid)`,
+            message: `${label} was not created — no valid line items found (need Product SKU or Product Name with qty/price)`,
           });
         }
 
@@ -562,6 +559,39 @@ router.post('/import', upload.single('file'), async (req, res) => {
   }
 });
 
+function normalizePurchaseOrderItems(rawItems = []) {
+  return (rawItems || []).map((item, index) => {
+    const quantity = Number(item.quantity) || 0;
+    const unitPrice = Number(item.unitPrice) || 0;
+    const productId = item.product?._id || item.product || null;
+    const itemName = String(item.itemName || item.productName || '').trim();
+    const sku = String(item.sku || '').trim();
+
+    if (!itemName) {
+      const err = new Error(`Item ${index + 1}: title is required (SKU is optional)`);
+      err.status = 400;
+      throw err;
+    }
+
+    const normalized = {
+      ...item,
+      quantity,
+      unitPrice,
+      total: quantity * unitPrice,
+      sku,
+      itemName,
+    };
+
+    if (productId) {
+      normalized.product = productId;
+    } else {
+      delete normalized.product;
+    }
+
+    return normalized;
+  });
+}
+
 // GET single purchase order
 router.get('/:id', async (req, res) => {
   if (req.params.id === 'template' || req.params.id === 'import') {
@@ -582,30 +612,26 @@ router.get('/:id', async (req, res) => {
 // POST create purchase order
 router.post('/', async (req, res) => {
   try {
-    // Calculate item totals
-    const items = req.body.items.map(item => ({
-      ...item,
-      total: item.quantity * item.unitPrice
-    }));
-    
+    const items = normalizePurchaseOrderItems(req.body.items || []);
+
     const poData = {
       ...req.body,
       items,
       poNumber: await generatePONumber()
     };
-    
+
     const purchaseOrder = new PurchaseOrder(poData);
     await purchaseOrder.save();
     await linkPurchaseOrderProductsToSupplier(purchaseOrder).catch((err) => {
       console.warn('Could not link PO products to supplier:', err.message);
     });
-    
+
     const populatedPO = await PurchaseOrder.findById(purchaseOrder._id)
       .populate(PO_POPULATE);
-    
+
     res.status(201).json(populatedPO);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(error.status || 400).json({ error: error.message });
   }
 });
 
@@ -613,23 +639,20 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     if (req.body.items) {
-      req.body.items = req.body.items.map(item => ({
-        ...item,
-        total: item.quantity * item.unitPrice
-      }));
+      req.body.items = normalizePurchaseOrderItems(req.body.items);
     }
 
     if (req.body.supplier) {
       req.body.needsVendorAssignment = false;
     }
-    
+
     const purchaseOrder = await PurchaseOrder.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     )
       .populate(PO_POPULATE);
-    
+
     if (!purchaseOrder) {
       return res.status(404).json({ error: 'Purchase order not found' });
     }
@@ -639,10 +662,10 @@ router.put('/:id', async (req, res) => {
         console.warn('Could not link PO products to supplier:', err.message);
       });
     }
-    
+
     res.json(purchaseOrder);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(error.status || 400).json({ error: error.message });
   }
 });
 

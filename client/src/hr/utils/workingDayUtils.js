@@ -52,13 +52,52 @@ export function recordToDateKey(record) {
   return toLocalDateKey(record?.date);
 }
 
-export function buildAttendanceCalendar({ month, year, records = [], today = new Date() }) {
+/** Expand approved leave ranges into YYYY-MM-DD keys (optionally limited to one month). */
+export function expandApprovedLeaveDateKeys(leaves = [], { month, year } = {}) {
+  const keys = new Set();
+  const monthPrefix =
+    month && year
+      ? `${year}-${String(month).padStart(2, '0')}-`
+      : '';
+
+  leaves.forEach((leave) => {
+    if (!leave || String(leave.status || '').toLowerCase() !== 'approved') return;
+    const fromKey = toLocalDateKey(leave.fromDate);
+    const toKey = toLocalDateKey(leave.toDate);
+    if (!fromKey || !toKey) return;
+
+    let key = fromKey;
+    while (key <= toKey) {
+      if (!monthPrefix || key.startsWith(monthPrefix)) {
+        keys.add(key);
+      }
+      const [y, m, d] = key.split('-').map(Number);
+      const next = new Date(y, m - 1, d + 1);
+      key = toLocalDateKey(next);
+      if (!key) break;
+    }
+  });
+
+  return keys;
+}
+
+export function buildAttendanceCalendar({
+  month,
+  year,
+  records = [],
+  approvedLeaveDateKeys = null,
+  today = new Date(),
+}) {
   const firstDay = new Date(year, month - 1, 1);
   const lastDay = new Date(year, month, 0);
   const startPad = firstDay.getDay();
   const daysInMonth = lastDay.getDate();
   const todayKey = toLocalDateKey(today);
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const leaveKeys =
+    approvedLeaveDateKeys instanceof Set
+      ? approvedLeaveDateKeys
+      : new Set(approvedLeaveDateKeys || []);
 
   const recordMap = new Map();
   records.forEach((record) => {
@@ -86,17 +125,30 @@ export function buildAttendanceCalendar({ month, year, records = [], today = new
     const nonWorking = isNonWorkingDay(date);
     const isFuture = date > todayStart;
     const isToday = dateKey === todayKey;
+    const onApprovedLeave =
+      leaveKeys.has(dateKey) || record?.status === 'Leave';
 
     let state;
     let label = '';
 
-    if (nonWorking) {
+    if (onApprovedLeave && !nonWorking) {
+      // Approved leave (or Leave attendance) — highlight even if still Absent / unmarked
+      state = 'leave';
+      label = 'Leave';
+    } else if (nonWorking) {
       state = 'weekoff';
       if (isSunday(date)) label = 'Sun';
       else label = 'Off';
     } else if (record) {
       state = attendanceStatusToState(record.status);
-      label = record.status === 'Work From Home' ? 'WFH' : '';
+      label =
+        record.status === 'Work From Home'
+          ? 'WFH'
+          : record.status === 'Half Day'
+            ? 'Half'
+            : record.status === 'Holiday'
+              ? 'Hol'
+              : '';
     } else if (isFuture) {
       state = 'future';
     } else if (isToday) {
@@ -117,6 +169,7 @@ export function buildAttendanceCalendar({ month, year, records = [], today = new
       state,
       label,
       record,
+      onApprovedLeave,
     });
   }
 

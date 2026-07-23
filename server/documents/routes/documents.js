@@ -160,6 +160,58 @@ router.get('/folders', requireDocuments('documents.view', 'documents.manual.view
   }
 });
 
+// POST /documents/folders/sync-catalog — build Category → Subcategory → SKU folders
+router.post(
+  '/folders/sync-catalog',
+  requireDocuments('documents.create', 'documents.update', 'documents.ai.view'),
+  async (req, res) => {
+    try {
+      const result = await documentService.syncCatalogFolders({
+        sourceScope: req.body?.sourceScope || 'AI Generator',
+        user: req.user,
+      });
+      const scope = await resolveScope(req);
+      const folders = await documentService.listFolders(scope, {
+        sourceScope: result.sourceScope,
+      });
+      res.json({ ...result, ...folders });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
+// GET /documents/folders/:id/browse — children + images for catalog folders
+router.get(
+  '/folders/:id/browse',
+  requireDocuments('documents.view', 'documents.manual.view', 'documents.ai.view'),
+  async (req, res) => {
+    try {
+      const scope = await resolveScope(req);
+      const data = await documentService.browseFolder(
+        req.params.id,
+        scope,
+        {
+          search: req.query.search,
+          category: req.query.category,
+          dateFrom: req.query.dateFrom,
+          dateTo: req.query.dateTo,
+          status: req.query.status || 'Active',
+        },
+        {
+          page: req.query.page || 1,
+          limit: req.query.limit || 48,
+        }
+      );
+      res.json(data);
+    } catch (error) {
+      const denied = /denied/i.test(error.message);
+      const missing = /not found/i.test(error.message);
+      res.status(denied ? 403 : missing ? 404 : 500).json({ error: error.message });
+    }
+  }
+);
+
 // POST /documents/folders
 router.post(
   '/folders',

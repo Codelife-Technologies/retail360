@@ -8,6 +8,7 @@ const {
   getDateKeyInAppTz,
   zonedDateTimeToUtc,
 } = require('../../utils/appTimezone');
+const { getApprovedLeaveEmployeeIdsForDate } = require('../services/leaveAttendanceSync');
 
 /** Marking / presence deadline — after this wall-clock time counts as half day. */
 const HALF_DAY_CUTOFF = '12:30';
@@ -49,6 +50,10 @@ function resolveSelfMarkStatus({ requestedStatus, existing, nowHHMM }) {
   const late = isAtOrAfterHalfDayCutoff(nowHHMM);
 
   if (existing) {
+    // Keep Leave status if already on approved leave (do not treat as Absent upgrade)
+    if (existing.status === 'Leave' || existing.status === 'Holiday') {
+      return existing.status;
+    }
     // Auto-absent (or HR absent) upgraded when employee marks after cutoff → Half Day
     if (existing.status === 'Absent') {
       return late ? 'Half Day' : allowed;
@@ -107,7 +112,9 @@ async function isHolidayToday(date = new Date()) {
 }
 
 /**
- * After 12:30 on a working day, create Absent for Active employees with no attendance row today.
+ * After 12:30 on a working day:
+ * - Approved leave covering today → mark Leave (not Absent)
+ * - Everyone else with no attendance → mark Absent
  */
 async function autoMarkAbsentAfterCutoff(now = new Date()) {
   if (!isPastHalfDayCutoff(now)) {
@@ -126,7 +133,7 @@ async function autoMarkAbsentAfterCutoff(now = new Date()) {
 
   const activeEmployees = await Employee.find({ status: 'Active' }).select('_id').lean();
   if (!activeEmployees.length) {
-    return { skipped: false, created: 0, dateKey };
+    return { skipped: false, created: 0, dateKey, leaveMarked: 0 };
   }
 
   const existing = await Attendance.find({
@@ -139,27 +146,56 @@ async function autoMarkAbsentAfterCutoff(now = new Date()) {
   const missing = activeEmployees.filter((emp) => !markedIds.has(String(emp._id)));
 
   if (!missing.length) {
-    return { skipped: false, created: 0, dateKey };
+    return { skipped: false, created: 0, dateKey, leaveMarked: 0 };
   }
 
-  const docs = missing.map((emp) => ({
-    employee: emp._id,
-    date: dayStart,
-    checkIn: '',
-    checkOut: '',
-    workingHours: 0,
-    status: 'Absent',
-    notes: 'Auto-marked absent (not marked present by 12:30)',
-  }));
+  const onLeaveIds = await getApprovedLeaveEmployeeIdsForDate(now);
+  const leaveDocs = [];
+  const absentDocs = [];
+
+  missing.forEach((emp) => {
+    const id = String(emp._id);
+    if (onLeaveIds.has(id)) {
+      leaveDocs.push({
+        employee: emp._id,
+        date: dayStart,
+        checkIn: '',
+        checkOut: '',
+        workingHours: 0,
+        status: 'Leave',
+        notes: 'Approved leave (auto-marked; not absent)',
+      });
+    } else {
+      absentDocs.push({
+        employee: emp._id,
+        date: dayStart,
+        checkIn: '',
+        checkOut: '',
+        workingHours: 0,
+        status: 'Absent',
+        notes: 'Auto-marked absent (not marked present by 12:30)',
+      });
+    }
+  });
+
+  let created = 0;
+  let leaveMarked = 0;
 
   try {
-    const result = await Attendance.insertMany(docs, { ordered: false });
-    return { skipped: false, created: result.length, dateKey };
+    if (leaveDocs.length) {
+      const leaveResult = await Attendance.insertMany(leaveDocs, { ordered: false });
+      leaveMarked = leaveResult.length;
+      created += leaveResult.length;
+    }
+    if (absentDocs.length) {
+      const absentResult = await Attendance.insertMany(absentDocs, { ordered: false });
+      created += absentResult.length;
+    }
+    return { skipped: false, created, leaveMarked, dateKey };
   } catch (error) {
-    // Partial success on duplicate key races
-    const created = error?.insertedDocs?.length || 0;
-    if (created > 0 || error?.code === 11000) {
-      return { skipped: false, created, dateKey, partial: true };
+    const createdPartial = error?.insertedDocs?.length || 0;
+    if (createdPartial > 0 || error?.code === 11000) {
+      return { skipped: false, created: createdPartial, leaveMarked, dateKey, partial: true };
     }
     throw error;
   }
@@ -174,8 +210,11 @@ function startAutoAbsentScheduler({ intervalMs = 60 * 1000 } = {}) {
     try {
       const result = await autoMarkAbsentAfterCutoff();
       if (!result.skipped && result.created > 0) {
+        const leavePart = result.leaveMarked
+          ? ` (${result.leaveMarked} on approved leave)`
+          : '';
         console.log(
-          `Attendance: auto-marked ${result.created} absent for ${result.dateKey} (cutoff ${HALF_DAY_CUTOFF})`
+          `Attendance: auto-marked ${result.created} for ${result.dateKey} (cutoff ${HALF_DAY_CUTOFF})${leavePart}`
         );
       }
     } catch (error) {

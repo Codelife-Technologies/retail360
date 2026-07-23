@@ -20,7 +20,6 @@ import Pagination from './Pagination';
 import SaleDetailsModal from './SaleDetailsModal';
 import { useCurrency } from '../currency/CurrencyContext';
 import { CurrencySelector, DualKpiValue } from '../currency/CurrencyUI';
-import DateDropdownPicker from './DateDropdownPicker';
 import '../currency/currency.css';
 import './SalesDashboard.css';
 
@@ -623,20 +622,22 @@ function SalesDashboard({ onSelectReport }) {
             <>
               <label className="sales-dash-filter-field">
                 <span>From</span>
-                <DateDropdownPicker
+                <input
+                  type="date"
                   aria-label="From date"
                   value={filters.customStart}
                   max={filters.customEnd || undefined}
-                  onChange={(iso) => handleCustomDateChange('customStart', iso)}
+                  onChange={(e) => handleCustomDateChange('customStart', e.target.value)}
                 />
               </label>
               <label className="sales-dash-filter-field">
                 <span>To</span>
-                <DateDropdownPicker
+                <input
+                  type="date"
                   aria-label="To date"
                   value={filters.customEnd}
                   min={filters.customStart || undefined}
-                  onChange={(iso) => handleCustomDateChange('customEnd', iso)}
+                  onChange={(e) => handleCustomDateChange('customEnd', e.target.value)}
                 />
               </label>
             </>

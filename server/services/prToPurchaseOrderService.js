@@ -4,27 +4,12 @@ const CompanyProfile = require('../models/CompanyProfile');
 const { getDefaultCompanyProfile } = require('../utils/defaultCompanyProfile');
 const { resolveLineSupplier } = require('../utils/prSupplierUtils');
 const { linkPurchaseOrderProductsToSupplier } = require('../utils/productSuppliers');
+const {
+  generatePONumber,
+  createPoNumberAllocator,
+} = require('../utils/generatePoNumber');
 
 const UNASSIGNED_KEY = '__unassigned__';
-
-async function generatePONumber() {
-  const today = new Date();
-  const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-  const prefix = `PO-${dateStr}-`;
-
-  const lastPO = await PurchaseOrder.findOne({
-    poNumber: { $regex: `^${prefix}` },
-  }).sort({ poNumber: -1 });
-
-  let sequence = 1;
-  if (lastPO) {
-    const parts = lastPO.poNumber.split('-');
-    const lastSequence = parseInt(parts[parts.length - 1], 10);
-    if (!Number.isNaN(lastSequence)) sequence = lastSequence + 1;
-  }
-
-  return `${prefix}${String(sequence).padStart(3, '0')}`;
-}
 
 async function loadCompanyDefaults() {
   const profile = await CompanyProfile.findOne({ singletonKey: 'master' }).lean();
@@ -87,14 +72,24 @@ async function mergePrLinesByVendor(prItems = []) {
 
     const existing = group.productLines.get(productId);
     const qty = Math.max(1, line.requestedQty || 1);
+    const itemName =
+      line.product?.title ||
+      line.product?.name ||
+      line.itemName ||
+      line.sku ||
+      'Item';
+    const sku = line.sku || line.product?.sku || '';
     if (existing) {
       existing.quantity += qty;
+      if (!existing.itemName) existing.itemName = itemName;
+      if (!existing.sku && sku) existing.sku = sku;
     } else {
       group.productLines.set(productId, {
         product: productId,
         quantity: qty,
         unitPrice: line.unitPrice || 0,
-        sku: line.sku || '',
+        sku,
+        itemName,
       });
     }
   }
@@ -109,6 +104,7 @@ async function mergePrLinesByVendor(prItems = []) {
 function buildPoItems(productLines) {
   return [...productLines.values()].map((line) => ({
     product: line.product,
+    itemName: String(line.itemName || line.sku || 'Item').trim(),
     quantity: line.quantity,
     unitPrice: line.unitPrice || 0,
     total: line.quantity * (line.unitPrice || 0),
@@ -156,6 +152,7 @@ async function createPurchaseOrdersFromPr(pr) {
 
   const created = [];
   let applyCharges = true;
+  const allocatePoNumber = createPoNumberAllocator();
 
   for (const group of vendorGroups) {
     const items = buildPoItems(group.productLines);
@@ -171,7 +168,7 @@ async function createPurchaseOrdersFromPr(pr) {
     }
 
     const poPayload = {
-      poNumber: await generatePONumber(),
+      poNumber: await allocatePoNumber(),
       supplier: group.supplierId || undefined,
       needsVendorAssignment: group.needsVendorAssignment,
       purchaseRequisite: pr._id,
@@ -380,6 +377,7 @@ async function assignVendorsToPurchaseOrder(poId, { supplierId, assignments } = 
   const resultPos = [];
   const resultPoIds = new Set();
   let convertedSourcePo = false;
+  const allocatePoNumber = createPoNumberAllocator();
 
   for (const [vendorId, groupItems] of vendorGroups.entries()) {
     const supplier = await getSupplier(vendorId);
@@ -422,7 +420,7 @@ async function assignVendorsToPurchaseOrder(poId, { supplierId, assignments } = 
 
     const newPo = new PurchaseOrder({
       ...base,
-      poNumber: await generatePONumber(),
+      poNumber: await allocatePoNumber(),
       items: groupItems,
       needsVendorAssignment: false,
     });

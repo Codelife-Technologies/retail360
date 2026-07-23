@@ -5,6 +5,7 @@ const Sale = require('../models/Sale');
 const Purchase = require('../models/Purchase');
 const logger = require('../utils/logger');
 const { exportToExcel, exportMultiSheetExcel } = require('../utils/excelGenerator');
+const { backfillPurchasesFromFinalizedGrns } = require('../services/purchaseFromGrnService');
 const {
   buildReplenishMonthBuckets,
   aggregateReplenishSalesMonthly,
@@ -987,8 +988,16 @@ function groupData(data, groupBy, dateField = 'salesDate', isSales = true, rates
           key = item.salesLocation?._id || item.salesLocation || 'unknown';
           displayName = item.salesLocation?.name || 'Unknown Location';
         } else {
-          key = item.location?._id || item.location || 'unknown';
-          displayName = item.location?.name || 'Unknown Location';
+          key = item.supplier?.state || item.supplier?.address || 'unknown';
+          displayName = item.supplier?.state || item.supplier?.address || 'Unknown Vendor Location';
+        }
+        break;
+      case 'vendorLocation':
+        if (!isSales) {
+          key = item.supplier?.state || item.supplier?.address || 'unknown';
+          displayName = item.supplier?.state || item.supplier?.address || 'Unknown Vendor Location';
+        } else {
+          return;
         }
         break;
       case 'supplier':
@@ -1244,7 +1253,11 @@ function mapPurchasesToExportRows(purchases = []) {
     purchaseNumber: purchase.purchaseNumber || '',
     purchaseDate: purchase.purchaseDate ? new Date(purchase.purchaseDate).toISOString().slice(0, 10) : '',
     supplier: purchase.supplier?.name || '',
-    location: purchase.location?.name || '',
+    location:
+      [purchase.supplier?.state, purchase.supplier?.address]
+        .map((part) => String(part || '').trim())
+        .filter(Boolean)
+        .join(' — ') || '',
     items: purchase.items?.length || 0,
     subtotal: purchase.subtotal ?? '',
     tax: purchase.tax ?? '',
@@ -1302,18 +1315,38 @@ function buildDashboardSummaryRows(currentPeriod, previousPeriod, change) {
 }
 
 async function fetchPurchasesForReport(filters = {}) {
-  const { startDate, endDate, supplier, location, paymentStatus } = filters;
+  const { startDate, endDate, supplier, location, vendorLocation, paymentStatus } = filters;
   const query = {};
 
-  if (supplier) query.supplier = supplier;
-  if (location) query.location = location;
   if (paymentStatus) query.paymentStatus = paymentStatus;
+
+  const vendorLoc = String(vendorLocation || '').trim();
+  if (vendorLoc) {
+    const Supplier = require('../models/Supplier');
+    const matchingSuppliers = await Supplier.find({
+      $or: [
+        { state: vendorLoc },
+        { address: { $regex: vendorLoc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
+      ],
+    }).select('_id');
+    const matchingIds = matchingSuppliers.map((row) => String(row._id));
+    if (supplier) {
+      query.supplier = matchingIds.includes(String(supplier)) ? supplier : { $in: [] };
+    } else {
+      query.supplier = { $in: matchingSuppliers.map((row) => row._id) };
+    }
+  } else if (supplier) {
+    query.supplier = supplier;
+  } else if (location && mongoose.Types.ObjectId.isValid(location)) {
+    // Legacy warehouse location filter (older clients)
+    query.location = location;
+  }
 
   const dateQuery = buildDateQuery(startDate, endDate);
   if (dateQuery) query.purchaseDate = dateQuery;
 
   return Purchase.find(query)
-    .populate('supplier', 'name')
+    .populate('supplier', 'name address state')
     .populate('location', 'name code')
     .populate('items.product', 'name sku title')
     .sort({ purchaseDate: -1 });
@@ -2057,9 +2090,29 @@ router.get('/sales/statistics', async (req, res) => {
   }
 });
 
+/** Ensure received GRNs appear in Purchase Report (idempotent, cheap when nothing missing). */
+let purchaseBackfillAt = 0;
+async function ensurePurchaseReportSynced() {
+  const now = Date.now();
+  if (now - purchaseBackfillAt < 30_000) return;
+  purchaseBackfillAt = now;
+  try {
+    const result = await backfillPurchasesFromFinalizedGrns({ limit: 200 });
+    if (result.created > 0) {
+      logger.backend.info('Backfilled purchases from finalized GRNs', result);
+    }
+  } catch (error) {
+    logger.backend.error('Purchase backfill from GRNs failed', {
+      error: error.message,
+      stack: error.stack,
+    });
+  }
+}
+
 // GET purchases summary
 router.get('/purchases/summary', async (req, res) => {
   try {
+    await ensurePurchaseReportSynced();
     const { startDate, endDate, supplier, location, paymentStatus, groupBy } = req.query;
     const query = {};
     
@@ -2150,6 +2203,7 @@ router.get('/purchases/summary', async (req, res) => {
 // GET purchases detailed
 router.get('/purchases/detailed', async (req, res) => {
   try {
+    await ensurePurchaseReportSynced();
     const { startDate, endDate, supplier, location, paymentStatus } = req.query;
     const query = {};
     
@@ -2176,6 +2230,7 @@ router.get('/purchases/detailed', async (req, res) => {
 // GET purchases statistics
 router.get('/purchases/statistics', async (req, res) => {
   try {
+    await ensurePurchaseReportSynced();
     const { startDate, endDate, supplier, location } = req.query;
     const query = {};
     
@@ -2287,6 +2342,7 @@ router.get('/sales/dashboard/export', async (req, res) => {
 // GET export purchases report as Excel
 router.get('/purchases/export', async (req, res) => {
   try {
+    await ensurePurchaseReportSynced();
     const { view = 'summary', groupBy = 'date', ...filters } = req.query;
     const purchases = await fetchPurchasesForReport(filters);
 

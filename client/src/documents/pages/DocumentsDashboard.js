@@ -39,7 +39,7 @@ function DocumentsDashboard({ onNavigate }) {
       <div className="dm-page-header">
         <div>
           <h1>Document Management</h1>
-          <p className="dm-subtitle">Central repository for AI-generated images and employee uploads</p>
+          <p className="dm-subtitle">Central repository for product images and employee uploads</p>
         </div>
       </div>
 
@@ -52,7 +52,7 @@ function DocumentsDashboard({ onNavigate }) {
         </div>
         <div className="dm-kpi-card success clickable" onClick={() => go('ai-generated-images')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && go('ai-generated-images')}>
           <h3>{loading ? '…' : analytics?.aiGeneratedImages ?? 0}</h3>
-          <p>AI Generated Images</p>
+          <p>Product images</p>
         </div>
         <div className="dm-kpi-card warning clickable" onClick={() => go('employee-documents')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && go('employee-documents')}>
           <h3>{loading ? '…' : analytics?.manualDocuments ?? 0}</h3>
@@ -73,9 +73,9 @@ function DocumentsDashboard({ onNavigate }) {
       </div>
 
       <div className="dm-card">
-        <h3>Recent AI Generated Images</h3>
+        <h3>Recent Product images</h3>
         {recentAi.length === 0 ? (
-          <div className="dm-empty"><p>No AI images yet. Generate images, then click Save in the Image Generator.</p></div>
+          <div className="dm-empty"><p>No product images yet. Upload from desktop, or generate in Utilities → Image Generator and Save.</p></div>
         ) : (
           <div className="dm-grid">
             {recentAi.map((doc) => (

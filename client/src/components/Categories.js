@@ -14,6 +14,7 @@ function Categories() {
   const [formData, setFormData] = useState({
     name: '',
     hsnCode: '',
+    gstRate: 0,
     description: '',
   });
 
@@ -64,7 +65,7 @@ function Categories() {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: name === 'gstRate' ? parseFloat(value) || 0 : value,
     }));
   };
 
@@ -91,6 +92,7 @@ function Categories() {
     setFormData({
       name: category.name || '',
       hsnCode: category.hsnCode || '',
+      gstRate: category.gstRate ?? 0,
       description: category.description || '',
     });
     setShowModal(true);
@@ -113,6 +115,7 @@ function Categories() {
     setFormData({
       name: '',
       hsnCode: '',
+      gstRate: 0,
       description: '',
     });
   };
@@ -156,6 +159,7 @@ function Categories() {
               <tr>
                 <th>Name</th>
                 <th>HSN Code</th>
+                <th>GST %</th>
                 <th>Description</th>
                 <th>Subcategories</th>
                 <th>Actions</th>
@@ -164,7 +168,7 @@ function Categories() {
             <tbody>
               {categories.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="no-data">
+                  <td colSpan="6" className="no-data">
                     No categories found
                   </td>
                 </tr>
@@ -177,6 +181,7 @@ function Categories() {
                   >
                     <td>{category.name}</td>
                     <td>{category.hsnCode}</td>
+                    <td>{category.gstRate != null ? `${category.gstRate}%` : '0%'}</td>
                     <td>{category.description || '-'}</td>
                     <td>{subcategoryCounts[category._id] || 0}</td>
                     <td onClick={(e) => e.stopPropagation()}>
@@ -207,6 +212,7 @@ function Categories() {
           fields={[
             { label: 'Name', value: viewingCategory.name },
             { label: 'HSN Code', value: viewingCategory.hsnCode },
+            { label: 'GST %', value: `${viewingCategory.gstRate ?? 0}%` },
             { label: 'Subcategories', value: subcategoryCounts[viewingCategory._id] || 0 },
             { label: 'Description', value: viewingCategory.description, full: true },
           ]}
@@ -251,6 +257,20 @@ function Categories() {
                   onChange={handleInputChange}
                   required
                 />
+              </div>
+              <div className="form-group">
+                <label>GST Rate (%) *</label>
+                <input
+                  type="number"
+                  name="gstRate"
+                  value={formData.gstRate}
+                  onChange={handleInputChange}
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  required
+                />
+                <small className="form-hint">Applied on Purchase Orders by this HSN / category.</small>
               </div>
               <div className="form-group">
                 <label>Description</label>

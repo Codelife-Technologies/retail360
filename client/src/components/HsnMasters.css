@@ -1,0 +1,140 @@
+.hsn-masters-page {
+  padding: 1.25rem 1.5rem 2rem;
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.hsn-masters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.hsn-masters-header h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.5rem;
+  color: #1e293b;
+}
+
+.hsn-masters-subtitle {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.hsn-masters-toolbar {
+  margin-bottom: 1rem;
+}
+
+.hsn-masters-search {
+  width: 100%;
+  max-width: 360px;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+.hsn-masters-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.hsn-masters-table th,
+.hsn-masters-table td {
+  padding: 0.75rem 0.85rem;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.9rem;
+}
+
+.hsn-masters-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+}
+
+.hsn-masters-table .clickable-row {
+  cursor: pointer;
+}
+
+.hsn-masters-table .clickable-row:hover {
+  background: #f8fafc;
+}
+
+.hsn-status {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.hsn-status.active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.hsn-status.inactive {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.hsn-masters-empty,
+.hsn-masters-table .no-data {
+  padding: 2rem;
+  text-align: center;
+  color: #64748b;
+}
+
+.hsn-masters-modal {
+  max-width: 720px;
+  width: 95%;
+}
+
+.hsn-masters-form .form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.hsn-masters-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+}
+
+.hsn-masters-form label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.hsn-masters-form input,
+.hsn-masters-form textarea {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.92rem;
+}
+
+.hsn-active-check {
+  justify-content: flex-end;
+}
+
+.hsn-active-check label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+}

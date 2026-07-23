@@ -1,11 +1,14 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Attendance = require('../models/Attendance');
 const { paginate } = require('../../utils/pagination');
 const { startOfDay, endOfDay, formatTimeHHMM } = require('../utils/employeeId');
 const {
   resolveAttendanceScope,
   applyEmployeeScope,
+  applySelfEmployeeScope,
+  wantsSelfService,
   recordMatchesScope,
   getEmployeeAttendanceTimes,
   getAttendanceTimesForUser,
@@ -23,10 +26,19 @@ const {
 } = require('../utils/attendanceCutoff');
 const { validateAttendanceLocation } = require('../utils/attendanceLocation');
 
+function applyAttendanceEmployeeScope(query, scope, req) {
+  if (wantsSelfService(req)) {
+    applySelfEmployeeScope(query, scope);
+  } else {
+    applyEmployeeScope(query, scope, req.query.employee);
+  }
+}
+
 function parseClientLocation(body = {}) {
   return {
     latitude: body.latitude ?? body.location?.latitude,
     longitude: body.longitude ?? body.location?.longitude,
+    accuracy: body.accuracy ?? body.location?.accuracy,
     deviceInfo: body.deviceInfo || body.location?.deviceInfo || '',
     browserInfo: body.browserInfo || body.location?.browserInfo || '',
   };
@@ -120,7 +132,7 @@ router.get('/summary', async (req, res) => {
     const scope = await resolveAttendanceScope(req);
     const dateRange = parseDateRange(req.query.date, req.query.month, req.query.year);
     const match = { date: dateRange };
-    applyEmployeeScope(match, scope, req.query.employee);
+    applyAttendanceEmployeeScope(match, scope, req);
 
     if (!scope.canManageAll && !scope.employeeId) {
       return res.json({ present: 0, absent: 0, late: 0, leave: 0 });
@@ -156,7 +168,7 @@ router.get('/trend', async (req, res) => {
       const dayStart = zonedDateTimeToUtc(dateKey, '00:00:00');
       const dayEnd = endOfDay(dateKey);
       const match = { date: { $gte: dayStart, $lte: dayEnd } };
-      applyEmployeeScope(match, scope, req.query.employee);
+      applyAttendanceEmployeeScope(match, scope, req);
 
       const [present, absent, leave] = await Promise.all([
         Attendance.countDocuments({ ...match, status: 'Present' }),
@@ -183,12 +195,104 @@ router.get('/trend', async (req, res) => {
   }
 });
 
+/** One row per employee for a month — counts by status, not day-by-day detail. */
+router.get('/employee-summary', async (req, res) => {
+  try {
+    const scope = await resolveAttendanceScope(req);
+    const { month, year, search, status } = req.query;
+
+    if (!scope.canManageAll && !scope.employeeId) {
+      return res.json({ employees: [] });
+    }
+
+    const dateRange = parseDateRange(undefined, month, year);
+    const match = { date: dateRange };
+    applyAttendanceEmployeeScope(match, scope, req);
+    if (status) match.status = status;
+
+    if (match.employee && typeof match.employee === 'string' && mongoose.Types.ObjectId.isValid(match.employee)) {
+      match.employee = new mongoose.Types.ObjectId(match.employee);
+    }
+
+    const rows = await Attendance.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: '$employee',
+          present: {
+            $sum: { $cond: [{ $eq: ['$status', 'Present'] }, 1, 0] },
+          },
+          absent: {
+            $sum: { $cond: [{ $eq: ['$status', 'Absent'] }, 1, 0] },
+          },
+          halfDay: {
+            $sum: { $cond: [{ $eq: ['$status', 'Half Day'] }, 1, 0] },
+          },
+          leave: {
+            $sum: { $cond: [{ $eq: ['$status', 'Leave'] }, 1, 0] },
+          },
+          holiday: {
+            $sum: { $cond: [{ $eq: ['$status', 'Holiday'] }, 1, 0] },
+          },
+          wfh: {
+            $sum: { $cond: [{ $eq: ['$status', 'Work From Home'] }, 1, 0] },
+          },
+          totalDays: { $sum: 1 },
+          workingHours: { $sum: { $ifNull: ['$workingHours', 0] } },
+        },
+      },
+      {
+        $lookup: {
+          from: 'hremployees',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'employee',
+        },
+      },
+      { $unwind: { path: '$employee', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 0,
+          employeeId: '$_id',
+          employeeCode: '$employee.employeeId',
+          firstName: '$employee.firstName',
+          lastName: '$employee.lastName',
+          department: '$employee.department',
+          photo: '$employee.photo',
+          present: 1,
+          absent: 1,
+          halfDay: 1,
+          leave: 1,
+          holiday: 1,
+          wfh: 1,
+          totalDays: 1,
+          workingHours: 1,
+        },
+      },
+      { $sort: { firstName: 1, lastName: 1 } },
+    ]);
+
+    let employees = rows;
+    if (search?.trim()) {
+      const term = search.trim().toLowerCase();
+      employees = rows.filter((row) => {
+        const name = `${row.firstName || ''} ${row.lastName || ''}`.toLowerCase();
+        return name.includes(term) || String(row.employeeCode || '').toLowerCase().includes(term);
+      });
+    }
+
+    res.json({ employees });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const scope = await resolveAttendanceScope(req);
     const { search, status, date, month, year, page, limit, sortBy, sortOrder } = req.query;
     const query = { date: parseDateRange(date, month, year) };
-    applyEmployeeScope(query, scope, req.query.employee);
+    applyAttendanceEmployeeScope(query, scope, req);
     if (status) query.status = status;
 
     if (!scope.canManageAll && !scope.employeeId) {
@@ -239,7 +343,12 @@ router.get('/mark-defaults', async (req, res) => {
     const scope = await resolveAttendanceScope(req);
     let employeeId = req.query.employee;
 
-    if (scope.canManageAll) {
+    if (wantsSelfService(req)) {
+      if (!scope.employeeId) {
+        return res.status(403).json({ error: 'Employee profile not linked' });
+      }
+      employeeId = scope.employeeId;
+    } else if (scope.canManageAll) {
       if (!employeeId) {
         if (!scope.employeeId) {
           return res.status(400).json({ error: 'Employee is required' });
@@ -254,7 +363,8 @@ router.get('/mark-defaults', async (req, res) => {
 
     const today = startOfDay(new Date());
     let times = { checkIn: '', checkOut: '' };
-    const selfRequest = isSelfAttendanceRequest(scope, employeeId);
+    const selfRequest =
+      wantsSelfService(req) || isSelfAttendanceRequest(scope, employeeId);
 
     if (selfRequest || !scope.canManageAll) {
       await ensureUserAttendanceSession(req.user.id, { allowCurrentTime: true });
@@ -319,7 +429,12 @@ router.post('/', async (req, res) => {
     const nowTime = getNowHHMM(new Date());
 
     let employeeId = req.body.employee;
-    if (!scope.canManageAll) {
+    if (wantsSelfService(req)) {
+      if (!scope.employeeId) {
+        return res.status(403).json({ error: 'Employee profile not linked' });
+      }
+      employeeId = scope.employeeId;
+    } else if (!scope.canManageAll) {
       if (!scope.employeeId) {
         return res.status(403).json({ error: 'Employee profile not linked' });
       }
@@ -331,7 +446,8 @@ router.post('/', async (req, res) => {
       employeeId = scope.employeeId;
     }
 
-    const selfRequest = isSelfAttendanceRequest(scope, employeeId);
+    const selfRequest =
+      wantsSelfService(req) || isSelfAttendanceRequest(scope, employeeId);
     const employeeMarking = selfRequest || !scope.canManageAll;
 
     let sessionTimes = { checkIn: '', checkOut: '' };
@@ -425,6 +541,9 @@ router.post('/', async (req, res) => {
         return res.json({
           ...(enriched && typeof enriched === 'object' ? enriched : { data: enriched }),
           autoWorkFromHome: Boolean(adjusted.autoWfh),
+          currentDistanceMeters: locationCheck.currentDistanceMeters ?? locationCheck.distanceMeters,
+          allowedRadiusMeters: locationCheck.allowedRadiusMeters ?? locationCheck.office?.radiusMeters,
+          officeName: locationCheck.office?.name || locationCheck.locationPayload?.officeName || '',
         });
       }
       return res.status(400).json({ error: 'Attendance already marked for this employee today' });
@@ -481,6 +600,9 @@ router.post('/', async (req, res) => {
     res.status(201).json({
       ...(enriched && typeof enriched === 'object' ? enriched : { data: enriched }),
       autoWorkFromHome: Boolean(adjusted.autoWfh),
+      currentDistanceMeters: locationCheck.currentDistanceMeters ?? locationCheck.distanceMeters,
+      allowedRadiusMeters: locationCheck.allowedRadiusMeters ?? locationCheck.office?.radiusMeters,
+      officeName: locationCheck.office?.name || locationCheck.locationPayload?.officeName || '',
     });
   } catch (error) {
     res.status(400).json({ error: error.message });

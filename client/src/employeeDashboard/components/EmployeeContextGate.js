@@ -24,9 +24,9 @@ function EmployeeContextGate({ children }) {
       <div className="ed-unlinked">
         <h2>Employee profile not linked</h2>
         <p>
-          Sign in with your username, email, or employee name (as in HR → Employee Master).
-          Your account must exist in User Management, and your profile must match by email or name.
-          Ask HR to create your user with your name as the username if needed.
+          Your login must match an active record in HR → Employee Master (same email, employee ID, or
+          username as the employee name). HR staff also need their own employee record to use self-service
+          here — ask an admin to sync users from Employee Master or align your email/username.
         </p>
       </div>
     );

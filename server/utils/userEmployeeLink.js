@@ -41,6 +41,13 @@ async function findEmployeeForUser(user) {
   const usernameNorm = normalizeName(user.username);
   if (!usernameNorm) return null;
 
+  // Exact employeeId match (common when username is EMP001)
+  const byEmployeeId = await Employee.findOne({
+    employeeId: { $regex: new RegExp(`^${escapeRegex(String(user.username).trim())}$`, 'i') },
+    status: { $in: ['Active', 'On Leave'] },
+  }).lean();
+  if (byEmployeeId) return byEmployeeId;
+
   const matches = await findEmployeesByName(user.username);
   return matches.length === 1 ? matches[0] : null;
 }

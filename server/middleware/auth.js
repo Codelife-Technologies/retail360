@@ -8,6 +8,7 @@ const MASTER_PERMISSION_MODULES = new Set([
   'products',
   'stock',
   'categories',
+  'hsnmasters',
   'subcategories',
   'prices',
   'pricemasters',

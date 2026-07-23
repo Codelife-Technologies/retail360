@@ -1,6 +1,7 @@
 import React from 'react';
 import HrDashboard from './pages/HrDashboard';
 import EmployeeMaster from './pages/EmployeeMaster';
+import HrMasters from './pages/HrMasters';
 import Attendance from './pages/Attendance';
 import LeaveManagement from './pages/LeaveManagement';
 import Payroll from './pages/Payroll';
@@ -17,6 +18,8 @@ function HrModule({ subTab = 'hr-dashboard', onNavigate }) {
         return <HrDashboard onNavigate={onNavigate} />;
       case 'employee-master':
         return <EmployeeMaster />;
+      case 'hr-masters':
+        return <HrMasters />;
       case 'employee-tasks':
         return <EmployeeTasks />;
       case 'work-logs':

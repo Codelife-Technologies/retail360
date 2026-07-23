@@ -28,7 +28,7 @@ function StorageAnalytics() {
       <div className="dm-page-header">
         <div>
           <h1>Storage Analytics</h1>
-          <p className="dm-subtitle">Usage overview across AI images and employee documents</p>
+          <p className="dm-subtitle">Usage overview across product images and employee documents</p>
         </div>
       </div>
 
@@ -41,7 +41,7 @@ function StorageAnalytics() {
         </div>
         <div className="dm-kpi-card success">
           <h3>{loading ? '…' : analytics?.aiGeneratedImages ?? 0}</h3>
-          <p>AI Generated Images</p>
+          <p>Product images</p>
         </div>
         <div className="dm-kpi-card warning">
           <h3>{loading ? '…' : analytics?.manualDocuments ?? 0}</h3>

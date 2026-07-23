@@ -1009,7 +1009,7 @@ function GeminiImageGenerator() {
                         value={saveFolderId}
                         onChange={(e) => setSaveFolderId(e.target.value)}
                         style={{ padding: '0.35rem 0.5rem', borderRadius: 6, border: '1px solid #d1d5db' }}
-                        title="Save into an AI images folder in Document Management"
+                        title="Save into a Product images folder in Document Management"
                       >
                         <option value="">Unfiled</option>
                         {aiFolders.map((f) => (
@@ -1030,7 +1030,7 @@ function GeminiImageGenerator() {
                           (img) => img.url && selectedGeneratedImages.has(img.order) && !savedToDocuments.has(img.order)
                         )
                       }
-                      title="Save selected images to Document Management → AI Generated Images"
+                      title="Save selected images to Document Management → Product images"
                     >
                       {savingToDocuments
                         ? 'Saving…'
@@ -1060,10 +1060,10 @@ function GeminiImageGenerator() {
               </div>
             </div>
             <p className="form-hint save-product-hint">
-              Use <strong>Save to Documents</strong> to show images in Document Management → AI Generated Images
+              Use <strong>Save to Documents</strong> to show images in Document Management → Product images
               {saveFolderId ? ' (selected folder)' : ' (Unfiled, or pick a folder above)'}.
               {selectedProduct ? ` SKU ${selectedProduct.sku} metadata will be attached.` : ' Select a SKU (optional) to attach product details.'}
-              {' '}Create more folders in Document Management → AI Generated Images.
+              {' '}Create more folders in Document Management → Product images.
             </p>
             <div className="generated-images-grid">
               {generatedImages.map((img, index) => {

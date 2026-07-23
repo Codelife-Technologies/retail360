@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const FOLDER_SCOPES = ['AI Generator', 'Manual Upload'];
 const FOLDER_VISIBILITIES = ['Shared', 'Personal'];
+const FOLDER_KINDS = ['custom', 'category', 'subcategory', 'sku'];
 
 const folderSchema = new mongoose.Schema(
   {
@@ -33,6 +34,31 @@ const folderSchema = new mongoose.Schema(
       enum: FOLDER_VISIBILITIES,
       default: 'Shared',
     },
+    /**
+     * custom = user-created
+     * category / subcategory / sku = catalog hierarchy folders
+     */
+    folderKind: {
+      type: String,
+      enum: FOLDER_KINDS,
+      default: 'custom',
+    },
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Category',
+      default: null,
+    },
+    subCategoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Subcategory',
+      default: null,
+    },
+    /** Product SKU for folderKind === 'sku' */
+    linkedSku: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     /** null = top-level folder */
     parentId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -63,6 +89,9 @@ const folderSchema = new mongoose.Schema(
 
 folderSchema.index({ status: 1, sourceScope: 1, parentId: 1, sortOrder: 1, name: 1 });
 folderSchema.index({ createdByUserId: 1, status: 1, visibility: 1 });
+folderSchema.index({ status: 1, sourceScope: 1, folderKind: 1, categoryId: 1 });
+folderSchema.index({ status: 1, sourceScope: 1, folderKind: 1, subCategoryId: 1 });
+folderSchema.index({ status: 1, sourceScope: 1, folderKind: 1, linkedSku: 1 });
 
 // Shared folder names are unique within a parent + source
 folderSchema.index(
@@ -89,3 +118,4 @@ folderSchema.index(
 module.exports = mongoose.model('DocumentFolder', folderSchema);
 module.exports.FOLDER_SCOPES = FOLDER_SCOPES;
 module.exports.FOLDER_VISIBILITIES = FOLDER_VISIBILITIES;
+module.exports.FOLDER_KINDS = FOLDER_KINDS;

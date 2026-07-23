@@ -108,6 +108,7 @@ async function buildAttendanceLocationPayload({
     return {
       latitude: cachedLocation.latitude,
       longitude: cachedLocation.longitude,
+      accuracy: cachedLocation.accuracy,
       deviceInfo,
       browserInfo,
     };
@@ -118,6 +119,7 @@ async function buildAttendanceLocationPayload({
     return {
       latitude: coords.latitude,
       longitude: coords.longitude,
+      accuracy: coords.accuracy,
       deviceInfo,
       browserInfo,
     };

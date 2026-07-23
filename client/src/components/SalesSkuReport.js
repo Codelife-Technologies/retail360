@@ -11,7 +11,6 @@ import SalesMonthlyTrendCharts from './SalesMonthlyTrendCharts';
 import SaleDetailsModal from './SaleDetailsModal';
 import ProductDetailsModal from './ProductDetailsModal';
 import ExcelUpload from './ExcelUpload';
-import DateDropdownPicker from './DateDropdownPicker';
 import './SalesSkuReport.css';
 import '../currency/currency.css';
 
@@ -1070,23 +1069,25 @@ function SalesSkuReport({ onClose }) {
           <div className="sales-sku-period-custom">
             <label>
               <span>From</span>
-              <DateDropdownPicker
+              <input
+                type="date"
                 aria-label="From date"
                 value={filters.startDate}
                 max={filters.endDate || undefined}
-                onChange={(iso) => {
-                  setFilters((prev) => ({ ...prev, startDate: iso, period: 'custom' }));
+                onChange={(e) => {
+                  setFilters((prev) => ({ ...prev, startDate: e.target.value, period: 'custom' }));
                 }}
               />
             </label>
             <label>
               <span>To</span>
-              <DateDropdownPicker
+              <input
+                type="date"
                 aria-label="To date"
                 value={filters.endDate}
                 min={filters.startDate || undefined}
-                onChange={(iso) => {
-                  setFilters((prev) => ({ ...prev, endDate: iso, period: 'custom' }));
+                onChange={(e) => {
+                  setFilters((prev) => ({ ...prev, endDate: e.target.value, period: 'custom' }));
                 }}
               />
             </label>

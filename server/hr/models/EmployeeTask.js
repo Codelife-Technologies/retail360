@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { getDateKeyInAppTz } = require('../../utils/appTimezone');
 
 const employeeTaskSchema = new mongoose.Schema(
   {
@@ -41,14 +42,22 @@ employeeTaskSchema.pre('save', function prepareDates(next) {
     this.dueDate = this.startDate;
   }
 
-  // Overdue pending tasks become backlog
+  // Overdue pending → Backlog only when deadline calendar day is before today (app TZ).
+  // Same-day deadlines stay Pending.
   if (this.status === 'Pending' && this.dueDate) {
-    const due = new Date(this.dueDate);
-    due.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (due < today) {
+    const dueKey = getDateKeyInAppTz(this.dueDate);
+    const todayKey = getDateKeyInAppTz(new Date());
+    if (dueKey && todayKey && dueKey < todayKey) {
       this.status = 'Backlog';
+    }
+  }
+
+  // Same-day (or future) backlog should not stay backlog
+  if (this.status === 'Backlog' && this.dueDate) {
+    const dueKey = getDateKeyInAppTz(this.dueDate);
+    const todayKey = getDateKeyInAppTz(new Date());
+    if (dueKey && todayKey && dueKey >= todayKey) {
+      this.status = 'Pending';
     }
   }
 
@@ -56,6 +65,6 @@ employeeTaskSchema.pre('save', function prepareDates(next) {
 });
 
 employeeTaskSchema.index({ employee: 1, dueDate: 1, status: 1 });
-employeeTaskSchema.index({ employee: 1, startDate: 1, source: 1 });
+employeeTaskSchema.index({ employee: 1, startDate: 1, status: 1 });
 
 module.exports = mongoose.model('HrEmployeeTask', employeeTaskSchema);

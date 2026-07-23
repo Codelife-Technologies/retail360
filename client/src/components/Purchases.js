@@ -1,9 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { purchasesAPI, suppliersAPI, productsAPI, purchaseOrdersAPI, locationsAPI, pricesAPI } from '../services/api';
 import DetailModal from './DetailModal';
 import PurchaseFormModal from './PurchaseFormModal';
 import { computeCategoryTax, getCategoryName, getTaxRateForCategory } from '../utils/taxRates';
 import './Purchases.css';
+
+function resolvePurchaseItemSku(item, products = []) {
+  if (item?.product?.sku) return String(item.product.sku).trim();
+  if (item?.sku) return String(item.sku).trim();
+  const productId = item?.product?._id || item?.product;
+  if (!productId) return '';
+  const product = (products || []).find((p) => String(p._id) === String(productId));
+  return product?.sku ? String(product.sku).trim() : '';
+}
+
+function resolvePurchaseItemName(item, products = []) {
+  if (item?.product?.title || item?.product?.name) {
+    return item.product.title || item.product.name;
+  }
+  const productId = item?.product?._id || item?.product;
+  const product = (products || []).find((p) => String(p._id) === String(productId));
+  return product?.title || product?.name || 'Unknown';
+}
+
+function formatINR(value) {
+  return `₹${(Number(value) || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
 
 function Purchases() {
   const [purchases, setPurchases] = useState([]);
@@ -13,6 +38,11 @@ function Purchases() {
   const [locations, setLocations] = useState([]);
   const [productPrices, setProductPrices] = useState({}); // Map of productId -> price
   const [loading, setLoading] = useState(true);
+  const [skuSearch, setSkuSearch] = useState('');
+  const [filters, setFilters] = useState({
+    supplier: '',
+    location: '',
+  });
   const [showModal, setShowModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState(null);
@@ -35,18 +65,86 @@ function Purchases() {
   });
 
   useEffect(() => {
-    fetchPurchases();
     fetchSuppliers();
     fetchProducts();
     fetchPurchaseOrders();
     fetchLocations();
   }, []);
 
+  useEffect(() => {
+    fetchPurchases();
+  }, [filters.supplier, filters.location]);
+
+  const skuQuery = skuSearch.trim().toLowerCase();
+
+  const filteredPurchases = useMemo(() => {
+    if (!skuQuery) return purchases;
+    return purchases.filter((purchase) =>
+      (purchase.items || []).some((item) => {
+        const sku = resolvePurchaseItemSku(item, products).toLowerCase();
+        const name = resolvePurchaseItemName(item, products).toLowerCase();
+        return sku.includes(skuQuery) || name.includes(skuQuery);
+      })
+    );
+  }, [purchases, products, skuQuery]);
+
+  const skuPurchaseTotals = useMemo(() => {
+    if (!skuQuery) return null;
+
+    const bySku = new Map();
+    let matchedPurchases = 0;
+
+    filteredPurchases.forEach((purchase) => {
+      let purchaseMatched = false;
+      (purchase.items || []).forEach((item) => {
+        const sku = resolvePurchaseItemSku(item, products);
+        const name = resolvePurchaseItemName(item, products);
+        const skuLower = sku.toLowerCase();
+        const nameLower = name.toLowerCase();
+        if (!skuLower.includes(skuQuery) && !nameLower.includes(skuQuery)) return;
+
+        purchaseMatched = true;
+        const key = sku || name || 'unknown';
+        const existing = bySku.get(key) || {
+          sku: sku || '—',
+          name,
+          quantity: 0,
+          amount: 0,
+          purchaseCount: 0,
+          purchaseIds: new Set(),
+        };
+        existing.quantity += Number(item.quantity) || 0;
+        existing.amount += Number(item.total) || 0;
+        if (!existing.purchaseIds.has(purchase._id)) {
+          existing.purchaseIds.add(purchase._id);
+          existing.purchaseCount += 1;
+        }
+        bySku.set(key, existing);
+      });
+      if (purchaseMatched) matchedPurchases += 1;
+    });
+
+    const rows = [...bySku.values()]
+      .map(({ purchaseIds, ...rest }) => rest)
+      .sort((a, b) => a.sku.localeCompare(b.sku));
+
+    return {
+      rows,
+      matchedPurchases,
+      totalQuantity: rows.reduce((sum, row) => sum + row.quantity, 0),
+      totalAmount: rows.reduce((sum, row) => sum + row.amount, 0),
+    };
+  }, [filteredPurchases, products, skuQuery]);
+
   const fetchPurchases = async () => {
     try {
       setLoading(true);
-      const response = await purchasesAPI.getAll();
-      setPurchases(response.data);
+      const params = {};
+      if (filters.supplier) params.supplier = filters.supplier;
+      if (filters.location) params.location = filters.location;
+      const response = await purchasesAPI.getAll(params);
+      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setPurchases(data);
     } catch (error) {
       console.error('Error fetching purchases:', error);
       console.error('Error details:', {
@@ -64,7 +162,8 @@ function Purchases() {
   const fetchSuppliers = async () => {
     try {
       const response = await suppliersAPI.getAll();
-      setSuppliers(response.data);
+      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setSuppliers(data);
     } catch (error) {
       console.error('Error fetching suppliers:', error);
       console.error('Error details:', {
@@ -126,7 +225,8 @@ function Purchases() {
   const fetchLocations = async () => {
     try {
       const response = await locationsAPI.getAll({ isActive: 'true' });
-      setLocations(response.data);
+      const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setLocations(data);
     } catch (error) {
       console.error('Error fetching locations:', error);
       console.error('Error details:', {
@@ -321,6 +421,109 @@ function Purchases() {
         </button>
       </div>
 
+      <div className="purchases-sku-search-bar">
+        <div className="purchases-filters-row">
+          <div className="purchases-filter-group">
+            <label htmlFor="purchases-vendor-filter">Vendor</label>
+            <select
+              id="purchases-vendor-filter"
+              value={filters.supplier}
+              onChange={(e) => setFilters((prev) => ({ ...prev, supplier: e.target.value }))}
+            >
+              <option value="">All Vendors</option>
+              {suppliers.map((supplier) => (
+                <option key={supplier._id} value={supplier._id}>
+                  {supplier.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="purchases-filter-group">
+            <label htmlFor="purchases-location-filter">Location</label>
+            <select
+              id="purchases-location-filter"
+              value={filters.location}
+              onChange={(e) => setFilters((prev) => ({ ...prev, location: e.target.value }))}
+            >
+              <option value="">All Locations</option>
+              {locations.map((location) => (
+                <option key={location._id} value={location._id}>
+                  {location.name} ({location.code})
+                </option>
+              ))}
+            </select>
+          </div>
+          {(filters.supplier || filters.location) ? (
+            <button
+              type="button"
+              className="btn-clear-sku-search purchases-filters-clear"
+              onClick={() => setFilters({ supplier: '', location: '' })}
+            >
+              Clear filters
+            </button>
+          ) : null}
+        </div>
+
+        <label htmlFor="purchases-sku-search">Find SKU purchased</label>
+        <div className="purchases-sku-search-row">
+          <input
+            id="purchases-sku-search"
+            type="search"
+            value={skuSearch}
+            onChange={(e) => setSkuSearch(e.target.value)}
+            placeholder="Search by SKU or product name…"
+            autoComplete="off"
+          />
+          {skuSearch ? (
+            <button type="button" className="btn-clear-sku-search" onClick={() => setSkuSearch('')}>
+              Clear
+            </button>
+          ) : null}
+        </div>
+        {skuPurchaseTotals ? (
+          <div className="purchases-sku-totals">
+            <div className="purchases-sku-totals-summary">
+              <span>
+                <strong>{skuPurchaseTotals.matchedPurchases}</strong> purchase
+                {skuPurchaseTotals.matchedPurchases === 1 ? '' : 's'}
+              </span>
+              <span>
+                Total qty: <strong>{skuPurchaseTotals.totalQuantity.toLocaleString('en-IN')}</strong>
+              </span>
+              <span>
+                Total amount: <strong>{formatINR(skuPurchaseTotals.totalAmount)}</strong>
+              </span>
+            </div>
+            {skuPurchaseTotals.rows.length > 0 ? (
+              <table className="purchases-sku-totals-table">
+                <thead>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Product</th>
+                    <th>Purchases</th>
+                    <th>Total Qty</th>
+                    <th>Total Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {skuPurchaseTotals.rows.map((row) => (
+                    <tr key={row.sku + row.name}>
+                      <td>{row.sku}</td>
+                      <td>{row.name}</td>
+                      <td>{row.purchaseCount}</td>
+                      <td>{row.quantity.toLocaleString('en-IN')}</td>
+                      <td>{formatINR(row.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="purchases-sku-empty">No purchased SKU matches “{skuSearch.trim()}”.</p>
+            )}
+          </div>
+        ) : null}
+      </div>
+
       {loading ? (
         <div className="loading">Loading purchases...</div>
       ) : (
@@ -329,7 +532,7 @@ function Purchases() {
             <thead>
               <tr>
                 <th>Purchase #</th>
-                <th>Supplier</th>
+                <th>Vendor</th>
                 <th>Location</th>
                 <th>Purchase Date</th>
                 <th>PO Number</th>
@@ -340,14 +543,14 @@ function Purchases() {
               </tr>
             </thead>
             <tbody>
-              {purchases.length === 0 ? (
+              {filteredPurchases.length === 0 ? (
                 <tr>
                   <td colSpan="9" className="no-data">
-                    No purchases found
+                    {skuQuery ? 'No purchases found for this SKU' : 'No purchases found'}
                   </td>
                 </tr>
               ) : (
-                purchases.map((purchase) => (
+                filteredPurchases.map((purchase) => (
                   <tr
                     key={purchase._id}
                     className="clickable-row"
@@ -364,7 +567,7 @@ function Purchases() {
                       </span>
                     </td>
                     <td>{purchase.items?.length || 0}</td>
-                    <td>₹{purchase.total?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td>{formatINR(purchase.total)}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <button
                         className="btn-edit"
@@ -392,7 +595,7 @@ function Purchases() {
           title={`Purchase ${viewingPurchase.purchaseNumber || ''}`}
           fields={[
             { label: 'Purchase #', value: viewingPurchase.purchaseNumber },
-            { label: 'Supplier', value: viewingPurchase.supplier?.name },
+            { label: 'Vendor', value: viewingPurchase.supplier?.name },
             { label: 'Location', value: viewingPurchase.location?.name },
             { label: 'Purchase Date', value: viewingPurchase.purchaseDate ? new Date(viewingPurchase.purchaseDate).toLocaleDateString() : '' },
             { label: 'PO Number', value: viewingPurchase.purchaseOrder?.poNumber },
@@ -428,18 +631,17 @@ function Purchases() {
                 </thead>
                 <tbody>
                   {viewingPurchase.items.map((item, idx) => {
-                    const product =
-                      item.product?.title ||
-                      item.product?.name ||
-                      products.find((p) => p._id === (item.product?._id || item.product))?.title ||
-                      products.find((p) => p._id === (item.product?._id || item.product))?.name ||
-                      'Unknown';
+                    const product = resolvePurchaseItemName(item, products);
+                    const sku = resolvePurchaseItemSku(item, products);
                     return (
                       <tr key={idx}>
-                        <td>{product}</td>
+                        <td>
+                          {product}
+                          {sku ? ` (${sku})` : ''}
+                        </td>
                         <td>{item.quantity}</td>
-                        <td>₹{(item.unitPrice || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td>₹{(item.total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td>{formatINR(item.unitPrice)}</td>
+                        <td>{formatINR(item.total)}</td>
                       </tr>
                     );
                   })}
@@ -482,14 +684,14 @@ function Purchases() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Supplier *</label>
+                  <label>Vendor *</label>
                   <select
                     name="supplier"
                     value={formData.supplier}
                     onChange={handleInputChange}
                     required
                   >
-                    <option value="">Select Supplier</option>
+                    <option value="">Select Vendor</option>
                     {suppliers.map((supplier) => (
                       <option key={supplier._id} value={supplier._id}>
                         {supplier.name}
@@ -498,7 +700,7 @@ function Purchases() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Location/Warehouse *</label>
+                  <label>Vendor Location *</label>
                   <select
                     name="location"
                     value={formData.location}

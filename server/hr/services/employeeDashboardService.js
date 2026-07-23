@@ -58,10 +58,14 @@ async function getEmployeeDashboard(userId) {
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
 
-  // Keep overdue pending work in Backlog before loading today's list
+  // Keep overdue pending work in Backlog; same-day deadlines stay Pending
   await EmployeeTask.updateMany(
     { employee: employeeId, status: 'Pending', dueDate: { $lt: todayStart } },
     { $set: { status: 'Backlog' } }
+  );
+  await EmployeeTask.updateMany(
+    { employee: employeeId, status: 'Backlog', dueDate: { $gte: todayStart } },
+    { $set: { status: 'Pending' } }
   );
 
   const [

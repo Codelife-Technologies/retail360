@@ -1,6 +1,6 @@
 export const DOCUMENTS_TABS = [
   { id: 'documents-dashboard', label: 'Dashboard', icon: '📊', permission: 'documents.dashboard.view' },
-  { id: 'ai-generated-images', label: 'AI Generated Images', icon: '🖼️', permission: 'documents.ai.view' },
+  { id: 'ai-generated-images', label: 'Product images', icon: '🖼️', permission: 'documents.ai.view' },
   { id: 'employee-documents', label: 'Employee Documents', icon: '📁', permission: 'documents.manual.view' },
   { id: 'storage-analytics', label: 'Storage Analytics', icon: '📈', permission: 'documents.analytics.view' },
   { id: 'documents-trash', label: 'Trash', icon: '🗑️', permission: 'documents.trash.view' },

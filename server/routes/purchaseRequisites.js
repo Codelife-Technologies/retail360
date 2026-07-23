@@ -42,6 +42,14 @@ async function generatePRNumber() {
 }
 
 function mapReplenishItemToLine(item, unitPrice = 0, supplierInfo = {}) {
+  const product = item.product;
+  const location = item.location;
+  if (!product || !location) return null;
+
+  const productId = product._id || product;
+  const locationId = location._id || location;
+  if (!productId || !locationId) return null;
+
   const reorderQty = Math.max(
     0,
     item.reorderQty ??
@@ -58,11 +66,11 @@ function mapReplenishItemToLine(item, unitPrice = 0, supplierInfo = {}) {
   }
 
   return {
-    product: item.product._id || item.product,
-    location: item.location._id || item.location,
-    sku: item.product.sku || '',
-    productTitle: item.product.title || item.product.name || '',
-    locationName: item.location.name || '',
+    product: productId,
+    location: locationId,
+    sku: product.sku || '',
+    productTitle: product.title || product.name || '',
+    locationName: location.name || '',
     currentStock: item.inventory?.currentStock ?? 0,
     minStock: item.inventory?.minStock ?? 0,
     suggestedQty: reorderQty || requestedQty,

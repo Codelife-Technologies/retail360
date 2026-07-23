@@ -8,7 +8,7 @@ const emptyForm = () => ({
   name: '',
   latitude: '',
   longitude: '',
-  radiusMeters: 100,
+  radiusMeters: 1000,
   address: '',
   assignedDepartments: [],
   assignedEmployees: [],
@@ -22,6 +22,7 @@ function LocationSettings() {
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -36,6 +37,7 @@ function LocationSettings() {
   const fetchOffices = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const response = await hrOfficeLocationsAPI.getAll({
         search: searchTerm,
         page,
@@ -46,6 +48,14 @@ function LocationSettings() {
     } catch (error) {
       console.error('Error fetching office locations:', error);
       setOffices([]);
+      setPagination(null);
+      const status = error.response?.status;
+      const apiError = error.response?.data?.error;
+      if (status === 403) {
+        setLoadError(apiError || 'Only HR and Admin can view office location settings.');
+      } else {
+        setLoadError(apiError || error.message || 'Failed to load office locations.');
+      }
     } finally {
       setLoading(false);
     }
@@ -236,9 +246,11 @@ function LocationSettings() {
           </p>
         </div>
         <div className="hr-page-actions">
-          <button type="button" className="hr-btn hr-btn-primary" onClick={openCreate}>
-            + Add Office Location
-          </button>
+          {!loadError ? (
+            <button type="button" className="hr-btn hr-btn-primary" onClick={openCreate}>
+              + Add Office Location
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -257,6 +269,12 @@ function LocationSettings() {
 
       {loading ? (
         <div className="hr-loading">Loading office locations…</div>
+      ) : loadError ? (
+        <div className="hr-table-card">
+          <div className="hr-empty" style={{ padding: '1.5rem' }}>
+            {loadError}
+          </div>
+        </div>
       ) : (
         <div className="hr-table-card">
           <table className="hr-table">
@@ -458,8 +476,10 @@ function LocationSettings() {
                     </button>
                   </div>
                   <p className="hr-muted" style={{ marginBottom: '0.5rem' }}>
-                    Tip: mark this office as <strong>Default</strong> (or leave it as the only active office)
-                    so every employee is covered without selecting them one by one.
+                      Tip: mark this office as <strong>Default</strong> (or leave it as the only active office)
+                      so every employee is covered without selecting them one by one.
+                      Use a radius of at least <strong>1000–1500 m</strong> for desktop browsers —
+                      Wi‑Fi GPS is often hundreds of meters off.
                   </p>
                   <div className="hr-chip-select hr-chip-select-scroll">
                     {employees.length === 0 ? (

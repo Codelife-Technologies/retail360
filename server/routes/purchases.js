@@ -22,11 +22,15 @@ const { generatePurchaseNumber } = require('../utils/generatePurchaseNumber');
 // GET all purchases (with pagination)
 router.get('/', requirePermission('purchases.view'), async (req, res) => {
   try {
-    const { supplier, paymentStatus, page, limit } = req.query;
+    const { supplier, location, paymentStatus, page, limit } = req.query;
     const query = {};
     
     if (supplier) {
       query.supplier = supplier;
+    }
+
+    if (location) {
+      query.location = location;
     }
     
     if (paymentStatus) {
@@ -42,7 +46,7 @@ router.get('/', requirePermission('purchases.view'), async (req, res) => {
           { path: 'supplier', select: 'name' },
           { path: 'location', select: 'name code' },
           { path: 'purchaseOrder', select: 'poNumber' },
-          { path: 'items.product', select: 'name sku' }
+          { path: 'items.product', select: 'name title sku' }
         ]
       });
       res.json(result);
@@ -51,7 +55,7 @@ router.get('/', requirePermission('purchases.view'), async (req, res) => {
         .populate('supplier', 'name')
         .populate('location', 'name code')
         .populate('purchaseOrder', 'poNumber')
-        .populate('items.product', 'name sku')
+        .populate('items.product', 'name title sku')
         .sort({ createdAt: -1 });
       res.json(purchases);
     }

@@ -13,6 +13,13 @@ const categorySchema = new mongoose.Schema({
     unique: true,
     trim: true
   },
+  /** GST % for this HSN — used on PO/Sales tax calculation */
+  gstRate: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100,
+  },
   description: {
     type: String,
     trim: true

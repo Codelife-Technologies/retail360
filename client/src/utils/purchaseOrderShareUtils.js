@@ -4,7 +4,7 @@ function resolveProductName(item, products = []) {
   const productId = item.product?._id || item.product;
   const fromList = products.find((p) => p._id === productId);
   const product = fromList || item.product;
-  return product?.title || product?.name || item.sku || 'Product';
+  return product?.title || product?.name || item.itemName || item.sku || 'Product';
 }
 
 export function buildPurchaseOrderShareMessage(po, products = []) {

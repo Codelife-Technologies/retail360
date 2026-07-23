@@ -186,16 +186,6 @@ function EmployeeTasks() {
     }
   };
 
-  const handleDelete = async (task) => {
-    if (!window.confirm(`Delete task "${task.title}"?`)) return;
-    try {
-      await hrTasksAPI.delete(task._id);
-      fetchTasks();
-    } catch (error) {
-      alert(error.response?.data?.error || 'Failed to delete task');
-    }
-  };
-
   const handleStatusChange = async (taskId, status) => {
     try {
       await hrTasksAPI.updateStatus(taskId, status);
@@ -374,13 +364,6 @@ function EmployeeTasks() {
                               <option key={s} value={s}>{s}</option>
                             ))}
                           </select>
-                          <button
-                            type="button"
-                            className="hr-btn hr-btn-danger hr-btn-sm"
-                            onClick={() => handleDelete(task)}
-                          >
-                            Delete
-                          </button>
                         </div>
                       </td>
                     </tr>

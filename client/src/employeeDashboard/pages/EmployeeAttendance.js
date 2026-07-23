@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { hrAttendanceAPI } from '../../hr/services/hrApi';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { hrAttendanceAPI, hrLeavesAPI } from '../../hr/services/hrApi';
 import EmployeeContextGate, { EmployeeWelcome } from '../components/EmployeeContextGate';
 import HrKpiCard from '../../hr/components/HrKpiCard';
 import HrStatusBadge from '../../hr/components/HrStatusBadge';
 import AttendanceCalendar from '../../hr/components/AttendanceCalendar';
 import { extractList } from '../../hr/utils/hrUtils';
+import { expandApprovedLeaveDateKeys } from '../../hr/utils/workingDayUtils';
 import {
   resolveWorkingHours,
   formatWorkingHoursDisplay,
@@ -15,6 +16,7 @@ import {
 import {
   buildAttendanceLocationPayload,
   formatLocationAttendanceError,
+  formatDistanceMeters,
   prefetchAttendanceLocation,
 } from '../../hr/utils/attendanceGeo';
 
@@ -41,13 +43,13 @@ const formatTodayLabel = () =>
 
 function EmployeeAttendanceContent({ employeeId }) {
   const [calendarRecords, setCalendarRecords] = useState([]);
+  const [approvedLeaves, setApprovedLeaves] = useState([]);
   const [summary, setSummary] = useState({ present: 0, absent: 0, late: 0, leave: 0 });
   const [loadingCalendar, setLoadingCalendar] = useState(true);
   const [todayDefaults, setTodayDefaults] = useState(null);
   const [loadingToday, setLoadingToday] = useState(true);
   const [marking, setMarking] = useState(false);
   const [workLocation, setWorkLocation] = useState('office');
-  const [notes, setNotes] = useState('');
   const [geoStatus, setGeoStatus] = useState('idle'); // idle | loading | ready | error
   const [geoCache, setGeoCache] = useState(null);
   const [geoError, setGeoError] = useState('');
@@ -76,13 +78,10 @@ function EmployeeAttendanceContent({ employeeId }) {
   const loadTodayDefaults = useCallback(async () => {
     try {
       setLoadingToday(true);
-      const res = await hrAttendanceAPI.getMarkDefaults();
+      const res = await hrAttendanceAPI.getMarkDefaults(null, { forSelf: true });
       setTodayDefaults(res.data || null);
       if (res.data?.existingRecord) {
         setWorkLocation(statusToWorkLocation(res.data.existingRecord.status));
-        if (res.data.existingRecord.notes) {
-          setNotes(res.data.existingRecord.notes);
-        }
       }
     } catch (error) {
       console.error('Error loading today attendance:', error);
@@ -99,28 +98,46 @@ function EmployeeAttendanceContent({ employeeId }) {
     if (!employeeId) return;
     try {
       setLoadingCalendar(true);
-      const [summaryRes, calendarRes] = await Promise.all([
+      const [summaryRes, calendarRes, leavesRes] = await Promise.all([
         hrAttendanceAPI.getSummary({
           employee: employeeId,
           month: filters.month,
           year: filters.year,
+          forSelf: true,
         }),
         hrAttendanceAPI.getAll({
           employee: employeeId,
           month: filters.month,
           year: filters.year,
           limit: 31,
+          forSelf: true,
+        }),
+        hrLeavesAPI.getAll({
+          employee: employeeId,
+          status: 'Approved',
+          limit: 100,
         }),
       ]);
       setCalendarRecords(extractList(calendarRes));
+      setApprovedLeaves(extractList(leavesRes));
       setSummary(summaryRes.data || { present: 0, absent: 0, late: 0, leave: 0 });
     } catch (error) {
       console.error('Error fetching attendance:', error);
       setCalendarRecords([]);
+      setApprovedLeaves([]);
     } finally {
       setLoadingCalendar(false);
     }
   }, [employeeId, filters.month, filters.year]);
+
+  const approvedLeaveDateKeys = useMemo(
+    () =>
+      expandApprovedLeaveDateKeys(approvedLeaves, {
+        month: filters.month,
+        year: filters.year,
+      }),
+    [approvedLeaves, filters.month, filters.year]
+  );
 
   useEffect(() => {
     loadTodayDefaults();
@@ -180,15 +197,25 @@ function EmployeeAttendanceContent({ employeeId }) {
       });
 
       const response = await hrAttendanceAPI.create({
-        notes,
         status: selectedStatus,
+        forSelf: true,
         ...locationPayload,
       });
 
       if (response.data?.autoWorkFromHome) {
         setWorkLocation('home');
+        const distance = response.data.currentDistanceMeters;
+        const allowed = response.data.allowedRadiusMeters;
+        const office = response.data.officeName || 'the office';
+        const distanceText = Number.isFinite(Number(distance))
+          ? formatDistanceMeters(distance)
+          : 'an unknown distance';
+        const allowedText = Number.isFinite(Number(allowed))
+          ? formatDistanceMeters(allowed)
+          : 'the configured radius';
         alert(
-          'You are outside the office attendance radius, so attendance was marked as Work From Home.'
+          `Your browser location is about ${distanceText} from ${office} (allowed ${allowedText}), so attendance was marked as Work From Home.\n\n` +
+            'If you are actually at the office, ask HR to open Utilities → Location Settings, re-check the office pin on the map, and increase the radius (desktop GPS is often 500–1000 m off).'
         );
       }
 
@@ -340,16 +367,6 @@ function EmployeeAttendanceContent({ employeeId }) {
             {alreadyMarked && todayRecord?.status !== 'Absent' && todayRecord?.status !== 'Half Day' && (
               <p className="ed-attendance-hint success">Marked for today. Update to change office/home or refresh checkout.</p>
             )}
-
-            <div className="ed-form-group ed-attendance-notes">
-              <label>Notes (optional)</label>
-              <textarea
-                rows={1}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add a note"
-              />
-            </div>
           </div>
         )}
       </section>
@@ -390,6 +407,7 @@ function EmployeeAttendanceContent({ employeeId }) {
         month={filters.month}
         year={filters.year}
         records={calendarRecords}
+        approvedLeaveDateKeys={approvedLeaveDateKeys}
         loading={loadingCalendar}
       />
     </>

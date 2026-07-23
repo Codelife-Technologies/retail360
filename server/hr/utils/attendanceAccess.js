@@ -13,10 +13,21 @@ const {
 const { startOfDay, endOfDay, formatTimeHHMM } = require('./employeeId');
 
 const ATTENDANCE_ADMIN_ROLE_CODES = new Set(['admin', 'super_admin', 'hr']);
+const ATTENDANCE_ADMIN_PERMISSIONS = new Set([
+  'admin.all',
+  'hr.access',
+  'hr.full',
+  'hr.attendance.manage',
+]);
+
+function permissionSetHas(permissions, code) {
+  const wanted = String(code || '').toLowerCase();
+  return [...permissions].some((entry) => String(entry || '').toLowerCase() === wanted);
+}
 
 async function userCanManageAllAttendance(userId) {
   const permissions = await getEffectivePermissions(userId);
-  if (permissions.has('admin.all')) {
+  if ([...ATTENDANCE_ADMIN_PERMISSIONS].some((code) => permissionSetHas(permissions, code))) {
     return true;
   }
 
@@ -156,7 +167,17 @@ function isSelfAttendanceRequest(scope, employeeId) {
   );
 }
 
-function applyEmployeeScope(query, scope, requestedEmployeeId) {
+function applyEmployeeScope(query, scope, requestedEmployeeId, options = {}) {
+  const forceSelf = Boolean(options.forceSelf);
+  if (forceSelf) {
+    if (!scope.employeeId) {
+      query.employee = { $in: [] };
+      return query;
+    }
+    query.employee = scope.employeeId;
+    return query;
+  }
+
   if (scope.canManageAll) {
     if (requestedEmployeeId) {
       query.employee = requestedEmployeeId;
@@ -171,7 +192,21 @@ function applyEmployeeScope(query, scope, requestedEmployeeId) {
   return query;
 }
 
-function recordMatchesScope(recordEmployeeId, scope) {
+/** Always scope to the linked employee (used by Employee Dashboard). */
+function applySelfEmployeeScope(query, scope) {
+  return applyEmployeeScope(query, scope, null, { forceSelf: true });
+}
+
+function wantsSelfService(req) {
+  const flag = req?.query?.forSelf ?? req?.body?.forSelf;
+  return flag === true || flag === 'true' || flag === '1';
+}
+
+function recordMatchesScope(recordEmployeeId, scope, options = {}) {
+  if (options.forceSelf) {
+    if (!scope.employeeId) return false;
+    return String(recordEmployeeId) === String(scope.employeeId);
+  }
   if (scope.canManageAll) {
     return true;
   }
@@ -243,6 +278,8 @@ module.exports = {
   resolveAttendanceScope,
   isSelfAttendanceRequest,
   applyEmployeeScope,
+  applySelfEmployeeScope,
+  wantsSelfService,
   recordMatchesScope,
   withComputedWorkingHours,
   syncAttendanceRecordOnLogout,

@@ -14,6 +14,7 @@ const ROLE_DEFINITIONS = [
     description: 'Human resources — employee and user management',
     permissionCodes: [
       'hr.access',
+      'employee.access',
       'users.view', 'users.create', 'users.update', 'users.delete',
       'roles.view', 'roles.create', 'roles.update',
       'groups.view', 'groups.create', 'groups.update',
@@ -58,6 +59,7 @@ const ROLE_DEFINITIONS = [
     code: 'employee',
     description: 'Employee self-service — dashboard, attendance, tasks, leave, personal documents',
     permissionCodes: [
+      'employee.access',
       'documents.access',
       'documents.view',
       'documents.create',
@@ -148,11 +150,12 @@ const ROLE_DEFINITIONS = [
   {
     name: 'Master Catalog',
     code: 'master_catalog',
-    description: 'Products, Stock, Categories, Subcategories, Vendor Prices',
+    description: 'Products, Stock, Categories, HSN Tax, Subcategories, Vendor Prices',
     permissionCodes: [
       'products.view', 'products.create', 'products.update',
       'stock.view', 'stock.create', 'stock.update',
       'categories.view', 'categories.create', 'categories.update',
+      'hsnMasters.view', 'hsnMasters.create', 'hsnMasters.update',
       'subcategories.view', 'subcategories.create', 'subcategories.update',
       'prices.view', 'prices.create', 'prices.update',
     ],

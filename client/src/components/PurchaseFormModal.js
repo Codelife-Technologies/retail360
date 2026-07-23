@@ -270,16 +270,16 @@ function PurchaseFormModal({ onClose, onSaved }) {
         <form onSubmit={handleSubmit}>
           <div className="form-row">
             <div className="form-group">
-              <label>Supplier *</label>
+              <label>Vendor *</label>
               <select name="supplier" value={formData.supplier} onChange={handleInputChange} required>
-                <option value="">Select Supplier</option>
+                <option value="">Select Vendor</option>
                 {suppliers.map((supplier) => (
                   <option key={supplier._id} value={supplier._id}>{supplier.name}</option>
                 ))}
               </select>
             </div>
             <div className="form-group">
-              <label>Location/Warehouse *</label>
+              <label>Vendor Location *</label>
               <select name="location" value={formData.location} onChange={handleInputChange} required>
                 <option value="">Select Location</option>
                 {locations.map((location) => (

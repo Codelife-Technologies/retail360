@@ -103,7 +103,7 @@ function DocumentsSettings() {
         <h3>Sources</h3>
         <p className="dm-subtitle">
           This module only accepts files from <strong>AI Generator</strong> and <strong>Manual Upload</strong>.
-          Employee documents never overwrite AI-generated images. Regenerated AI images are stored as new versions.
+          Employee documents never overwrite product images. Regenerated AI images are stored as new versions.
         </p>
       </div>
     </div>

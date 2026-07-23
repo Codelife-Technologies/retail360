@@ -7,7 +7,6 @@ import {
   formatDate,
   formatDuration,
   employeeName,
-  getCurrentWeekRange,
   HR_PERIOD_OPTIONS,
   getHrPeriodRange,
   formatHrPeriodLabel,
@@ -22,13 +21,13 @@ function DailyWorkLogsView({ employees }) {
   });
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState(() => {
-    const week = getCurrentWeekRange();
+    const month = getHrPeriodRange('month') || { fromDate: '', toDate: '' };
     return {
-      period: 'week',
+      period: 'month',
       employee: '',
       status: '',
-      fromDate: week.fromDate,
-      toDate: week.toDate,
+      fromDate: month.fromDate,
+      toDate: month.toDate,
     };
   });
   const [exporting, setExporting] = useState(false);
@@ -45,17 +44,29 @@ function DailyWorkLogsView({ employees }) {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [logsRes, summaryRes] = await Promise.all([
-        hrWorkLogsAPI.getAll(filterParams),
-        hrWorkLogsAPI.getSummary(filterParams),
-      ]);
+      const logsRes = await hrWorkLogsAPI.getAll(filterParams);
       setLogs(extractList(logsRes));
-      setSummary(
-        summaryRes.data || {
-          totals: { logCount: 0, totalMinutes: 0, submittedCount: 0 },
+
+      try {
+        const summaryRes = await hrWorkLogsAPI.getSummary(filterParams);
+        setSummary(
+          summaryRes.data || {
+            totals: { logCount: 0, totalMinutes: 0, submittedCount: 0 },
+            byEmployee: [],
+          }
+        );
+      } catch (summaryError) {
+        console.error('Error fetching work log summary:', summaryError);
+        const list = extractList(logsRes);
+        setSummary({
+          totals: {
+            logCount: list.length,
+            totalMinutes: list.reduce((sum, log) => sum + (Number(log.totalMinutes) || 0), 0),
+            submittedCount: list.filter((log) => log.status === 'Submitted').length,
+          },
           byEmployee: [],
-        }
-      );
+        });
+      }
     } catch (error) {
       console.error('Error fetching work logs:', error);
       setLogs([]);
@@ -215,7 +226,8 @@ function DailyWorkLogsView({ employees }) {
               {logs.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="hr-empty">
-                    No work logs found for the selected period / filters
+                    No work logs found for {periodLabel.toLowerCase()}. Try This Month, Custom dates,
+                    or Monthly Report.
                   </td>
                 </tr>
               ) : (
@@ -466,10 +478,10 @@ function MonthlyWorkLogReportView({ employees, departments }) {
                 </tr>
               ) : (
                 filteredEmployees.map((row) => {
-                  const empKey = row.employee?._id;
+                  const empKey = String(row.employee?._id || '');
                   const isExpanded = expandedId === empKey;
                   return (
-                    <React.Fragment key={empKey}>
+                    <React.Fragment key={empKey || employeeName(row.employee)}>
                       <tr className={row.summary.logCount === 0 ? 'hr-worklog-report-empty-row' : ''}>
                         <td>
                           <div className="hr-worklog-report-employee">

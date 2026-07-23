@@ -796,16 +796,16 @@ router.get('/', async (req, res) => {
         limit: limit || 25,
         sort: { createdAt: -1 },
         populate: [
-          { path: 'category', select: 'name hsnCode' },
-          { path: 'subCategory', select: 'name category', populate: { path: 'category', select: 'name hsnCode' } },
+          { path: 'category', select: 'name hsnCode gstRate' },
+          { path: 'subCategory', select: 'name category', populate: { path: 'category', select: 'name hsnCode gstRate' } },
           SUPPLIER_POPULATE,
         ]
       });
       res.json(result);
     } else {
       const products = await Product.find(query)
-        .populate('category', 'name hsnCode')
-        .populate({ path: 'subCategory', select: 'name category', populate: { path: 'category', select: 'name hsnCode' } })
+        .populate('category', 'name hsnCode gstRate')
+        .populate({ path: 'subCategory', select: 'name category', populate: { path: 'category', select: 'name hsnCode gstRate' } })
         .populate(SUPPLIER_POPULATE)
         .sort({ createdAt: -1 });
       res.json(products);
@@ -900,11 +900,11 @@ router.get('/export', async (req, res) => {
   try {
     const query = buildProductQuery(req.query);
     const products = await Product.find(query)
-      .populate('category', 'name hsnCode')
+      .populate('category', 'name hsnCode gstRate')
       .populate({
         path: 'subCategory',
         select: 'name category',
-        populate: { path: 'category', select: 'name hsnCode' },
+        populate: { path: 'category', select: 'name hsnCode gstRate' },
       })
       .populate(SUPPLIER_POPULATE)
       .sort({ createdAt: -1 });
@@ -931,8 +931,8 @@ router.get('/:id', async (req, res) => {
     }
     
     const product = await Product.findById(req.params.id)
-      .populate('category', 'name hsnCode')
-      .populate({ path: 'subCategory', select: 'name category', populate: { path: 'category', select: 'name hsnCode' } })
+      .populate('category', 'name hsnCode gstRate')
+      .populate({ path: 'subCategory', select: 'name category', populate: { path: 'category', select: 'name hsnCode gstRate' } })
       .populate(SUPPLIER_POPULATE);
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
@@ -1086,8 +1086,8 @@ router.put('/:id', productEditAccess, async (req, res) => {
       req.body,
       { new: true, runValidators: true }
     )
-      .populate('category', 'name hsnCode')
-      .populate({ path: 'subCategory', select: 'name category', populate: { path: 'category', select: 'name hsnCode' } })
+      .populate('category', 'name hsnCode gstRate')
+      .populate({ path: 'subCategory', select: 'name category', populate: { path: 'category', select: 'name hsnCode gstRate' } })
       .populate(SUPPLIER_POPULATE);
     
     // If SKU changed from empty to value, or from one value to another, move images
@@ -1164,8 +1164,8 @@ router.put('/:id/suppliers', productEditAccess, async (req, res) => {
       { suppliers: supplierLinks },
       { new: true, runValidators: true }
     )
-      .populate('category', 'name hsnCode')
-      .populate({ path: 'subCategory', select: 'name category', populate: { path: 'category', select: 'name hsnCode' } })
+      .populate('category', 'name hsnCode gstRate')
+      .populate({ path: 'subCategory', select: 'name category', populate: { path: 'category', select: 'name hsnCode gstRate' } })
       .populate(SUPPLIER_POPULATE);
 
     if (!product) {

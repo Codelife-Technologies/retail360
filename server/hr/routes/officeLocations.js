@@ -80,6 +80,15 @@ async function syncEmployeeOfficeLinks(office) {
     byDept.forEach((emp) => linkedIds.add(String(emp._id)));
   }
 
+  // Default / sole active office should cover every active employee.
+  if (office.isDefault || office.isActive !== false) {
+    const activeOfficeCount = await OfficeLocation.countDocuments({ isActive: true });
+    if (office.isDefault || activeOfficeCount <= 1) {
+      const allActive = await Employee.find({ status: 'Active' }).select('_id').lean();
+      allActive.forEach((emp) => linkedIds.add(String(emp._id)));
+    }
+  }
+
   const employeeIds = [...linkedIds];
   if (employeeIds.length) {
     await Employee.updateMany(
@@ -89,8 +98,7 @@ async function syncEmployeeOfficeLinks(office) {
   }
 
   // Clear direct link for employees who were previously linked only via this office
-  // but are no longer covered by assignment / department.
-  // Default / single-office coverage is resolved at attendance time without forcing links.
+  // but are no longer covered by assignment / department / default coverage.
   await Employee.updateMany(
     {
       officeLocation: office._id,
@@ -130,12 +138,34 @@ router.get('/my-office', async (req, res) => {
   }
 });
 
+async function ensureDefaultOfficeCoverage() {
+  const unlinked = await Employee.countDocuments({
+    status: 'Active',
+    $or: [{ officeLocation: null }, { officeLocation: { $exists: false } }],
+  });
+  if (unlinked === 0) return;
+
+  const defaultOffice = await OfficeLocation.findOne({ isActive: true, isDefault: true });
+  if (defaultOffice) {
+    await syncEmployeeOfficeLinks(defaultOffice);
+    return;
+  }
+
+  const activeOffices = await OfficeLocation.find({ isActive: true }).limit(2);
+  if (activeOffices.length === 1) {
+    await syncEmployeeOfficeLinks(activeOffices[0]);
+  }
+}
+
 router.get('/', async (req, res) => {
   try {
     const scope = await resolveAttendanceScope(req);
     if (!scope.canManageAll) {
       return res.status(403).json({ error: 'Only HR and Admin can manage office locations' });
     }
+
+    // Heal coverage when Default / sole office exists but some staff are still unlinked.
+    await ensureDefaultOfficeCoverage();
 
     const query = {};
     if (req.query.isActive === 'true') query.isActive = true;

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { purchaseOrdersAPI, suppliersAPI, productsAPI, pricesAPI, purchaseRequisitesAPI, companyProfileAPI } from '../services/api';
+import { purchaseOrdersAPI, suppliersAPI, productsAPI, pricesAPI, purchaseRequisitesAPI, companyProfileAPI, locationsAPI, hsnMastersAPI } from '../services/api';
 import DetailModal from './DetailModal';
 import ExcelUpload from './ExcelUpload';
 import PurchaseOrderExtendedFields from './PurchaseOrderExtendedFields';
-import { getCategoryName, getTaxRateForCategory } from '../utils/taxRates';
+import { getTaxRateForProduct } from '../utils/taxRates';
 import {
   computePurchaseOrderTotals,
   enrichLineItem,
@@ -75,6 +75,18 @@ function getPurchaseRequisitionNumber(po) {
   return po.purchaseRequisite?.prNumber || po.purchaseRequisitionNumber || '—';
 }
 
+function resolvePoLineSku(item) {
+  if (!item) return '';
+  return String(item.sku || item.product?.sku || '').trim();
+}
+
+function resolvePoLineTitle(item) {
+  if (!item) return '';
+  return String(
+    item.itemName || item.product?.title || item.product?.name || ''
+  ).trim();
+}
+
 function PurchaseOrders({ onNavigate }) {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -82,6 +94,7 @@ function PurchaseOrders({ onNavigate }) {
   const [productPrices, setProductPrices] = useState({}); // Map of productId -> price
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [skuSearch, setSkuSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [editingPO, setEditingPO] = useState(null);
@@ -95,21 +108,28 @@ function PurchaseOrders({ onNavigate }) {
   const [loadingPrs, setLoadingPrs] = useState(false);
   const [createSource, setCreateSource] = useState('new');
   const [companyProfile, setCompanyProfile] = useState(null);
-  const [bulkVendorId, setBulkVendorId] = useState('');
+  const [locations, setLocations] = useState([]);
+  const [hsnMasters, setHsnMasters] = useState([]);
+  const [shipToLocationId, setShipToLocationId] = useState('');
   const [formData, setFormData] = useState(() => createEmptyPurchaseOrderForm());
   const [newItem, setNewItem] = useState({
     product: '',
+    itemName: '',
+    sku: '',
     quantity: 1,
     unitPrice: 0,
     discountPercent: 0,
     unitOfMeasure: 'PCS',
     taxRate: '',
+    supplierId: '',
   });
 
   useEffect(() => {
     fetchSuppliers();
     fetchProducts();
     fetchCompanyProfile();
+    fetchLocations();
+    fetchHsnMasters();
   }, []);
 
   useEffect(() => {
@@ -117,12 +137,134 @@ function PurchaseOrders({ onNavigate }) {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  const skuQuery = skuSearch.trim().toLowerCase();
+
+  const filteredPurchaseOrders = useMemo(() => {
+    if (!skuQuery) return purchaseOrders;
+    return purchaseOrders.filter((po) =>
+      (po.items || []).some((item) => {
+        const sku = resolvePoLineSku(item).toLowerCase();
+        const title = resolvePoLineTitle(item).toLowerCase();
+        return sku.includes(skuQuery) || title.includes(skuQuery);
+      })
+    );
+  }, [purchaseOrders, skuQuery]);
+
+  const skuOrderTotals = useMemo(() => {
+    if (!skuQuery) return null;
+
+    const bySku = new Map();
+    let matchedOrders = 0;
+
+    filteredPurchaseOrders.forEach((po) => {
+      let orderMatched = false;
+      (po.items || []).forEach((item) => {
+        const sku = resolvePoLineSku(item);
+        const title = resolvePoLineTitle(item);
+        const skuLower = sku.toLowerCase();
+        const titleLower = title.toLowerCase();
+        if (!skuLower.includes(skuQuery) && !titleLower.includes(skuQuery)) return;
+
+        orderMatched = true;
+        const key = sku || title || 'unknown';
+        const existing = bySku.get(key) || {
+          sku: sku || '—',
+          title: title || '—',
+          quantity: 0,
+          amount: 0,
+          orderCount: 0,
+          orderIds: new Set(),
+        };
+        existing.quantity += Number(item.quantity) || 0;
+        existing.amount += Number(item.total ?? item.lineTotal) || 0;
+        if (!existing.orderIds.has(po._id)) {
+          existing.orderIds.add(po._id);
+          existing.orderCount += 1;
+        }
+        bySku.set(key, existing);
+      });
+      if (orderMatched) matchedOrders += 1;
+    });
+
+    const rows = [...bySku.values()]
+      .map(({ orderIds, ...rest }) => rest)
+      .sort((a, b) => String(a.sku).localeCompare(String(b.sku)));
+
+    return {
+      rows,
+      matchedOrders,
+      totalQuantity: rows.reduce((sum, row) => sum + row.quantity, 0),
+      totalAmount: rows.reduce((sum, row) => sum + row.amount, 0),
+    };
+  }, [filteredPurchaseOrders, skuQuery]);
+
   const fetchCompanyProfile = async () => {
     try {
       const response = await companyProfileAPI.get();
       setCompanyProfile(response.data);
     } catch (error) {
       console.error('Error fetching company profile:', error);
+    }
+  };
+
+  const applyShipToLocation = (locationId, locationList = locations) => {
+    const location = (locationList || []).find((l) => String(l._id) === String(locationId));
+    setShipToLocationId(locationId || '');
+    if (!location) {
+      setFormData((prev) => ({
+        ...prev,
+        deliveryLocation: '',
+      }));
+      return;
+    }
+    const addressParts = [
+      location.address,
+      location.city,
+      location.state,
+      location.pincode,
+      location.country,
+    ].filter(Boolean);
+    setFormData((prev) => ({
+      ...prev,
+      deliveryLocation: `${location.name}${location.code ? ` (${location.code})` : ''}`,
+      shippingAddress: {
+        ...(prev.shippingAddress || {}),
+        warehouseName: location.name || location.code || '',
+        address: addressParts.join(', '),
+        contactPerson: location.contactPerson || '',
+        contactNumber: location.phone || '',
+        companyName:
+          prev.buyer?.companyName ||
+          prev.billingAddress?.companyName ||
+          prev.shippingAddress?.companyName ||
+          '',
+        gstin: prev.billingAddress?.gstin || prev.buyer?.gstin || prev.shippingAddress?.gstin || '',
+      },
+    }));
+  };
+
+  const fetchLocations = async () => {
+    try {
+      const response = await locationsAPI.getAll({ isActive: 'true' });
+      const list = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setLocations(list);
+      const home = list.find((l) => l.isHomeBranch) || list[0];
+      if (home?._id) {
+        applyShipToLocation(String(home._id), list);
+      }
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+    }
+  };
+
+  const fetchHsnMasters = async () => {
+    try {
+      const response = await hsnMastersAPI.getActive();
+      const list = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setHsnMasters(list);
+    } catch (error) {
+      console.error('Error fetching HSN masters:', error);
+      setHsnMasters([]);
     }
   };
 
@@ -142,10 +284,7 @@ function PurchaseOrders({ onNavigate }) {
           const price = productPrices[productId];
           const unitPrice =
             item.unitPrice || price?.purchasePrice || price?.salesPrice || 0;
-          const taxRate =
-            item.taxRate !== '' && item.taxRate != null
-              ? item.taxRate
-              : getTaxRateForCategory(getCategoryName(product), 0);
+          const taxRate = getTaxRateForProduct(product, 0, hsnMasters);
 
           return enrichLineItem(
             {
@@ -153,7 +292,7 @@ function PurchaseOrders({ onNavigate }) {
               quantity: item.quantity,
               unitPrice,
               discountPercent: item.discountPercent || 0,
-              unitOfMeasure: getProductUom(product),
+              unitOfMeasure: getProductUom(product, hsnMasters),
               taxRate,
               supplierId:
                 item.supplierId ||
@@ -161,7 +300,9 @@ function PurchaseOrders({ onNavigate }) {
                 getDesignatedSupplierId(product) ||
                 '',
             },
-            product
+            product,
+            0,
+            hsnMasters
           );
         }),
         products,
@@ -257,8 +398,8 @@ function PurchaseOrders({ onNavigate }) {
   };
 
   const poTotals = useMemo(
-    () => computePurchaseOrderTotals(formData, products),
-    [formData, products]
+    () => computePurchaseOrderTotals(formData, products, hsnMasters),
+    [formData, products, hsnMasters]
   );
 
   const autoVendorSplit = !editingPO;
@@ -294,21 +435,6 @@ function PurchaseOrders({ onNavigate }) {
     };
   }, [formData.items, products, suppliers, editingPO]);
 
-  const applyBulkVendorToItems = () => {
-    if (!bulkVendorId) return;
-    setFormData((prev) => ({
-      ...prev,
-      items: sortItemsBySupplier(
-        prev.items.map((item) => ({
-          ...item,
-          supplierId: bulkVendorId,
-        })),
-        products,
-        suppliers
-      ),
-    }));
-  };
-
   const handleItemVendorChange = (index, supplierId) => {
     setFormData((prev) => {
       const items = prev.items.map((item, i) =>
@@ -333,7 +459,7 @@ function PurchaseOrders({ onNavigate }) {
       freightCharges: applyCharges ? baseForm.freightCharges || 0 : 0,
       packingCharges: applyCharges ? baseForm.packingCharges || 0 : 0,
     };
-    const totals = computePurchaseOrderTotals(groupForm, products);
+    const totals = computePurchaseOrderTotals(groupForm, products, hsnMasters);
     return sanitizePurchaseOrderPayload({
       ...groupForm,
       subtotal: totals.subtotal,
@@ -356,10 +482,7 @@ function PurchaseOrders({ onNavigate }) {
       const price = productPrices[productId];
       const unitPrice =
         item.unitPrice || price?.purchasePrice || price?.salesPrice || 0;
-      const taxRate =
-        item.taxRate !== '' && item.taxRate != null
-          ? item.taxRate
-          : getTaxRateForCategory(getCategoryName(product), 0);
+      const taxRate = getTaxRateForProduct(product, 0, hsnMasters);
 
       return enrichLineItem(
         {
@@ -367,7 +490,7 @@ function PurchaseOrders({ onNavigate }) {
           quantity: item.quantity,
           unitPrice,
           discountPercent: item.discountPercent || 0,
-          unitOfMeasure: getProductUom(product),
+          unitOfMeasure: getProductUom(product, hsnMasters),
           taxRate,
           supplierId:
             item.supplierId ||
@@ -375,7 +498,9 @@ function PurchaseOrders({ onNavigate }) {
             getDesignatedSupplierId(product) ||
             '',
         },
-        product
+        product,
+        0,
+        hsnMasters
       );
     });
 
@@ -436,7 +561,6 @@ function PurchaseOrders({ onNavigate }) {
   const openNewPoForm = () => {
     setEditingPO(null);
     resetForm();
-    setBulkVendorId('');
     setCreateSource('new');
     setPendingPrLinkId(null);
     setShowCreateChoice(false);
@@ -479,8 +603,13 @@ function PurchaseOrders({ onNavigate }) {
   };
 
   const handleAddItem = () => {
-    if (!newItem.product) {
-      alert('Please select a product');
+    const itemName = String(newItem.itemName || '').trim();
+    const product = newItem.product
+      ? products.find((p) => p._id === newItem.product)
+      : null;
+    const title = itemName || product?.title || product?.name || '';
+    if (!title.trim()) {
+      alert('Title is required for each line item');
       return;
     }
     if (!validateQuantity(newItem.quantity).valid) {
@@ -488,29 +617,34 @@ function PurchaseOrders({ onNavigate }) {
       return;
     }
     if (!validatePrice(newItem.unitPrice).valid) {
-      alert('Unit price cannot be negative');
+      alert('Amount cannot be negative');
       return;
     }
-    const product = products.find((p) => p._id === newItem.product);
+    if (autoVendorSplit && !newItem.supplierId) {
+      alert('Select a vendor for this item');
+      return;
+    }
     const taxRate =
       newItem.taxRate !== '' && newItem.taxRate != null
         ? parseFloat(newItem.taxRate)
-        : getTaxRateForCategory(getCategoryName(product), formData.defaultTaxRate);
+        : getTaxRateForProduct(product, formData.defaultTaxRate, hsnMasters);
 
     const rawItem = {
-      product: newItem.product,
+      product: newItem.product || undefined,
+      itemName: title.trim(),
       quantity: parseFloat(newItem.quantity),
       unitPrice: parseFloat(newItem.unitPrice),
-      discountPercent: parseFloat(newItem.discountPercent) || 0,
-      unitOfMeasure: newItem.unitOfMeasure || getProductUom(product),
+      discountPercent: 0,
+      unitOfMeasure: newItem.unitOfMeasure || getProductUom(product, hsnMasters),
       taxRate,
-      sku: product?.sku || '',
+      sku: String(newItem.sku || product?.sku || '').trim(),
       hsnCode: getProductHsn(product),
       receivedQuantity: 0,
-      supplierId: getDesignatedSupplierId(product) || '',
+      supplierId:
+        newItem.supplierId || getDesignatedSupplierId(product) || formData.supplier || '',
     };
     rawItem.total = rawItem.quantity * rawItem.unitPrice;
-    const enriched = enrichLineItem(rawItem, product, formData.defaultTaxRate);
+    const enriched = enrichLineItem(rawItem, product, formData.defaultTaxRate, hsnMasters);
 
     setFormData((prev) => ({
       ...prev,
@@ -518,11 +652,14 @@ function PurchaseOrders({ onNavigate }) {
     }));
     setNewItem({
       product: '',
+      itemName: '',
+      sku: '',
       quantity: 1,
       unitPrice: 0,
       discountPercent: 0,
       unitOfMeasure: 'PCS',
       taxRate: '',
+      supplierId: '',
     });
   };
 
@@ -538,6 +675,10 @@ function PurchaseOrders({ onNavigate }) {
     e.preventDefault();
     if (formData.items.length === 0) {
       alert('Please add at least one item');
+      return;
+    }
+    if (!editingPO && !shipToLocationId) {
+      alert('Please select a Ship To location');
       return;
     }
     const buyerGst = validateGSTIN(formData.buyer?.gstin);
@@ -587,7 +728,7 @@ function PurchaseOrders({ onNavigate }) {
             })
             .join('\n• ');
           alert(
-            `These products have no vendor assigned. Select a vendor for each product (or apply one vendor to all):\n\n• ${names}`
+            `These products have no vendor assigned. Select a vendor for each product after choosing the item:\n\n• ${names}`
           );
           return;
         }
@@ -615,7 +756,8 @@ function PurchaseOrders({ onNavigate }) {
               freightCharges: i === 0 ? formData.freightCharges || 0 : 0,
               packingCharges: i === 0 ? formData.packingCharges || 0 : 0,
             },
-            products
+            products,
+            hsnMasters
           );
           const payload = buildPoPayload(
             formData,
@@ -695,20 +837,26 @@ function PurchaseOrders({ onNavigate }) {
 
   const resetForm = () => {
     setFormData(createEmptyPurchaseOrderForm(companyProfile));
+    setShipToLocationId('');
     setNewItem({
       product: '',
+      itemName: '',
+      sku: '',
       quantity: 1,
       unitPrice: 0,
       discountPercent: 0,
       unitOfMeasure: 'PCS',
       taxRate: '',
     });
+    const home = locations.find((l) => l.isHomeBranch) || locations[0];
+    if (home?._id) {
+      setTimeout(() => applyShipToLocation(String(home._id), locations), 0);
+    }
   };
 
   const closePoModal = () => {
     setShowModal(false);
     setEditingPO(null);
-    setBulkVendorId('');
     closeCreateFlow();
     resetForm();
   };
@@ -716,7 +864,6 @@ function PurchaseOrders({ onNavigate }) {
   const openAddModal = () => {
     setEditingPO(null);
     resetForm();
-    setBulkVendorId('');
     setCreateStep('choice');
     setSelectedPrId('');
     setCreateSource('new');
@@ -726,45 +873,44 @@ function PurchaseOrders({ onNavigate }) {
 
   const renderItemRow = (item, index) => {
     const productId = item.product?._id || item.product;
-    const product = products.find((p) => p._id === productId);
-    const enriched = enrichLineItem(item, product, formData.defaultTaxRate);
+    const product = productId ? products.find((p) => p._id === productId) : null;
+    const enriched = enrichLineItem(item, product, formData.defaultTaxRate, hsnMasters);
     const vendorOptions = getVendorOptionsForProduct(product, suppliers);
-    const productName = product?.title || product?.name || 'Unknown';
+    const productName =
+      product?.title || product?.name || item.itemName || 'New item';
     return (
-      <div key={`${productId}-${index}`} className="item-row po-item-row-extended">
+      <div key={`${productId || item.itemName || 'item'}-${index}`} className="item-row po-item-row-simplified">
         <span className="po-product-name" title={productName}>
           {truncateProductName(productName)}
         </span>
-        <span>{enriched.sku || '-'}</span>
-        {autoVendorSplit && (
-          <span className="po-item-vendor-cell">
-            <select
-              value={item.supplierId || ''}
-              onChange={(e) => handleItemVendorChange(index, e.target.value)}
-              aria-label={`Vendor for ${product?.title || product?.name || 'product'}`}
-            >
-              <option value="">Select vendor</option>
-              {vendorOptions.map((vendor) => (
-                <option key={vendor._id} value={vendor._id}>
-                  {vendor.name}
+        <span>{enriched.sku || '—'}</span>
+        <span className="po-item-vendor-cell">
+          <select
+            value={item.supplierId || formData.supplier || ''}
+            onChange={(e) => handleItemVendorChange(index, e.target.value)}
+            aria-label={`Vendor for ${productName}`}
+            required={autoVendorSplit}
+          >
+            <option value="">Select vendor</option>
+            {(vendorOptions.length ? vendorOptions : suppliers).map((vendor) => (
+              <option key={vendor._id} value={vendor._id}>
+                {vendor.name}
+              </option>
+            ))}
+            {item.supplierId &&
+              !(vendorOptions.length ? vendorOptions : suppliers).some(
+                (v) => String(v._id) === String(item.supplierId)
+              ) && (
+                <option value={item.supplierId}>
+                  {suppliers.find((s) => String(s._id) === String(item.supplierId))?.name ||
+                    'Selected vendor'}
                 </option>
-              ))}
-              {/* Keep current value visible even if not in product-linked list */}
-              {item.supplierId &&
-                !vendorOptions.some((v) => String(v._id) === String(item.supplierId)) && (
-                  <option value={item.supplierId}>
-                    {suppliers.find((s) => String(s._id) === String(item.supplierId))?.name ||
-                      'Selected vendor'}
-                  </option>
-                )}
-            </select>
-          </span>
-        )}
+              )}
+          </select>
+        </span>
+        <span>{enriched.hsnCode || getProductHsn(product) || '—'}</span>
         <span>{item.quantity}</span>
         <span>{enriched.unitOfMeasure}</span>
-        <span>{formatINR(item.unitPrice)}</span>
-        <span>{enriched.discountPercent || 0}%</span>
-        <span>{enriched.taxRate || 0}%</span>
         <span>{formatINR(enriched.lineTotal)}</span>
         <button
           type="button"
@@ -822,6 +968,67 @@ function PurchaseOrders({ onNavigate }) {
         />
       </div>
 
+      <div className="po-sku-search-bar">
+        <label htmlFor="po-sku-search">Find SKU on purchase orders</label>
+        <div className="po-sku-search-row">
+          <input
+            id="po-sku-search"
+            type="search"
+            value={skuSearch}
+            onChange={(e) => setSkuSearch(e.target.value)}
+            placeholder="Search by SKU or product title…"
+            autoComplete="off"
+          />
+          {skuSearch ? (
+            <button type="button" className="btn-clear-sku-search" onClick={() => setSkuSearch('')}>
+              Clear
+            </button>
+          ) : null}
+        </div>
+        {skuOrderTotals ? (
+          <div className="po-sku-totals">
+            <div className="po-sku-totals-summary">
+              <span>
+                <strong>{skuOrderTotals.matchedOrders}</strong> PO
+                {skuOrderTotals.matchedOrders === 1 ? '' : 's'}
+              </span>
+              <span>
+                Total qty: <strong>{skuOrderTotals.totalQuantity.toLocaleString('en-IN')}</strong>
+              </span>
+              <span>
+                Total amount: <strong>{formatINR(skuOrderTotals.totalAmount)}</strong>
+              </span>
+            </div>
+            {skuOrderTotals.rows.length > 0 ? (
+              <table className="po-sku-totals-table">
+                <thead>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Title</th>
+                    <th>POs</th>
+                    <th>Total Qty</th>
+                    <th>Total Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {skuOrderTotals.rows.map((row) => (
+                    <tr key={`${row.sku}-${row.title}`}>
+                      <td>{row.sku}</td>
+                      <td>{row.title}</td>
+                      <td>{row.orderCount}</td>
+                      <td>{row.quantity.toLocaleString('en-IN')}</td>
+                      <td>{formatINR(row.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="po-sku-empty">No PO lines match “{skuSearch.trim()}”.</p>
+            )}
+          </div>
+        ) : null}
+      </div>
+
       {loading ? (
         <div className="loading">Loading purchase orders...</div>
       ) : (
@@ -834,58 +1041,89 @@ function PurchaseOrders({ onNavigate }) {
                 <th>Supplier</th>
                 <th>Order Date</th>
                 <th>Status</th>
-                <th>Items</th>
+                <th>SKU</th>
+                <th>Qty</th>
                 <th>Total</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {purchaseOrders.length === 0 ? (
+              {filteredPurchaseOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="no-data">
-                    No purchase orders found
+                  <td colSpan="9" className="no-data">
+                    {skuQuery ? 'No purchase orders found for this SKU' : 'No purchase orders found'}
                   </td>
                 </tr>
               ) : (
-                purchaseOrders.map((po) => (
-                  <tr
-                    key={po._id}
-                    className="clickable-row"
-                    onClick={() => setViewingPO(po)}
-                  >
-                    <td>{po.poNumber}</td>
-                    <td>{getPurchaseRequisitionNumber(po)}</td>
-                    <td>
-                      {po.needsVendorAssignment ? (
-                        <span className="po-vendor-pending-badge">Assign vendor</span>
-                      ) : (
-                        po.supplier?.name || '—'
-                      )}
-                    </td>
-                    <td>{new Date(po.orderDate).toLocaleDateString()}</td>
-                    <td>
-                      <span className={`status-badge status-${po.status}`}>
-                        {po.status}
-                      </span>
-                    </td>
-                    <td>{po.items?.length || 0}</td>
-                    <td>₹{po.total?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <button
-                        className="btn-edit"
-                        onClick={() => handleEdit(po)}
+                filteredPurchaseOrders.flatMap((po) => {
+                  const lines =
+                    po.items?.length > 0
+                      ? po.items
+                      : [{ _placeholder: true, sku: '—', quantity: 0 }];
+                  const rowSpan = lines.length;
+                  return lines.map((item, idx) => {
+                    const sku = item._placeholder
+                      ? '—'
+                      : resolvePoLineSku(item) || '—';
+                    const qty = item._placeholder ? '—' : item.quantity ?? 0;
+                    const title = item._placeholder ? '' : resolvePoLineTitle(item);
+                    return (
+                      <tr
+                        key={`${po._id}-${idx}`}
+                        className={`clickable-row${idx > 0 ? ' po-list-item-row' : ''}`}
+                        onClick={() => setViewingPO(po)}
                       >
-                        {po.needsVendorAssignment ? 'Assign Vendor' : 'Edit'}
-                      </button>
-                      <button
-                        className="btn-delete"
-                        onClick={() => handleDelete(po._id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                        {idx === 0 ? (
+                          <>
+                            <td rowSpan={rowSpan}>{po.poNumber}</td>
+                            <td rowSpan={rowSpan}>{getPurchaseRequisitionNumber(po)}</td>
+                            <td rowSpan={rowSpan}>
+                              {po.needsVendorAssignment ? (
+                                <span className="po-vendor-pending-badge">Assign vendor</span>
+                              ) : (
+                                po.supplier?.name || '—'
+                              )}
+                            </td>
+                            <td rowSpan={rowSpan}>
+                              {new Date(po.orderDate).toLocaleDateString()}
+                            </td>
+                            <td rowSpan={rowSpan}>
+                              <span className={`status-badge status-${po.status}`}>
+                                {po.status}
+                              </span>
+                            </td>
+                          </>
+                        ) : null}
+                        <td title={title || undefined}>
+                          <span className="po-list-sku">{sku}</span>
+                          {title && sku === '—' ? (
+                            <span className="po-list-title-hint">{truncateProductName(title)}</span>
+                          ) : null}
+                        </td>
+                        <td>{qty}</td>
+                        {idx === 0 ? (
+                          <>
+                            <td rowSpan={rowSpan}>
+                              ₹
+                              {po.total?.toLocaleString('en-IN', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </td>
+                            <td rowSpan={rowSpan} onClick={(e) => e.stopPropagation()}>
+                              <button className="btn-edit" onClick={() => handleEdit(po)}>
+                                {po.needsVendorAssignment ? 'Assign Vendor' : 'Edit'}
+                              </button>
+                              <button className="btn-delete" onClick={() => handleDelete(po._id)}>
+                                Delete
+                              </button>
+                            </td>
+                          </>
+                        ) : null}
+                      </tr>
+                    );
+                  });
+                })
               )}
             </tbody>
           </table>
@@ -904,7 +1142,9 @@ function PurchaseOrders({ onNavigate }) {
             'Order Date & Expected Delivery Date — different dates create separate POs',
             'One PO is created per unique vendor + PO reference + dates combination',
             'Multiple line rows with the same vendor, PO ref, and dates = one PO with many items',
-            'Product SKU *, Quantity *, Unit Price (Amount) * — line items',
+            'Product SKU (optional) — match Product Master when known',
+            'Product Name (optional if SKU set) — use for new items without SKU',
+            'Quantity *, Unit Price (Amount) * — line items',
           ]}
         />
       )}
@@ -936,18 +1176,22 @@ function PurchaseOrders({ onNavigate }) {
           fields={[
             { label: 'PO Number', value: viewingPO.poNumber },
             { label: 'PR Number', value: getPurchaseRequisitionNumber(viewingPO) },
-            { label: 'Revision', value: viewingPO.revisionNumber || '0' },
             { label: 'Currency', value: viewingPO.currency || 'INR' },
-            { label: 'Supplier', value: viewingPO.supplier?.name },
-            { label: 'Buyer GSTIN', value: viewingPO.buyer?.gstin },
-            { label: 'Supplier GSTIN', value: viewingPO.supplierDetails?.gstin },
+            { label: 'Vendor', value: viewingPO.supplier?.name },
+            { label: 'Vendor GSTIN', value: viewingPO.supplierDetails?.gstin },
+            {
+              label: 'Vendor Location',
+              value: [viewingPO.supplierDetails?.state, viewingPO.supplierDetails?.address]
+                .filter(Boolean)
+                .join(' — '),
+            },
             { label: 'Order Date', value: viewingPO.orderDate ? new Date(viewingPO.orderDate).toLocaleDateString() : '' },
             { label: 'Expected Delivery', value: viewingPO.expectedDeliveryDate ? new Date(viewingPO.expectedDeliveryDate).toLocaleDateString() : '' },
-            { label: 'Department', value: viewingPO.department },
-            { label: 'Cost Center', value: viewingPO.costCenter },
-            { label: 'Status', value: viewingPO.status },
+            {
+              label: 'Ship To',
+              value: viewingPO.deliveryLocation || viewingPO.shippingAddress?.warehouseName,
+            },
             { label: 'Subtotal', value: formatINR(viewingPO.subtotal) },
-            { label: 'Discount', value: formatINR(viewingPO.discountTotal) },
             { label: 'Taxable Value', value: formatINR(viewingPO.taxableValue) },
             { label: 'CGST', value: formatINR(viewingPO.cgst) },
             { label: 'SGST', value: formatINR(viewingPO.sgst) },
@@ -979,10 +1223,6 @@ function PurchaseOrders({ onNavigate }) {
                   <col className="po-col-hsn" />
                   <col className="po-col-qty" />
                   <col className="po-col-uom" />
-                  <col className="po-col-price" />
-                  <col className="po-col-disc" />
-                  <col className="po-col-tax" />
-                  <col className="po-col-tax-amt" />
                   <col className="po-col-line" />
                   <col className="po-col-rcvd" />
                   <col className="po-col-pending" />
@@ -995,11 +1235,7 @@ function PurchaseOrders({ onNavigate }) {
                     <th>HSN</th>
                     <th>Qty</th>
                     <th>UOM</th>
-                    <th>Unit Price</th>
-                    <th>Disc %</th>
-                    <th>Tax %</th>
-                    <th>Tax Amt</th>
-                    <th>Line Total</th>
+                    <th>Total</th>
                     <th>Received</th>
                     <th>Pending</th>
                   </tr>
@@ -1007,9 +1243,10 @@ function PurchaseOrders({ onNavigate }) {
                 <tbody>
                   {viewingPO.items.map((item, idx) => {
                     const fullProduct = resolveProduct(item, products);
-                    const productName = fullProduct.title || fullProduct.name || 'Unknown';
+                    const productName =
+                      fullProduct.title || fullProduct.name || item.itemName || 'New item';
                     const thumbnail = getProductThumbnail(fullProduct);
-                    const enriched = enrichLineItem(item, fullProduct, viewingPO.defaultTaxRate || 0);
+                    const enriched = enrichLineItem(item, fullProduct, viewingPO.defaultTaxRate || 0, hsnMasters);
                     const productUrl = fullProduct.productUrl;
                     return (
                       <tr key={idx}>
@@ -1025,7 +1262,7 @@ function PurchaseOrders({ onNavigate }) {
                             }}
                           />
                         </td>
-                        <td>{enriched.sku || '-'}</td>
+                        <td>{enriched.sku || '—'}</td>
                         <td className="po-product-name" title={productName}>
                           {productUrl ? (
                             <a href={productUrl} target="_blank" rel="noopener noreferrer">
@@ -1038,10 +1275,6 @@ function PurchaseOrders({ onNavigate }) {
                         <td>{enriched.hsnCode || '-'}</td>
                         <td>{item.quantity}</td>
                         <td>{enriched.unitOfMeasure}</td>
-                        <td>{formatINR(item.unitPrice)}</td>
-                        <td>{enriched.discountPercent || 0}%</td>
-                        <td>{enriched.taxRate || 0}%</td>
-                        <td>{formatINR(enriched.taxAmount)}</td>
                         <td>{formatINR(enriched.lineTotal)}</td>
                         <td>{enriched.receivedQuantity || 0}</td>
                         <td>{enriched.pendingQuantity ?? item.quantity}</td>
@@ -1066,8 +1299,8 @@ function PurchaseOrders({ onNavigate }) {
               <>
                 <h2>Create Purchase Order</h2>
                 <p className="po-create-choice-subtitle">
-                  Choose how you want to create purchase orders. You can assign vendors per product
-                  or apply one vendor to all items — one PO is created per vendor on save.
+                  Choose how you want to create purchase orders. Assign a vendor after selecting each
+                  product — one PO is created per vendor on save.
                 </p>
                 <div className="po-create-choice-cards">
                   <button
@@ -1090,7 +1323,7 @@ function PurchaseOrders({ onNavigate }) {
                   >
                     <strong>New Purchase Order</strong>
                     <span>
-                      Add products and pick vendors product-wise, or choose one vendor for all.
+                      Add products, then pick a vendor and HSN for each line.
                     </span>
                   </button>
                 </div>
@@ -1188,48 +1421,24 @@ function PurchaseOrders({ onNavigate }) {
               )}
             </h2>
             <form onSubmit={handleSubmit}>
-              <PurchaseOrderExtendedFields
-                formData={formData}
-                onChange={handleInputChange}
-                onNestedChange={handleNestedChange}
-                onSupplierChange={handleSupplierChange}
-                suppliers={suppliers}
-                autoVendorSplit={autoVendorSplit}
-              />
+              {editingPO ? (
+                <PurchaseOrderExtendedFields
+                  formData={formData}
+                  onChange={handleInputChange}
+                  onNestedChange={handleNestedChange}
+                  onSupplierChange={handleSupplierChange}
+                  suppliers={suppliers}
+                  autoVendorSplit={false}
+                />
+              ) : (
+                <p className="po-create-hint">
+                  Company information comes from Company Master. Add products, then choose a vendor
+                  for each item. Tax is applied from HSN / Category master.
+                </p>
+              )}
 
               <div className="items-section">
                 <h3>Items</h3>
-                {autoVendorSplit && formData.items.length > 0 && (
-                  <div className="po-vendor-bulk-panel">
-                    <div className="po-vendor-bulk-row">
-                      <label htmlFor="po-bulk-vendor">One vendor for all products</label>
-                      <select
-                        id="po-bulk-vendor"
-                        value={bulkVendorId}
-                        onChange={(e) => setBulkVendorId(e.target.value)}
-                      >
-                        <option value="">Select vendor</option>
-                        {suppliers.map((supplier) => (
-                          <option key={supplier._id} value={String(supplier._id)}>
-                            {supplier.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        disabled={!bulkVendorId}
-                        onClick={applyBulkVendorToItems}
-                      >
-                        Apply to all
-                      </button>
-                    </div>
-                    <p className="po-vendor-bulk-hint">
-                      Or choose a different vendor for each product in the list below. Same-vendor
-                      items share one PO on save.
-                    </p>
-                  </div>
-                )}
                 {autoVendorSplit && vendorDisplayGroups && formData.items.length > 0 && (
                   <div className="po-vendor-split-summary">
                     {vendorDisplayGroups.unassigned.length > 0 ? (
@@ -1246,25 +1455,70 @@ function PurchaseOrders({ onNavigate }) {
                 )}
                 <div className="add-item-form">
                   <div className="add-item-field add-item-field-product">
-                    <label>Product</label>
+                    <label>Product (optional)</label>
                     <ProductSearchPicker
                       products={products}
                       value={newItem.product}
                       onChange={(productId, product) => {
                         const price = productPrices[productId];
+                        const designated = getDesignatedSupplierId(product) || '';
                         setNewItem({
                           ...newItem,
                           product: productId,
-                          unitPrice: price ? price.salesPrice : 0,
-                          unitOfMeasure: getProductUom(product),
-                          taxRate: getTaxRateForCategory(
-                            getCategoryName(product),
-                            formData.defaultTaxRate
-                          ),
+                          itemName: product?.title || product?.name || '',
+                          sku: product?.sku || '',
+                          unitPrice: price ? (price.purchasePrice || price.salesPrice || 0) : 0,
+                          unitOfMeasure: getProductUom(product, hsnMasters),
+                          taxRate: getTaxRateForProduct(product, formData.defaultTaxRate, hsnMasters),
+                          supplierId: designated || newItem.supplierId || formData.supplier || '',
                         });
                       }}
                       placeholder="Type product name or SKU…"
                     />
+                  </div>
+                  <div className="add-item-field add-item-field-product">
+                    <label>Title *</label>
+                    <input
+                      type="text"
+                      placeholder="Product title (required)"
+                      value={newItem.itemName}
+                      onChange={(e) =>
+                        setNewItem({
+                          ...newItem,
+                          itemName: e.target.value,
+                        })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="add-item-field add-item-field-sm">
+                    <label>SKU (optional)</label>
+                    <input
+                      type="text"
+                      placeholder="Optional — leave blank for new items"
+                      value={newItem.sku}
+                      onChange={(e) => setNewItem({ ...newItem, sku: e.target.value })}
+                    />
+                  </div>
+                  <div className="add-item-field add-item-field-sm">
+                    <label>Vendor *</label>
+                    <select
+                      value={newItem.supplierId}
+                      onChange={(e) => setNewItem({ ...newItem, supplierId: e.target.value })}
+                    >
+                      <option value="">Select vendor</option>
+                      {(() => {
+                        const product = products.find((p) => p._id === newItem.product);
+                        const options = product
+                          ? getVendorOptionsForProduct(product, suppliers)
+                          : suppliers;
+                        return (options.length ? options : suppliers).map((vendor) => (
+                          <option key={vendor._id} value={vendor._id}>
+                            {vendor.name}
+                          </option>
+                        ));
+                      })()}
+                    </select>
                   </div>
                   <div className="add-item-field add-item-field-sm">
                     <label>Quantity</label>
@@ -1282,43 +1536,16 @@ function PurchaseOrders({ onNavigate }) {
                     />
                   </div>
                   <div className="add-item-field add-item-field-sm">
-                    <label>Unit Price (₹)</label>
+                    <label>HSN</label>
                     <input
-                      type="number"
-                      step="0.01"
-                      placeholder="Price"
-                      value={newItem.unitPrice}
-                      onChange={(e) =>
-                        setNewItem({
-                          ...newItem,
-                          unitPrice: parseFloat(e.target.value) || 0,
-                        })
+                      type="text"
+                      disabled
+                      value={
+                        getProductHsn(
+                          products.find((p) => p._id === newItem.product) || null
+                        ) || '—'
                       }
-                      min="0"
-                    />
-                  </div>
-                  <div className="add-item-field add-item-field-sm">
-                    <label>Discount %</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={newItem.discountPercent}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, discountPercent: parseFloat(e.target.value) || 0 })
-                      }
-                      min="0"
-                      max="100"
-                    />
-                  </div>
-                  <div className="add-item-field add-item-field-sm">
-                    <label>Tax %</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={newItem.taxRate}
-                      onChange={(e) => setNewItem({ ...newItem, taxRate: e.target.value })}
-                      min="0"
-                      max="100"
+                      title="From category / HSN master"
                     />
                   </div>
                   <div className="add-item-field add-item-field-sm">
@@ -1333,7 +1560,7 @@ function PurchaseOrders({ onNavigate }) {
                     </select>
                   </div>
                   <div className="add-item-field add-item-field-sm">
-                    <label>Line Total</label>
+                    <label>Total</label>
                     <input
                       type="text"
                       disabled
@@ -1342,11 +1569,12 @@ function PurchaseOrders({ onNavigate }) {
                           {
                             quantity: newItem.quantity,
                             unitPrice: newItem.unitPrice,
-                            discountPercent: newItem.discountPercent,
+                            discountPercent: 0,
                             taxRate: newItem.taxRate !== '' ? newItem.taxRate : undefined,
                           },
                           products.find((p) => p._id === newItem.product) || null,
-                          formData.defaultTaxRate
+                          formData.defaultTaxRate,
+                          hsnMasters
                         ).lineTotal
                       )}
                     />
@@ -1357,24 +1585,18 @@ function PurchaseOrders({ onNavigate }) {
                 </div>
 
                 {formData.items.length > 0 && (
-                  <div
-                    className={`items-list-header po-items-header-extended${
-                      autoVendorSplit ? ' has-vendor-col' : ''
-                    }`}
-                  >
+                  <div className="items-list-header po-items-header-simplified">
                     <span>Product</span>
                     <span>SKU</span>
-                    {autoVendorSplit && <span>Vendor</span>}
+                    <span>Vendor</span>
+                    <span>HSN</span>
                     <span>Qty</span>
                     <span>UOM</span>
-                    <span>Price</span>
-                    <span>Disc%</span>
-                    <span>Tax%</span>
-                    <span>Line Total</span>
+                    <span>Total</span>
                     <span></span>
                   </div>
                 )}
-                <div className={`items-list${autoVendorSplit ? ' has-vendor-col' : ''}`}>
+                <div className="items-list has-vendor-col">
                   {autoVendorSplit && vendorDisplayGroups ? (
                     <>
                       {vendorDisplayGroups.groups.map((group) => (
@@ -1409,34 +1631,30 @@ function PurchaseOrders({ onNavigate }) {
                 </div>
               </div>
 
-              <div className="form-row po-tax-summary">
-                <div className="form-group">
-                  <label>Default Tax Rate (%)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    name="defaultTaxRate"
-                    value={formData.defaultTaxRate}
-                    onChange={handleInputChange}
-                    min="0"
-                  />
-                  <small className="form-hint">
-                    Brass/Copper 12%, Gemstone 5%. Other categories use this default.
-                    {poTotals.isIntraState ? ' CGST + SGST (same state).' : ' IGST (inter-state).'}
-                  </small>
-                </div>
-                <div className="form-group">
-                  <label>Freight (₹)</label>
-                  <input type="number" step="0.01" name="freightCharges" value={formData.freightCharges || 0} onChange={handleInputChange} min="0" />
-                </div>
-                <div className="form-group">
-                  <label>Packing (₹)</label>
-                  <input type="number" step="0.01" name="packingCharges" value={formData.packingCharges || 0} onChange={handleInputChange} min="0" />
-                </div>
+              <div className="po-ship-to-row">
+                <label htmlFor="po-ship-to-location">Ship To *</label>
+                <select
+                  id="po-ship-to-location"
+                  value={shipToLocationId}
+                  onChange={(e) => applyShipToLocation(e.target.value)}
+                  required
+                >
+                  <option value="">Select Ship To location</option>
+                  {locations.map((loc) => (
+                    <option key={loc._id} value={String(loc._id)}>
+                      {loc.name}
+                      {loc.code ? ` (${loc.code})` : ''}
+                      {loc.isHomeBranch ? ' — Home' : ''}
+                    </option>
+                  ))}
+                </select>
+                {formData.shippingAddress?.address ? (
+                  <p className="po-ship-to-address">{formData.shippingAddress.address}</p>
+                ) : null}
               </div>
+
               <div className="form-row po-tax-summary-grid">
                 <div className="form-group"><label>Subtotal</label><input type="text" value={formatINR(poTotals.subtotal)} disabled /></div>
-                <div className="form-group"><label>Discount</label><input type="text" value={formatINR(poTotals.discountTotal)} disabled /></div>
                 <div className="form-group"><label>Taxable Value</label><input type="text" value={formatINR(poTotals.taxableValue)} disabled /></div>
                 {poTotals.isIntraState ? (
                   <>
@@ -1452,31 +1670,39 @@ function PurchaseOrders({ onNavigate }) {
                   <input type="text" value={formatINR(poTotals.total)} disabled className="total-input" />
                 </div>
               </div>
+              <p className="po-tax-source-hint">
+                {poTotals.isIntraState ? 'CGST + SGST (same state).' : 'IGST (inter-state).'}
+                {' '}Tax rates from Category HSN master.
+              </p>
 
-              <div className="form-group">
-                <label>Terms &amp; Conditions</label>
-                <textarea
-                  name="termsText"
-                  value={(formData.termsAndConditions || []).join('\n')}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      termsAndConditions: e.target.value.split('\n').filter(Boolean),
-                    }))
-                  }
-                  rows="4"
-                />
-              </div>
+              {editingPO ? (
+                <>
+                  <div className="form-group">
+                    <label>Terms &amp; Conditions</label>
+                    <textarea
+                      name="termsText"
+                      value={(formData.termsAndConditions || []).join('\n')}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          termsAndConditions: e.target.value.split('\n').filter(Boolean),
+                        }))
+                      }
+                      rows="4"
+                    />
+                  </div>
 
-              <div className="form-group">
-                <label>Notes</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleInputChange}
-                  rows="3"
-                />
-              </div>
+                  <div className="form-group">
+                    <label>Notes</label>
+                    <textarea
+                      name="notes"
+                      value={formData.notes}
+                      onChange={handleInputChange}
+                      rows="3"
+                    />
+                  </div>
+                </>
+              ) : null}
 
               <div className="form-actions">
                 <button type="button" onClick={closePoModal}>

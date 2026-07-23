@@ -10,6 +10,10 @@ const PERMISSION_DEFINITIONS = [
   { code: 'categories.create', name: 'Create Categories', module: 'categories', description: 'Create categories' },
   { code: 'categories.update', name: 'Update Categories', module: 'categories', description: 'Update categories' },
   { code: 'categories.delete', name: 'Delete Categories', module: 'categories', description: 'Delete categories' },
+  { code: 'hsnMasters.view', name: 'View HSN Tax Master', module: 'hsnMasters', description: 'View HSN / GST tax master' },
+  { code: 'hsnMasters.create', name: 'Create HSN Tax Master', module: 'hsnMasters', description: 'Create HSN tax records' },
+  { code: 'hsnMasters.update', name: 'Update HSN Tax Master', module: 'hsnMasters', description: 'Update HSN tax records' },
+  { code: 'hsnMasters.delete', name: 'Delete HSN Tax Master', module: 'hsnMasters', description: 'Delete HSN tax records' },
   { code: 'subcategories.view', name: 'View Subcategories', module: 'subcategories', description: 'View subcategories' },
   { code: 'subcategories.create', name: 'Create Subcategories', module: 'subcategories', description: 'Create subcategories' },
   { code: 'subcategories.update', name: 'Update Subcategories', module: 'subcategories', description: 'Update subcategories' },
@@ -98,6 +102,7 @@ const PERMISSION_DEFINITIONS = [
   { code: 'logs.create', name: 'Create Logs', module: 'logs', description: 'Create log entries (e.g. frontend logging)' },
   { code: 'logs.delete', name: 'Delete Logs', module: 'logs', description: 'Delete logs' },
   { code: 'hr.access', name: 'Access HR Module', module: 'hr', description: 'View and use HR module features' },
+  { code: 'employee.access', name: 'Access Employee Dashboard', module: 'employee', description: 'View and use the employee self-service dashboard' },
 
   // Compliance module
   { code: 'compliance.access', name: 'Access Compliance Module', module: 'compliance', description: 'Access the Compliance module navigation' },

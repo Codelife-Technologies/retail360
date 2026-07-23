@@ -246,12 +246,13 @@ function EmployeeLeaveContent({ employeeId, employee }) {
                   <th>Days</th>
                   <th>Reason</th>
                   <th>Status</th>
+                  <th>HR Notes</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {leaves.length === 0 ? (
-                  <tr><td colSpan={7} className="ed-empty">No leave applications yet.</td></tr>
+                  <tr><td colSpan={8} className="ed-empty">No leave applications yet.</td></tr>
                 ) : (
                   leaves.map((leave) => (
                     <tr key={leave._id}>
@@ -261,6 +262,11 @@ function EmployeeLeaveContent({ employeeId, employee }) {
                       <td>{leave.days}</td>
                       <td>{leave.reason}</td>
                       <td><HrStatusBadge status={leave.status} /></td>
+                      <td>
+                        {leave.status === 'Rejected' && leave.reviewNotes
+                          ? leave.reviewNotes
+                          : '—'}
+                      </td>
                       <td>
                         {(leave.status === 'Pending' || leave.status === 'Approved') && (
                           <button

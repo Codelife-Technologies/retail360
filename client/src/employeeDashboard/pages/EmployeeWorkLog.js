@@ -88,7 +88,7 @@ function EmployeeWorkLogContent({ employeeId }) {
 
     try {
       setLoading(true);
-      const response = await employeeWorkLogsAPI.getByDate(date, employeeId);
+      const response = await employeeWorkLogsAPI.getByDate(date);
       // Ignore stale responses so a slow getByDate cannot wipe a just-saved logId/tasks.
       if (requestId !== loadRequestIdRef.current) return;
 

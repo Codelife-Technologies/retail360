@@ -1,4 +1,4 @@
-import { getCategoryName, getTaxRateForCategory } from './taxRates';
+import { findHsnMaster, getProductHsnCode, getTaxRateForProduct } from './taxRates';
 import { isIntraState } from './indianGstValidation';
 
 /**
@@ -11,31 +11,30 @@ export function resolveProduct(item, products) {
 
 /** HSN from product or populated category */
 export function getProductHsn(product) {
-  if (!product) return '';
-  if (product.hsnCode) return product.hsnCode;
-  const cat = product.category;
-  if (cat && typeof cat === 'object' && cat.hsnCode) return cat.hsnCode;
-  return '';
+  return getProductHsnCode(product);
 }
 
-/** Unit of measure from product, default PCS */
-export function getProductUom(product) {
-  if (!product?.unit) return 'PCS';
-  return product.unit.toUpperCase();
+/** Unit of measure from product, then HSN master default, else PCS */
+export function getProductUom(product, hsnMasters = []) {
+  if (product?.unit) return String(product.unit).toUpperCase();
+  const hsnRow = findHsnMaster(getProductHsn(product), hsnMasters);
+  if (hsnRow?.defaultUom) return String(hsnRow.defaultUom).toUpperCase();
+  return 'PCS';
 }
 
 /**
  * Enrich a line item with GST fields while preserving existing total semantics.
- * item.total = quantity × unitPrice (pre-discount line value, backward compatible).
+ * Tax % comes from HSN Tax Master (then Category gstRate) when not explicitly set.
  */
-export function enrichLineItem(item, product, defaultTaxRate = 0) {
+export function enrichLineItem(item, product, defaultTaxRate = 0, hsnMasters = []) {
   const qty = Number(item.quantity) || 0;
   const unitPrice = Number(item.unitPrice) || 0;
   const discountPercent = Number(item.discountPercent) || 0;
+  const masterRate = getTaxRateForProduct(product, defaultTaxRate, hsnMasters);
   const taxRate =
     item.taxRate != null && item.taxRate !== ''
       ? Number(item.taxRate)
-      : getTaxRateForCategory(getCategoryName(product), defaultTaxRate);
+      : masterRate;
 
   const gross = qty * unitPrice;
   const discountAmount = (gross * discountPercent) / 100;
@@ -46,6 +45,8 @@ export function enrichLineItem(item, product, defaultTaxRate = 0) {
   const receivedQty = Number(item.receivedQuantity) || 0;
   const pendingQty =
     item.pendingQuantity != null ? Number(item.pendingQuantity) : Math.max(0, orderedQty - receivedQty);
+  const hsnCode = item.hsnCode || getProductHsn(product);
+  const hsnRow = findHsnMaster(hsnCode, hsnMasters);
 
   return {
     ...item,
@@ -58,9 +59,35 @@ export function enrichLineItem(item, product, defaultTaxRate = 0) {
     lineTotal,
     taxableValue,
     discountAmount,
-    unitOfMeasure: item.unitOfMeasure || getProductUom(product),
-    hsnCode: item.hsnCode || getProductHsn(product),
+    unitOfMeasure: item.unitOfMeasure || getProductUom(product, hsnMasters),
+    hsnCode,
+    hsnDescription: item.hsnDescription || hsnRow?.description || '',
+    cgstRate:
+      item.cgstRate != null && item.cgstRate !== ''
+        ? Number(item.cgstRate)
+        : hsnRow?.cgstRate != null
+          ? Number(hsnRow.cgstRate)
+          : Math.round((taxRate / 2) * 100) / 100,
+    sgstRate:
+      item.sgstRate != null && item.sgstRate !== ''
+        ? Number(item.sgstRate)
+        : hsnRow?.sgstRate != null
+          ? Number(hsnRow.sgstRate)
+          : Math.round((taxRate / 2) * 100) / 100,
+    igstRate:
+      item.igstRate != null && item.igstRate !== ''
+        ? Number(item.igstRate)
+        : hsnRow?.igstRate != null
+          ? Number(hsnRow.igstRate)
+          : taxRate,
+    cessRate:
+      item.cessRate != null && item.cessRate !== ''
+        ? Number(item.cessRate)
+        : hsnRow?.cessRate != null
+          ? Number(hsnRow.cessRate)
+          : 0,
     sku: item.sku || product?.sku || '',
+    itemName: item.itemName || product?.title || product?.name || '',
     receivedQuantity: receivedQty,
     pendingQuantity: pendingQty,
   };
@@ -69,10 +96,10 @@ export function enrichLineItem(item, product, defaultTaxRate = 0) {
 /**
  * Compute full PO financial summary with CGST/SGST/IGST split per Indian GST rules.
  */
-export function computePurchaseOrderTotals(po, products = []) {
+export function computePurchaseOrderTotals(po, products = [], hsnMasters = []) {
   const items = (po.items || []).map((item) => {
     const product = resolveProduct(item, products);
-    return enrichLineItem(item, product, po.defaultTaxRate || 0);
+    return enrichLineItem(item, product, po.defaultTaxRate || 0, hsnMasters);
   });
 
   const buyerState = po.buyer?.state || '';
@@ -124,8 +151,12 @@ export function computePurchaseOrderTotals(po, products = []) {
 }
 
 /** Legacy helper — total tax amount (sum of line tax). */
-export function computeCategoryTax(items, products, defaultRate = 0) {
-  const totals = computePurchaseOrderTotals({ items, defaultTaxRate: defaultRate }, products);
+export function computeCategoryTax(items, products, defaultRate = 0, hsnMasters = []) {
+  const totals = computePurchaseOrderTotals(
+    { items, defaultTaxRate: defaultRate },
+    products,
+    hsnMasters
+  );
   return totals.tax;
 }
 

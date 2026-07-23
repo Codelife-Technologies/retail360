@@ -9,6 +9,8 @@ const { exportToExcel } = require('../../utils/excelGenerator');
 const {
   resolveAttendanceScope,
   applyEmployeeScope,
+  applySelfEmployeeScope,
+  wantsSelfService,
   recordMatchesScope,
 } = require('../utils/attendanceAccess');
 
@@ -34,7 +36,7 @@ function formatExportDate(value) {
   return `${d}/${m}/${y}`;
 }
 
-/** Move overdue Pending tasks to Backlog (deadline before today). */
+/** Move overdue Pending tasks to Backlog (deadline before today). Same-day stays Pending. */
 async function promoteOverduePendingToBacklog() {
   const todayStart = startOfDay(new Date());
   await EmployeeTask.updateMany(
@@ -43,6 +45,14 @@ async function promoteOverduePendingToBacklog() {
       dueDate: { $lt: todayStart },
     },
     { $set: { status: 'Backlog' } }
+  );
+  // Undo incorrect backlog for deadlines on/after today (timezone / earlier bug)
+  await EmployeeTask.updateMany(
+    {
+      status: 'Backlog',
+      dueDate: { $gte: todayStart },
+    },
+    { $set: { status: 'Pending' } }
   );
 }
 
@@ -92,7 +102,11 @@ function buildTaskListQuery(req, scope) {
   if (fromDate && toDate) {
     Object.assign(query, buildTimelineOverlapQuery(fromDate, toDate));
   }
-  applyEmployeeScope(query, scope, req.query.employee);
+  if (wantsSelfService(req)) {
+    applySelfEmployeeScope(query, scope);
+  } else {
+    applyEmployeeScope(query, scope, req.query.employee);
+  }
   return query;
 }
 
@@ -120,11 +134,18 @@ router.get('/today', async (req, res) => {
     if (!scope.canManageAll && !scope.employeeId) {
       return res.json([]);
     }
+    if (wantsSelfService(req) && !scope.employeeId) {
+      return res.json([]);
+    }
 
     const todayStart = startOfDay(new Date());
     const todayEnd = endOfDay(new Date());
     const query = buildActiveTodayQuery(todayStart, todayEnd);
-    applyEmployeeScope(query, scope, req.query.employee);
+    if (wantsSelfService(req)) {
+      applySelfEmployeeScope(query, scope);
+    } else {
+      applyEmployeeScope(query, scope, req.query.employee);
+    }
 
     const tasks = await EmployeeTask.find(query)
       .populate(EMPLOYEE_POPULATE)
@@ -239,10 +260,10 @@ router.post('/', async (req, res) => {
     const wantsPersonal =
       req.body.source === 'Personal' ||
       req.body.assignedBy === 'Self' ||
-      !requestedEmployee;
+      (!requestedEmployee && !scope.canManageAll);
 
-    // Personal / self task — including admins with a linked employee profile
-    if (wantsPersonal || (requestedEmployee && scope.employeeId && String(requestedEmployee) === String(scope.employeeId))) {
+    // Personal / self task from Employee Dashboard
+    if (wantsPersonal) {
       if (!scope.employeeId) {
         return res.status(403).json({
           error: 'Employee profile not linked. Link your user account to an employee record to add personal tasks.',
@@ -265,9 +286,12 @@ router.post('/', async (req, res) => {
       return res.status(201).json(task);
     }
 
-    // HR-assigned task for another employee
+    // HR-assigned task (may include assigning to self)
     if (!scope.canManageAll) {
       return res.status(403).json({ error: 'You can only create personal tasks for yourself' });
+    }
+    if (!requestedEmployee) {
+      return res.status(400).json({ error: 'Employee is required' });
     }
 
     const employee = await Employee.findById(requestedEmployee);

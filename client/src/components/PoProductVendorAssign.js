@@ -30,7 +30,6 @@ function PoProductVendorAssign({
   const [items, setItems] = useState([]);
   const [assignments, setAssignments] = useState({});
   const [suppliers, setSuppliers] = useState(suppliersProp);
-  const [bulkVendorId, setBulkVendorId] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -104,17 +103,6 @@ function PoProductVendorAssign({
     [items, assignments]
   );
 
-  const applyBulkVendor = () => {
-    if (!bulkVendorId) return;
-    setAssignments((prev) => {
-      const next = { ...prev };
-      items.forEach((row) => {
-        next[row.productId] = bulkVendorId;
-      });
-      return next;
-    });
-  };
-
   const handleSave = async () => {
     if (!allAssigned) {
       alert('Please assign a vendor to every product');
@@ -178,21 +166,6 @@ function PoProductVendorAssign({
           </p>
         </>
       )}
-
-      <div className="po-vendor-bulk-row">
-        <label>Apply same vendor to all</label>
-        <select value={bulkVendorId} onChange={(e) => setBulkVendorId(e.target.value)}>
-          <option value="">Select vendor</option>
-          {suppliers.map((supplier) => (
-            <option key={supplier._id} value={String(supplier._id)}>
-              {supplier.name}
-            </option>
-          ))}
-        </select>
-        <button type="button" className="btn-secondary" disabled={!bulkVendorId} onClick={applyBulkVendor}>
-          Apply to all
-        </button>
-      </div>
 
       <div className="po-vendor-assign-table-wrap">
         <table className="po-vendor-assign-table">

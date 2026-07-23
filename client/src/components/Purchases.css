@@ -18,6 +18,141 @@
   color: #333;
 }
 
+.purchases-sku-search-bar {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.15rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.purchases-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.purchases-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 200px;
+  flex: 1;
+}
+
+.purchases-filter-group label {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.purchases-filter-group select {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: #fff;
+  color: #111827;
+}
+
+.purchases-filter-group select:focus {
+  outline: none;
+  border-color: #6b3894;
+  box-shadow: 0 0 0 3px rgba(107, 56, 148, 0.12);
+}
+
+.purchases-filters-clear {
+  align-self: flex-end;
+  height: fit-content;
+}
+
+.purchases-sku-search-bar label {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.purchases-sku-search-row {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.purchases-sku-search-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+.purchases-sku-search-row input:focus {
+  outline: none;
+  border-color: #6b3894;
+  box-shadow: 0 0 0 3px rgba(107, 56, 148, 0.12);
+}
+
+.btn-clear-sku-search {
+  padding: 0.6rem 0.9rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #f9fafb;
+  color: #374151;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-clear-sku-search:hover {
+  background: #f3f4f6;
+}
+
+.purchases-sku-totals {
+  margin-top: 0.9rem;
+}
+
+.purchases-sku-totals-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 0.75rem;
+  color: #374151;
+  font-size: 0.92rem;
+}
+
+.purchases-sku-totals-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.purchases-sku-totals-table th,
+.purchases-sku-totals-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+.purchases-sku-totals-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  color: #333;
+}
+
+.purchases-sku-empty {
+  margin: 0.35rem 0 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
 .loading {
   padding: 2rem;
   text-align: center;

@@ -18,6 +18,9 @@ const STATE_LABELS = {
 
 function cellTitle(cell) {
   if (cell.otherMonth || cell.state === 'other') return '';
+  if (cell.state === 'leave' || cell.onApprovedLeave) {
+    return 'Approved leave';
+  }
   if (cell.state === 'weekoff') {
     return cell.label === 'Sun' ? 'Sunday — not counted' : '2nd / 4th Saturday — not counted';
   }
@@ -33,10 +36,16 @@ function cellTitle(cell) {
   return STATE_LABELS[cell.state] || '';
 }
 
-function AttendanceCalendar({ month, year, records = [], loading = false }) {
+function AttendanceCalendar({
+  month,
+  year,
+  records = [],
+  approvedLeaveDateKeys = null,
+  loading = false,
+}) {
   const { cells, dayNames } = useMemo(
-    () => buildAttendanceCalendar({ month, year, records }),
-    [month, year, records]
+    () => buildAttendanceCalendar({ month, year, records, approvedLeaveDateKeys }),
+    [month, year, records, approvedLeaveDateKeys]
   );
 
   const stats = useMemo(
@@ -71,6 +80,7 @@ function AttendanceCalendar({ month, year, records = [], loading = false }) {
       <div className="attendance-calendar-legend">
         <span className="legend-item legend-present">Present</span>
         <span className="legend-item legend-absent">Absent</span>
+        <span className="legend-item legend-leave">Approved Leave</span>
         <span className="legend-item legend-weekoff">Week Off</span>
         <span className="legend-item legend-pending">Not marked</span>
       </div>

@@ -19,6 +19,7 @@ router.use('/office-locations', require('./officeLocations'));
 router.use('/leaves', leavesRoutes);
 router.use('/payroll', payrollRoutes);
 router.use('/holidays', holidaysRoutes);
+router.use('/masters', require('./hrMasters'));
 router.use('/employee-dashboard', employeeDashboardRoutes);
 router.use('/tasks', tasksRoutes);
 router.use('/work-logs', workLogsRoutes);

@@ -30,8 +30,10 @@ const purchaseOrderItemSchema = new mongoose.Schema({
   product: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Product',
-    required: true
+    required: false,
   },
+  /** Free-text name when purchasing a new item not yet in Product Master */
+  itemName: { type: String, trim: true },
   quantity: { type: Number, required: true, min: 1 },
   unitPrice: { type: Number, required: true, min: 0 },
   total: { type: Number, required: true, min: 0 },
@@ -41,10 +43,23 @@ const purchaseOrderItemSchema = new mongoose.Schema({
   lineTotal: { type: Number, min: 0 },
   unitOfMeasure: { type: String, trim: true, default: 'PCS' },
   hsnCode: { type: String, trim: true },
+  hsnDescription: { type: String, trim: true },
+  cgstRate: { type: Number, min: 0, max: 100 },
+  sgstRate: { type: Number, min: 0, max: 100 },
+  igstRate: { type: Number, min: 0, max: 100 },
+  cessRate: { type: Number, min: 0, max: 100, default: 0 },
   sku: { type: String, trim: true },
   receivedQuantity: { type: Number, default: 0, min: 0 },
   pendingQuantity: { type: Number, min: 0 }
 }, { _id: false });
+
+purchaseOrderItemSchema.pre('validate', function validatePoItem(next) {
+  const hasName = Boolean(String(this.itemName || '').trim());
+  if (!hasName) {
+    return next(new Error('Each PO line needs a title (SKU is optional)'));
+  }
+  next();
+});
 
 const purchaseOrderSchema = new mongoose.Schema({
   poNumber: { type: String, unique: true, required: true },

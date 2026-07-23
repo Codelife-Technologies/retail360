@@ -5,6 +5,7 @@ export const MASTER_GROUPS = [
       { id: 'products', label: 'Products', icon: '📦', permission: 'products.view' },
       { id: 'stock', label: 'Stock', icon: '📊', permission: 'stock.view' },
       { id: 'categories', label: 'Categories', icon: '📁', permission: 'categories.view' },
+      { id: 'hsn-masters', label: 'HSN Tax Master', icon: '🧾', permission: 'hsnMasters.view' },
       { id: 'subcategories', label: 'Subcategories', icon: '📂', permission: 'subcategories.view' },
       { id: 'prices', label: 'Vendor Prices', icon: '💵', permission: 'prices.view' },
     ],

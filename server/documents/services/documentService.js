@@ -5,6 +5,8 @@ const Document = require('../models/Document');
 const DocumentFolder = require('../models/DocumentFolder');
 const DocumentSettings = require('../models/DocumentSettings');
 const Product = require('../../models/Product');
+const Category = require('../../models/Category');
+const Subcategory = require('../../models/Subcategory');
 const {
   AI_DIR,
   MANUAL_DIR,
@@ -14,6 +16,7 @@ const {
   toPublicUrl,
   relativeFromUploads,
   generateThumbnail,
+  UPLOADS_ROOT,
 } = require('../utils/storage');
 
 ensureDocumentFolders();
@@ -75,6 +78,456 @@ async function assertFolderAccess(folderId, scope = {}) {
     throw new Error('Access denied to personal folder');
   }
   return folder;
+}
+
+async function collectDescendantFolderIds(rootFolderId) {
+  const rootId = toObjectId(rootFolderId);
+  if (!rootId) return [];
+  const ids = [rootId];
+  let frontier = [rootId];
+  while (frontier.length) {
+    const children = await DocumentFolder.find({
+      parentId: { $in: frontier },
+      status: 'Active',
+    })
+      .select('_id')
+      .lean();
+    frontier = children.map((c) => c._id);
+    ids.push(...frontier);
+  }
+  return ids;
+}
+
+function productImagePublicUrl(imagePath) {
+  if (!imagePath) return '';
+  const raw = String(imagePath).trim();
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  if (raw.startsWith('/uploads/')) return raw;
+  if (raw.startsWith('uploads/')) return `/${raw}`;
+  return `/uploads/${raw.replace(/^\/+/, '')}`;
+}
+
+/**
+ * Find or create a shared catalog folder (category / subcategory / sku).
+ */
+async function findOrCreateCatalogFolder({
+  name,
+  parentId = null,
+  sourceScope = 'AI Generator',
+  folderKind,
+  categoryId = null,
+  subCategoryId = null,
+  linkedSku = '',
+  user = null,
+  description = '',
+}) {
+  const scopeValue = sourceScope === 'Manual Upload' ? 'Manual Upload' : 'AI Generator';
+  const parentObjectId = toObjectId(parentId);
+  const trimmedName = String(name || '').trim().slice(0, 120);
+  if (!trimmedName) throw new Error('Folder name is required');
+  if (!['category', 'subcategory', 'sku'].includes(folderKind)) {
+    throw new Error('Invalid catalog folder kind');
+  }
+
+  const identity = {
+    status: 'Active',
+    sourceScope: scopeValue,
+    visibility: 'Shared',
+    folderKind,
+  };
+  if (folderKind === 'category' && categoryId) identity.categoryId = categoryId;
+  else if (folderKind === 'subcategory' && subCategoryId) identity.subCategoryId = subCategoryId;
+  else if (folderKind === 'sku' && linkedSku) {
+    identity.linkedSku = String(linkedSku).trim();
+    identity.parentId = parentObjectId;
+  } else {
+    identity.parentId = parentObjectId;
+    identity.name = trimmedName;
+  }
+
+  let folder = await DocumentFolder.findOne(identity);
+  if (!folder && folderKind === 'sku' && linkedSku) {
+    folder = await DocumentFolder.findOne({
+      status: 'Active',
+      sourceScope: scopeValue,
+      folderKind: 'sku',
+      linkedSku: String(linkedSku).trim(),
+    });
+  }
+  if (!folder && folderKind === 'category' && categoryId) {
+    folder = await DocumentFolder.findOne({
+      status: 'Active',
+      sourceScope: scopeValue,
+      folderKind: 'category',
+      categoryId,
+    });
+  }
+  if (!folder && folderKind === 'subcategory' && subCategoryId) {
+    folder = await DocumentFolder.findOne({
+      status: 'Active',
+      sourceScope: scopeValue,
+      folderKind: 'subcategory',
+      subCategoryId,
+    });
+  }
+
+  if (folder) {
+    let dirty = false;
+    if (folder.name !== trimmedName) {
+      folder.name = trimmedName;
+      dirty = true;
+    }
+    if (parentObjectId && String(folder.parentId || '') !== String(parentObjectId)) {
+      folder.parentId = parentObjectId;
+      dirty = true;
+    }
+    if (categoryId && String(folder.categoryId || '') !== String(categoryId)) {
+      folder.categoryId = categoryId;
+      dirty = true;
+    }
+    if (subCategoryId && String(folder.subCategoryId || '') !== String(subCategoryId)) {
+      folder.subCategoryId = subCategoryId;
+      dirty = true;
+    }
+    if (linkedSku && folder.linkedSku !== String(linkedSku).trim()) {
+      folder.linkedSku = String(linkedSku).trim();
+      dirty = true;
+    }
+    if (dirty) await folder.save();
+    return folder;
+  }
+
+  let order = 0;
+  const last = await DocumentFolder.findOne({
+    status: 'Active',
+    sourceScope: scopeValue,
+    parentId: parentObjectId,
+  })
+    .sort({ sortOrder: -1 })
+    .select('sortOrder')
+    .lean();
+  order = (last?.sortOrder ?? -1) + 1;
+
+  try {
+    return await DocumentFolder.create({
+      name: trimmedName,
+      description: description || '',
+      sourceScope: scopeValue,
+      visibility: 'Shared',
+      folderKind,
+      categoryId: categoryId || null,
+      subCategoryId: subCategoryId || null,
+      linkedSku: linkedSku ? String(linkedSku).trim() : '',
+      parentId: parentObjectId,
+      sortOrder: order,
+      createdBy: actorLabel(user) || 'Catalog Sync',
+      createdByUserId: user?.id || user?._id || null,
+      status: 'Active',
+    });
+  } catch (err) {
+    if (err && err.code === 11000) {
+      const existing = await DocumentFolder.findOne({
+        status: 'Active',
+        sourceScope: scopeValue,
+        visibility: 'Shared',
+        parentId: parentObjectId,
+        name: trimmedName,
+      });
+      if (existing) return existing;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Ensure Category → Subcategory → SKU folder path for a product.
+ * Returns the leaf SKU folder (or subcategory/category if SKU missing).
+ */
+async function ensureCatalogFolderPath(productMeta = {}, { user, sourceScope = 'AI Generator' } = {}) {
+  let categoryId = productMeta.categoryId || null;
+  let subCategoryId = productMeta.subCategoryId || null;
+  let categoryName = String(productMeta.category || '').trim();
+  let subCategoryName = String(productMeta.subCategory || '').trim();
+  const sku = String(productMeta.sku || '').trim();
+
+  if (productMeta.productId && (!categoryId || !subCategoryId || !categoryName || !subCategoryName)) {
+    const product = await Product.findById(productMeta.productId)
+      .populate('category', 'name')
+      .populate('subCategory', 'name')
+      .lean();
+    if (product) {
+      categoryId = product.category?._id || categoryId;
+      subCategoryId = product.subCategory?._id || subCategoryId;
+      categoryName = product.category?.name || categoryName;
+      subCategoryName = product.subCategory?.name || subCategoryName;
+    }
+  }
+
+  if (!categoryName && !subCategoryName && !sku) return null;
+
+  let categoryFolder = null;
+  if (categoryName || categoryId) {
+    categoryFolder = await findOrCreateCatalogFolder({
+      name: categoryName || 'Uncategorized',
+      parentId: null,
+      sourceScope,
+      folderKind: 'category',
+      categoryId,
+      user,
+      description: 'Category folder',
+    });
+  }
+
+  let subFolder = null;
+  if ((subCategoryName || subCategoryId) && categoryFolder) {
+    subFolder = await findOrCreateCatalogFolder({
+      name: subCategoryName || 'General',
+      parentId: categoryFolder._id,
+      sourceScope,
+      folderKind: 'subcategory',
+      categoryId,
+      subCategoryId,
+      user,
+      description: 'Subcategory folder',
+    });
+  }
+
+  if (sku && (subFolder || categoryFolder)) {
+    return findOrCreateCatalogFolder({
+      name: sku,
+      parentId: (subFolder || categoryFolder)._id,
+      sourceScope,
+      folderKind: 'sku',
+      categoryId,
+      subCategoryId,
+      linkedSku: sku,
+      user,
+      description: productMeta.productName
+        ? `SKU images · ${productMeta.productName}`
+        : 'SKU images',
+    });
+  }
+
+  return subFolder || categoryFolder;
+}
+
+/**
+ * Build Category → Subcategory → SKU folders from master catalog + existing AI docs.
+ */
+async function syncCatalogFolders({ sourceScope = 'AI Generator', user = null } = {}) {
+  const scopeValue = sourceScope === 'Manual Upload' ? 'Manual Upload' : 'AI Generator';
+  const categories = await Category.find({}).select('_id name').sort({ name: 1 }).lean();
+  const subcategories = await Subcategory.find({})
+    .select('_id name category')
+    .sort({ name: 1 })
+    .lean();
+  const products = await Product.find({})
+    .select('_id sku title name category subCategory images')
+    .lean();
+
+  const skusWithDocs = await Document.distinct('sku', {
+    source: scopeValue,
+    status: { $ne: 'Deleted' },
+    sku: { $nin: [null, ''] },
+  });
+  const skuDocSet = new Set(skusWithDocs.map((s) => String(s).trim()).filter(Boolean));
+
+  let categoriesCreated = 0;
+  let subcategoriesCreated = 0;
+  let skusCreated = 0;
+
+  const categoryFolderById = new Map();
+  for (const category of categories) {
+    const before = await DocumentFolder.findOne({
+      status: 'Active',
+      sourceScope: scopeValue,
+      folderKind: 'category',
+      categoryId: category._id,
+    }).select('_id').lean();
+    const folder = await findOrCreateCatalogFolder({
+      name: category.name,
+      parentId: null,
+      sourceScope: scopeValue,
+      folderKind: 'category',
+      categoryId: category._id,
+      user,
+      description: 'Category folder',
+    });
+    categoryFolderById.set(String(category._id), folder);
+    if (!before) categoriesCreated += 1;
+  }
+
+  const subFolderById = new Map();
+  for (const sub of subcategories) {
+    const parent = categoryFolderById.get(String(sub.category));
+    if (!parent) continue;
+    const before = await DocumentFolder.findOne({
+      status: 'Active',
+      sourceScope: scopeValue,
+      folderKind: 'subcategory',
+      subCategoryId: sub._id,
+    }).select('_id').lean();
+    const folder = await findOrCreateCatalogFolder({
+      name: sub.name,
+      parentId: parent._id,
+      sourceScope: scopeValue,
+      folderKind: 'subcategory',
+      categoryId: sub.category,
+      subCategoryId: sub._id,
+      user,
+      description: 'Subcategory folder',
+    });
+    subFolderById.set(String(sub._id), folder);
+    if (!before) subcategoriesCreated += 1;
+  }
+
+  for (const product of products) {
+    const sku = String(product.sku || '').trim();
+    if (!sku) continue;
+    const hasImages = Array.isArray(product.images) && product.images.some(Boolean);
+    if (!hasImages && !skuDocSet.has(sku)) continue;
+
+    const parent =
+      subFolderById.get(String(product.subCategory)) ||
+      categoryFolderById.get(String(product.category));
+    if (!parent) continue;
+
+    const before = await DocumentFolder.findOne({
+      status: 'Active',
+      sourceScope: scopeValue,
+      folderKind: 'sku',
+      linkedSku: sku,
+    }).select('_id').lean();
+
+    await findOrCreateCatalogFolder({
+      name: sku,
+      parentId: parent._id,
+      sourceScope: scopeValue,
+      folderKind: 'sku',
+      categoryId: product.category,
+      subCategoryId: product.subCategory,
+      linkedSku: sku,
+      user,
+      description: product.title || product.name || 'SKU images',
+    });
+    if (!before) skusCreated += 1;
+  }
+
+  return {
+    sourceScope: scopeValue,
+    categories: categories.length,
+    subcategories: subcategories.length,
+    skuFoldersCreated: skusCreated,
+    categoryFoldersCreated: categoriesCreated,
+    subcategoryFoldersCreated: subcategoriesCreated,
+  };
+}
+
+async function getProductImagesForSku(sku) {
+  const trimmed = String(sku || '').trim();
+  if (!trimmed) return [];
+  const product = await Product.findOne({ sku: trimmed })
+    .select('sku title name images brandName category subCategory')
+    .populate('category', 'name')
+    .populate('subCategory', 'name')
+    .lean();
+  if (!product) return [];
+  return (product.images || []).filter(Boolean).map((img, index) => ({
+    id: `product-${product._id}-${index}`,
+    kind: 'product',
+    sku: product.sku,
+    productName: product.title || product.name || '',
+    category: product.category?.name || '',
+    subCategory: product.subCategory?.name || '',
+    brand: product.brandName || '',
+    title: `${product.sku || 'SKU'} · Image ${index + 1}`,
+    fileUrl: productImagePublicUrl(img),
+    thumbnailUrl: productImagePublicUrl(img),
+    source: 'Product Catalog',
+  }));
+}
+
+/**
+ * Browse a catalog folder: child folders + documents (+ product images for SKU folders).
+ */
+async function browseFolder(folderId, scope = {}, filters = {}, { page = 1, limit = 48 } = {}) {
+  const folder = await assertFolderAccess(folderId, scope);
+  const children = await DocumentFolder.find({
+    status: 'Active',
+    parentId: folder._id,
+  })
+    .sort({ folderKind: 1, sortOrder: 1, name: 1 })
+    .lean();
+
+  const childIds = children.map((c) => c._id);
+  const childCounts = childIds.length
+    ? await Document.aggregate([
+        {
+          $match: {
+            status: { $ne: 'Deleted' },
+            source: folder.sourceScope,
+            folderId: { $in: childIds },
+          },
+        },
+        { $group: { _id: '$folderId', count: { $sum: 1 } } },
+      ])
+    : [];
+  const childCountMap = Object.fromEntries(childCounts.map((c) => [String(c._id), c.count]));
+
+  // For subcategory children that are SKU folders, also count product catalog images
+  const enrichedChildren = await Promise.all(
+    children.map(async (child) => {
+      let productImageCount = 0;
+      let previewUrl = '';
+      if (child.folderKind === 'sku' && child.linkedSku) {
+        const productImages = await getProductImagesForSku(child.linkedSku);
+        productImageCount = productImages.length;
+        previewUrl = productImages[0]?.thumbnailUrl || '';
+      }
+      return {
+        ...child,
+        documentCount: childCountMap[String(child._id)] || 0,
+        productImageCount,
+        previewUrl,
+      };
+    })
+  );
+
+  const descendantIds = await collectDescendantFolderIds(folder._id);
+  const listFilters = {
+    ...filters,
+    source: folder.sourceScope,
+    status: filters.status || 'Active',
+    folderId: undefined,
+    folderIds: descendantIds,
+  };
+
+  // SKU folder: prefer exact folder + sku match for docs, plus product images
+  if (folder.folderKind === 'sku') {
+    listFilters.folderIds = [folder._id];
+    if (folder.linkedSku) listFilters.skuExact = folder.linkedSku;
+  } else if (folder.folderKind === 'subcategory' || folder.folderKind === 'category') {
+    // Show only docs directly in this folder when browsing mid-level with children;
+    // images live in SKU children. Still include docs filed on this folder itself.
+    listFilters.folderIds = [folder._id];
+  }
+
+  const docsResult = await listDocuments(listFilters, scope, { page, limit });
+  let productImages = [];
+  if (folder.folderKind === 'sku' && folder.linkedSku) {
+    productImages = await getProductImagesForSku(folder.linkedSku);
+  }
+
+  return {
+    folder: {
+      ...(typeof folder.toObject === 'function' ? folder.toObject() : folder),
+      folderKind: folder.folderKind || 'custom',
+    },
+    children: enrichedChildren,
+    documents: docsResult.data,
+    pagination: docsResult.pagination,
+    productImages,
+  };
 }
 
 async function getInaccessiblePersonalFolderIds(scope = {}) {
@@ -148,6 +601,7 @@ async function listFolders(scope = {}, filters = {}) {
     folders: folders.map((f) => ({
       ...f,
       visibility: f.visibility || 'Shared',
+      folderKind: f.folderKind || 'custom',
       documentCount: countMap[String(f._id)] || 0,
     })),
     unfiledCount,
@@ -369,6 +823,8 @@ async function resolveProductMeta({ productId, sku }) {
       productName: '',
       category: '',
       subCategory: '',
+      categoryId: null,
+      subCategoryId: null,
       brand: '',
     };
   }
@@ -378,6 +834,8 @@ async function resolveProductMeta({ productId, sku }) {
     productName: product.title || product.name || '',
     category: product.category?.name || '',
     subCategory: product.subCategory?.name || '',
+    categoryId: product.category?._id || null,
+    subCategoryId: product.subCategory?._id || null,
     brand: product.brandName || '',
   };
 }
@@ -436,6 +894,25 @@ async function saveAiGeneratedImage({
   }
 
   const productMeta = await resolveProductMeta({ productId, sku });
+  const {
+    categoryId: _omitCategoryId,
+    subCategoryId: _omitSubCategoryId,
+    ...documentProductMeta
+  } = productMeta;
+
+  let finalFolderId = resolvedFolderId;
+  if (!finalFolderId) {
+    try {
+      const catalogFolder = await ensureCatalogFolderPath(productMeta, {
+        user: uploadedByUserId ? { id: uploadedByUserId, username: uploadedBy } : null,
+        sourceScope: 'AI Generator',
+      });
+      if (catalogFolder?._id) finalFolderId = catalogFolder._id;
+    } catch (_err) {
+      // Non-fatal — still save the image unfiled if catalog folders fail
+    }
+  }
+
   const version = await nextAiVersion(productMeta.sku);
   const ext = extensionOf(sourceAbsPath) || '.jpg';
   const safeSku = (productMeta.sku || 'unassigned').replace(/[<>:"/\\|?*]/g, '_');
@@ -450,7 +927,7 @@ async function saveAiGeneratedImage({
   const document = await Document.create({
     documentType: 'Image',
     source: 'AI Generator',
-    ...productMeta,
+    ...documentProductMeta,
     title: title || `${productMeta.productName || productMeta.sku || 'AI Image'} (v${version})`,
     description: description || promptText || '',
     tags: Array.isArray(tags) ? tags : [],
@@ -465,7 +942,7 @@ async function saveAiGeneratedImage({
     uploadedBy: uploadedBy || 'AI Generator',
     uploadedByUserId: uploadedByUserId || null,
     department: '',
-    folderId: resolvedFolderId,
+    folderId: finalFolderId,
     status: 'Active',
     version,
     promptOrder: promptOrder != null ? Number(promptOrder) : null,
@@ -542,6 +1019,11 @@ async function createManualUpload({
   }
 
   const productMeta = await resolveProductMeta({ productId, sku });
+  const {
+    categoryId: _omitCat,
+    subCategoryId: _omitSub,
+    ...documentProductMeta
+  } = productMeta;
   const destName = file.filename;
   const destAbs = path.join(MANUAL_DIR, destName);
   const storageRelative = relativeFromUploads(file.path || destAbs).replace(/\\/g, '/');
@@ -551,7 +1033,7 @@ async function createManualUpload({
   const document = await Document.create({
     documentType: isImageMime(mimeType) ? 'Image' : 'Document',
     source: 'Manual Upload',
-    ...productMeta,
+    ...documentProductMeta,
     title: title || file.originalname || destName,
     description: description || '',
     tags: Array.isArray(tags) ? tags : (tags ? String(tags).split(',').map((t) => t.trim()).filter(Boolean) : []),
@@ -594,7 +1076,7 @@ async function createAiDesktopUpload({
 
   const mimeType = file.mimetype || '';
   if (!isImageMime(mimeType)) {
-    throw new Error('Only image files can be added to AI Generated Images');
+    throw new Error('Only image files can be added to Product images');
   }
 
   const settings = await getSettings();
@@ -616,6 +1098,25 @@ async function createAiDesktopUpload({
   }
 
   const productMeta = await resolveProductMeta({ productId, sku });
+  const {
+    categoryId: _omitCategoryId,
+    subCategoryId: _omitSubCategoryId,
+    ...documentProductMeta
+  } = productMeta;
+
+  let finalFolderId = resolvedFolderId;
+  if (!finalFolderId) {
+    try {
+      const catalogFolder = await ensureCatalogFolderPath(productMeta, {
+        user,
+        sourceScope: 'AI Generator',
+      });
+      if (catalogFolder?._id) finalFolderId = catalogFolder._id;
+    } catch (_err) {
+      // non-fatal
+    }
+  }
+
   const version = await nextAiVersion(productMeta.sku);
   const destName = file.filename;
   const destAbs = path.join(AI_DIR, destName);
@@ -625,7 +1126,7 @@ async function createAiDesktopUpload({
   const document = await Document.create({
     documentType: 'Image',
     source: 'AI Generator',
-    ...productMeta,
+    ...documentProductMeta,
     title: title || file.originalname || `${productMeta.productName || productMeta.sku || 'AI Image'} (v${version})`,
     description: description || '',
     tags: Array.isArray(tags) ? tags : (tags ? String(tags).split(',').map((t) => t.trim()).filter(Boolean) : []),
@@ -640,7 +1141,7 @@ async function createAiDesktopUpload({
     uploadedBy: actorLabel(user),
     uploadedByUserId: user?.id || user?.userId || user?._id || null,
     department: '',
-    folderId: resolvedFolderId,
+    folderId: finalFolderId,
     status: 'Active',
     version,
     promptOrder: null,
@@ -670,14 +1171,22 @@ function buildListQuery(filters = {}, scope = {}) {
   if (filters.documentType) query.documentType = filters.documentType;
   if (filters.department) query.department = filters.department;
   if (filters.category) query.category = filters.category;
-  if (filters.sku) query.sku = { $regex: escapeRegex(filters.sku), $options: 'i' };
+  if (filters.subCategory) query.subCategory = filters.subCategory;
+  if (filters.skuExact) {
+    query.sku = String(filters.skuExact).trim();
+  } else if (filters.sku) {
+    query.sku = { $regex: escapeRegex(filters.sku), $options: 'i' };
+  }
   if (filters.uploadedBy) {
     query.uploadedBy = { $regex: escapeRegex(filters.uploadedBy), $options: 'i' };
   }
   if (filters.employeeId) query.uploadedByUserId = filters.employeeId;
 
   // Folder filter: 'all' / omit = no filter; 'unfiled' / 'null' = no folder; else ObjectId
-  if (filters.folderId != null && filters.folderId !== '' && filters.folderId !== 'all') {
+  // folderIds = include documents in any of these folders (descendants)
+  if (Array.isArray(filters.folderIds) && filters.folderIds.length) {
+    query.folderId = { $in: filters.folderIds };
+  } else if (filters.folderId != null && filters.folderId !== '' && filters.folderId !== 'all') {
     if (filters.folderId === 'unfiled' || filters.folderId === 'null') {
       query.$and = (query.$and || []).concat([
         { $or: [{ folderId: null }, { folderId: { $exists: false } }] },
@@ -888,4 +1397,9 @@ module.exports = {
   reorderFolders,
   moveDocumentToFolder,
   canAccessFolder,
+  syncCatalogFolders,
+  ensureCatalogFolderPath,
+  browseFolder,
+  getProductImagesForSku,
+  collectDescendantFolderIds,
 };

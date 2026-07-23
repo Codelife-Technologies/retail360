@@ -9,6 +9,7 @@ import SalesChannels from '../components/SalesChannels';
 import SalesLocations from '../components/SalesLocations';
 import ShipmentVendors from '../components/ShipmentVendors';
 import Categories from '../components/Categories';
+import HsnMasters from '../components/HsnMasters';
 import Subcategories from '../components/Subcategories';
 import './MasterModule.css';
 
@@ -35,6 +36,8 @@ function MasterModule({ subTab = 'products' }) {
         return <ShipmentVendors />;
       case 'categories':
         return <Categories />;
+      case 'hsn-masters':
+        return <HsnMasters />;
       case 'subcategories':
         return <Subcategories />;
       default:
