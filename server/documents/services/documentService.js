@@ -63,19 +63,52 @@ async function assertFolderExists(folderId) {
   return folder;
 }
 
-/** Personal folders are visible only to the owning employee and documents admins. */
+function isFolderOwner(folder, scope = {}) {
+  return String(folder?.createdByUserId || '') === String(scope.userId || '');
+}
+
+/**
+ * Read access: Shared always; Personal for owner/admin;
+ * Personal + employeeVisible for any employee with document access.
+ */
 function canAccessFolder(folder, scope = {}) {
   if (!folder) return true;
   const visibility = folder.visibility || 'Shared';
   if (visibility !== 'Personal') return true;
   if (scope.admin) return true;
-  return String(folder.createdByUserId || '') === String(scope.userId || '');
+  if (folder.employeeVisible) return true;
+  return isFolderOwner(folder, scope);
+}
+
+/**
+ * Write access (upload/move/rename/delete/create child):
+ * Personal → owner or admin only (even when employeeVisible).
+ * Shared → admins/managers always; regular employees only for folders they own.
+ */
+function canWriteToFolder(folder, scope = {}) {
+  if (!folder) return true;
+  const visibility = folder.visibility || 'Shared';
+  if (visibility === 'Personal') {
+    if (scope.admin) return true;
+    return isFolderOwner(folder, scope);
+  }
+  if (scope.admin || !scope.ownOnly) return true;
+  if (!folder.createdByUserId) return true;
+  return isFolderOwner(folder, scope);
 }
 
 async function assertFolderAccess(folderId, scope = {}) {
   const folder = await assertFolderExists(folderId);
   if (folder && !canAccessFolder(folder, scope)) {
     throw new Error('Access denied to personal folder');
+  }
+  return folder;
+}
+
+async function assertFolderWriteAccess(folderId, scope = {}) {
+  const folder = await assertFolderAccess(folderId, scope);
+  if (folder && !canWriteToFolder(folder, scope)) {
+    throw new Error('Only the folder owner can add or change files here');
   }
   return folder;
 }
@@ -523,6 +556,23 @@ async function syncCatalogFolders({ sourceScope = 'AI Generator', user = null } 
   };
 }
 
+function normalizeUploadsRelativePath(imagePath) {
+  let normalized = String(imagePath || '').replace(/\\/g, '/').trim();
+  if (!normalized) return '';
+  try {
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      normalized = new URL(normalized).pathname;
+    }
+  } catch (_e) {
+    // keep
+  }
+  normalized = normalized.replace(/^\/+/, '');
+  if (normalized.startsWith('uploads/')) {
+    normalized = normalized.slice('uploads/'.length);
+  }
+  return normalized;
+}
+
 async function getProductImagesForSku(sku) {
   const trimmed = String(sku || '').trim();
   if (!trimmed) return [];
@@ -532,19 +582,27 @@ async function getProductImagesForSku(sku) {
     .populate('subCategory', 'name')
     .lean();
   if (!product) return [];
-  return (product.images || []).filter(Boolean).map((img, index) => ({
-    id: `product-${product._id}-${index}`,
-    kind: 'product',
-    sku: product.sku,
-    productName: product.title || product.name || '',
-    category: product.category?.name || '',
-    subCategory: product.subCategory?.name || '',
-    brand: product.brandName || '',
-    title: `${product.sku || 'SKU'} · Image ${index + 1}`,
-    fileUrl: productImagePublicUrl(img),
-    thumbnailUrl: productImagePublicUrl(img),
-    source: 'Product Catalog',
-  }));
+  return (product.images || []).filter(Boolean).map((img, index) => {
+    const storagePath = normalizeUploadsRelativePath(img);
+    return {
+      id: `product-${product._id}-${index}`,
+      kind: 'product',
+      productId: String(product._id),
+      imageIndex: index,
+      isDefault: index === 0,
+      path: storagePath,
+      storagePath,
+      sku: product.sku,
+      productName: product.title || product.name || '',
+      category: product.category?.name || '',
+      subCategory: product.subCategory?.name || '',
+      brand: product.brandName || '',
+      title: `${product.sku || 'SKU'} · Image ${index + 1}${index === 0 ? ' (Default)' : ''}`,
+      fileUrl: productImagePublicUrl(img),
+      thumbnailUrl: productImagePublicUrl(img),
+      source: 'Product Catalog',
+    };
+  });
 }
 
 /**
@@ -552,12 +610,13 @@ async function getProductImagesForSku(sku) {
  */
 async function browseFolder(folderId, scope = {}, filters = {}, { page = 1, limit = 48 } = {}) {
   const folder = await assertFolderAccess(folderId, scope);
-  const children = await DocumentFolder.find({
+  const allChildren = await DocumentFolder.find({
     status: 'Active',
     parentId: folder._id,
   })
     .sort({ folderKind: 1, sortOrder: 1, name: 1 })
     .lean();
+  const children = allChildren.filter((child) => canAccessFolder(child, scope));
 
   const childIds = children.map((c) => c._id);
   const childCounts = childIds.length
@@ -614,8 +673,35 @@ async function browseFolder(folderId, scope = {}, filters = {}, { page = 1, limi
 
   const docsResult = await listDocuments(listFilters, scope, { page, limit });
   let productImages = [];
+  let documents = docsResult.data || [];
   if (folder.folderKind === 'sku' && folder.linkedSku) {
     productImages = await getProductImagesForSku(folder.linkedSku);
+    const defaultPath = productImages[0]?.storagePath || '';
+    const docPathSet = new Set(
+      documents
+        .map((d) => normalizeUploadsRelativePath(d.storagePath || d.fileUrl))
+        .filter(Boolean)
+    );
+    // Avoid duplicate cards when default points at an AI/document file already listed
+    productImages = productImages.filter((img) => !docPathSet.has(img.storagePath));
+    // Recompute default flag after filter (first remaining catalog image, or docs below)
+    productImages = productImages.map((img, index) => ({
+      ...img,
+      imageIndex: img.imageIndex,
+      isDefault: Boolean(defaultPath) && img.storagePath === defaultPath,
+      title: `${img.sku || 'SKU'} · Image ${(img.imageIndex ?? index) + 1}${
+        defaultPath && img.storagePath === defaultPath ? ' (Default)' : ''
+      }`,
+    }));
+    if (defaultPath) {
+      documents = documents.map((d) => {
+        const docPath = normalizeUploadsRelativePath(d.storagePath || d.fileUrl);
+        return {
+          ...(typeof d.toObject === 'function' ? d.toObject() : d),
+          isDefault: docPath === defaultPath,
+        };
+      });
+    }
   }
 
   return {
@@ -624,7 +710,7 @@ async function browseFolder(folderId, scope = {}, filters = {}, { page = 1, limi
       folderKind: folder.folderKind || 'custom',
     },
     children: enrichedChildren,
-    documents: docsResult.data,
+    documents,
     pagination: docsResult.pagination,
     productImages,
   };
@@ -635,11 +721,24 @@ async function getInaccessiblePersonalFolderIds(scope = {}) {
   const query = {
     status: 'Active',
     visibility: 'Personal',
+    employeeVisible: { $ne: true },
   };
   if (scope.userId) {
     query.createdByUserId = { $ne: scope.userId };
   }
   const folders = await DocumentFolder.find(query).select('_id').lean();
+  return folders.map((f) => f._id);
+}
+
+/** Personal folders marked employeeVisible — docs inside are viewable by all employees. */
+async function getEmployeeVisiblePersonalFolderIds() {
+  const folders = await DocumentFolder.find({
+    status: 'Active',
+    visibility: 'Personal',
+    employeeVisible: true,
+  })
+    .select('_id')
+    .lean();
   return folders.map((f) => f._id);
 }
 
@@ -661,6 +760,7 @@ async function listFolders(scope = {}, filters = {}) {
     query.$or = [
       { visibility: { $ne: 'Personal' } },
       { visibility: 'Personal', createdByUserId: scope.userId },
+      { visibility: 'Personal', employeeVisible: true },
       { visibility: { $exists: false } },
     ];
   }
@@ -676,7 +776,12 @@ async function listFolders(scope = {}, filters = {}) {
     folderId: { $in: folderIds },
   };
   if (scope.ownOnly && scope.userId) {
-    countMatch.uploadedByUserId = scope.userId;
+    const visiblePersonalIds = await getEmployeeVisiblePersonalFolderIds();
+    countMatch.$or = [
+      { uploadedByUserId: scope.userId },
+      ...(visiblePersonalIds.length ? [{ folderId: { $in: visiblePersonalIds } }] : []),
+    ];
+    delete countMatch.uploadedByUserId;
   }
 
   const counts = folderIds.length
@@ -701,8 +806,10 @@ async function listFolders(scope = {}, filters = {}) {
     folders: folders.map((f) => ({
       ...f,
       visibility: f.visibility || 'Shared',
+      employeeVisible: Boolean(f.employeeVisible),
       folderKind: f.folderKind || 'custom',
       documentCount: countMap[String(f._id)] || 0,
+      canManage: canWriteToFolder(f, scope),
     })),
     unfiledCount,
     sourceScope,
@@ -718,6 +825,7 @@ async function createFolder({
   sortOrder,
   sourceScope,
   visibility,
+  employeeVisible,
   scope = {},
 }) {
   const trimmed = String(name || '').trim();
@@ -725,6 +833,9 @@ async function createFolder({
 
   const scopeValue = sourceScope === 'AI Generator' ? 'AI Generator' : 'Manual Upload';
   const visibilityValue = String(visibility || '').toLowerCase() === 'personal' ? 'Personal' : 'Shared';
+  const employeeVisibleValue =
+    visibilityValue === 'Personal' &&
+    (employeeVisible === true || employeeVisible === 'true' || employeeVisible === 1 || employeeVisible === '1');
   const ownerId = user?.id || user?.userId || user?._id || null;
 
   if (visibilityValue === 'Personal' && !ownerId) {
@@ -734,7 +845,10 @@ async function createFolder({
   let parent = null;
   const parentObjectId = toObjectId(parentId);
   if (parentObjectId) {
-    parent = await assertFolderAccess(parentObjectId, scope.admin != null ? scope : { admin: false, userId: ownerId });
+    parent = await assertFolderWriteAccess(
+      parentObjectId,
+      scope.admin != null ? scope : { admin: false, userId: ownerId }
+    );
     if (parent.sourceScope && parent.sourceScope !== scopeValue) {
       throw new Error('Parent folder belongs to a different source');
     }
@@ -762,6 +876,7 @@ async function createFolder({
       description: description ? String(description).trim() : '',
       sourceScope: scopeValue,
       visibility: visibilityValue,
+      employeeVisible: employeeVisibleValue,
       parentId: parent?._id || null,
       sortOrder: Number(order) || 0,
       createdBy: actorLabel(user),
@@ -781,7 +896,7 @@ async function createFolder({
 async function updateFolder(id, patch = {}, scope = {}) {
   const folder = await DocumentFolder.findById(id);
   if (!folder || folder.status === 'Deleted') throw new Error('Folder not found');
-  if (scope.ownOnly && String(folder.createdByUserId || '') !== String(scope.userId)) {
+  if (!canWriteToFolder(folder, scope)) {
     throw new Error('Access denied');
   }
 
@@ -794,13 +909,24 @@ async function updateFolder(id, patch = {}, scope = {}) {
   if (patch.department != null) folder.department = String(patch.department).trim();
   if (patch.sortOrder != null) folder.sortOrder = Number(patch.sortOrder) || 0;
 
+  if (patch.employeeVisible !== undefined) {
+    if ((folder.visibility || 'Shared') !== 'Personal') {
+      throw new Error('Only personal folders can be marked employee-visible');
+    }
+    folder.employeeVisible =
+      patch.employeeVisible === true ||
+      patch.employeeVisible === 'true' ||
+      patch.employeeVisible === 1 ||
+      patch.employeeVisible === '1';
+  }
+
   if (patch.parentId !== undefined) {
     const nextParentId = toObjectId(patch.parentId);
     if (nextParentId && String(nextParentId) === String(folder._id)) {
       throw new Error('Folder cannot be its own parent');
     }
     if (nextParentId) {
-      await assertFolderExists(nextParentId);
+      await assertFolderWriteAccess(nextParentId, scope);
       let cursor = nextParentId;
       const seen = new Set([String(folder._id)]);
       while (cursor) {
@@ -852,7 +978,7 @@ async function reorderFolders(orderedIds = [], scope = {}, filters = {}) {
 async function deleteFolder(id, scope = {}) {
   const folder = await DocumentFolder.findById(id);
   if (!folder || folder.status === 'Deleted') throw new Error('Folder not found');
-  if (scope.ownOnly && String(folder.createdByUserId || '') !== String(scope.userId)) {
+  if (!canWriteToFolder(folder, scope)) {
     throw new Error('Access denied');
   }
 
@@ -890,13 +1016,13 @@ async function moveDocumentToFolder(documentId, folderId, scope = {}) {
 
   const nextFolderId = toObjectId(folderId);
   if (nextFolderId) {
-    const folder = await assertFolderAccess(nextFolderId, scope);
+    const folder = await assertFolderWriteAccess(nextFolderId, scope);
     if (folder.sourceScope && folder.sourceScope !== doc.source) {
       throw new Error('Folder does not match this document type');
     }
   } else if (doc.folderId) {
-    // Leaving a personal folder also requires access to that folder
-    await assertFolderAccess(doc.folderId, scope);
+    // Leaving a personal folder also requires write access to that folder
+    await assertFolderWriteAccess(doc.folderId, scope);
   }
   doc.folderId = nextFolderId;
   await doc.save();
@@ -987,7 +1113,7 @@ async function saveAiGeneratedImage({
 
   const resolvedFolderId = toObjectId(folderId);
   if (resolvedFolderId) {
-    const folder = await assertFolderAccess(resolvedFolderId, scope);
+    const folder = await assertFolderWriteAccess(resolvedFolderId, scope);
     if (folder.sourceScope && folder.sourceScope !== 'AI Generator') {
       throw new Error('Selected folder is not an AI images folder');
     }
@@ -1112,7 +1238,7 @@ async function createManualUpload({
 
   const resolvedFolderId = toObjectId(folderId);
   if (resolvedFolderId) {
-    const folder = await assertFolderAccess(resolvedFolderId, scope);
+    const folder = await assertFolderWriteAccess(resolvedFolderId, scope);
     if (folder.sourceScope && folder.sourceScope !== 'Manual Upload') {
       throw new Error('Selected folder is not an employee documents folder');
     }
@@ -1191,7 +1317,7 @@ async function createAiDesktopUpload({
 
   const resolvedFolderId = toObjectId(folderId);
   if (resolvedFolderId) {
-    const folder = await assertFolderAccess(resolvedFolderId, scope);
+    const folder = await assertFolderWriteAccess(resolvedFolderId, scope);
     if (folder.sourceScope && folder.sourceScope !== 'AI Generator') {
       throw new Error('Selected folder is not an AI images folder');
     }
@@ -1256,7 +1382,7 @@ function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function buildListQuery(filters = {}, scope = {}) {
+async function buildListQuery(filters = {}, scope = {}) {
   const query = {};
 
   if (filters.status) {
@@ -1325,7 +1451,13 @@ function buildListQuery(filters = {}, scope = {}) {
   }
 
   if (scope.ownOnly && scope.userId) {
-    query.uploadedByUserId = scope.userId;
+    // Own uploads always; plus anything in personal folders marked employee-visible
+    const visiblePersonalIds = await getEmployeeVisiblePersonalFolderIds();
+    const ownOrVisible = [
+      { uploadedByUserId: scope.userId },
+      ...(visiblePersonalIds.length ? [{ folderId: { $in: visiblePersonalIds } }] : []),
+    ];
+    query.$and = (query.$and || []).concat([{ $or: ownOrVisible }]);
   } else if (scope.department && !scope.admin) {
     query.$and = (query.$and || []).concat([
       {
@@ -1342,7 +1474,7 @@ function buildListQuery(filters = {}, scope = {}) {
 }
 
 async function listDocuments(filters, scope, { page = 1, limit = 24 } = {}) {
-  const query = buildListQuery(filters, scope);
+  const query = await buildListQuery(filters, scope);
 
   // Hide documents that live in other users' personal folders (admins see all)
   const hiddenFolderIds = await getInaccessiblePersonalFolderIds(scope);
@@ -1393,7 +1525,7 @@ async function listDocuments(filters, scope, { page = 1, limit = 24 } = {}) {
 }
 
 async function getAnalytics(scope = {}) {
-  const base = buildListQuery({ status: 'Active' }, scope);
+  const base = await buildListQuery({ status: 'Active' }, scope);
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const startOfMonth = new Date(startOfToday.getFullYear(), startOfToday.getMonth(), 1);
@@ -1497,6 +1629,7 @@ module.exports = {
   reorderFolders,
   moveDocumentToFolder,
   canAccessFolder,
+  canWriteToFolder,
   syncCatalogFolders,
   ensureCatalogFolderPath,
   browseFolder,

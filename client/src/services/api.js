@@ -37,6 +37,7 @@ export const productsAPI = {
   create: (data) => api.post('/products', data),
   update: (id, data) => api.put(`/products/${id}`, data),
   updateSuppliers: (id, suppliers) => api.put(`/products/${id}/suppliers`, { suppliers }),
+  setDefaultImage: (id, data) => api.post(`/products/${id}/images/default`, data),
   delete: (id) => api.delete(`/products/${id}`),
   downloadTemplate: () => api.get('/products/template', { responseType: 'blob' }),
   exportExcel: (params) => api.get('/products/export', { params, responseType: 'blob' }),

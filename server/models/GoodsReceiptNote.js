@@ -109,6 +109,7 @@ const goodsReceiptNoteSchema = new mongoose.Schema(
   {
     grnNumber: { type: String, unique: true, required: true, trim: true, uppercase: true },
     grnDate: { type: Date, default: Date.now },
+    deliveryDate: { type: Date },
     grnTime: { type: String, trim: true },
     receiptStatus: {
       type: String,

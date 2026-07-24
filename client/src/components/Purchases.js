@@ -221,7 +221,10 @@ function Purchases() {
 
   const fetchPurchaseOrders = async () => {
     try {
-      const response = await purchaseOrdersAPI.getAll({ status: 'approved' });
+      const response = await purchaseOrdersAPI.getAll({
+        status: 'approved',
+        includeFullyReceived: true,
+      });
       setPurchaseOrders(response.data);
     } catch (error) {
       console.error('Error fetching purchase orders:', error);

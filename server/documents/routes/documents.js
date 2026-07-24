@@ -227,6 +227,7 @@ router.post(
         sortOrder: req.body?.sortOrder,
         sourceScope: req.body?.sourceScope || 'Manual Upload',
         visibility: req.body?.visibility || 'Shared',
+        employeeVisible: req.body?.employeeVisible,
         user: req.user,
         scope,
       });
@@ -293,6 +294,33 @@ router.post('/:id/move', requireDocuments('documents.update'), async (req, res) 
   } catch (error) {
     const status = error.message === 'Access denied' ? 403 : 400;
     res.status(status).json({ error: error.message });
+  }
+});
+
+// POST /documents/:id/set-product-default — use this image as product default
+router.post('/:id/set-product-default', requireDocuments('documents.update'), async (req, res) => {
+  try {
+    const Document = require('../models/Document');
+    const { setProductDefaultFromDocument } = require('../../utils/productDefaultImage');
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+    if (doc.status === 'Deleted') {
+      return res.status(400).json({ error: 'Cannot use a deleted document as default image' });
+    }
+
+    const product = await setProductDefaultFromDocument(doc, {
+      sku: req.body?.sku,
+    });
+    res.json({
+      success: true,
+      message: 'Default product image updated',
+      productId: product._id,
+      sku: product.sku,
+      defaultImage: product.images?.[0] || null,
+      images: product.images,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 });
 

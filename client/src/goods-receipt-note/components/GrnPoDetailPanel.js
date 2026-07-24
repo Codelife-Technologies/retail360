@@ -63,7 +63,7 @@ function GrnPoDetailPanel({
     ['LR Number', 'lrNumber', 'text'],
     ['E-Way Bill', 'ewayBillNumber', 'text'],
     ['Received By', 'receivedBy', 'text'],
-    ['Received Date', 'receivedDate', 'date'],
+    ['Delivery Date', 'receivedDate', 'date'],
   ];
 
   return (

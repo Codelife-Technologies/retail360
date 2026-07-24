@@ -39,12 +39,14 @@
   font-size: 0.95rem;
 }
 
-.por-status-filter {
+.por-vendor-filter {
   padding: 0.55rem 0.75rem;
   border: 1px solid #d1d5db;
   border-radius: 8px;
   background: #fff;
   font-size: 0.95rem;
+  min-width: 180px;
+  max-width: 260px;
 }
 
 .por-date-filter {

@@ -7,11 +7,29 @@ const { paginate } = require('../utils/pagination');
 const { parseExcel } = require('../utils/excelParser');
 const { generateTemplate } = require('../utils/excelGenerator');
 const { requirePermission } = require('../middleware/auth');
+const {
+  normalizeIdList,
+  syncChannelWarehouseLinks,
+} = require('../services/syncChannelWarehouses');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }
 });
+
+const WAREHOUSE_POPULATE = { path: 'warehouses', select: 'name code city country isActive' };
+
+function prepareChannelBody(body = {}) {
+  const data = { ...body };
+  if (data.warehouses !== undefined) {
+    data.warehouses = normalizeIdList(data.warehouses);
+  }
+  return data;
+}
+
+async function respondWithChannel(channelDoc) {
+  return SalesChannel.findById(channelDoc._id).populate(WAREHOUSE_POPULATE);
+}
 
 // GET all sales channels (with pagination)
 router.get('/', requirePermission('salesChannels.view'), async (req, res) => {
@@ -39,11 +57,14 @@ router.get('/', requirePermission('salesChannels.view'), async (req, res) => {
       const result = await paginate(SalesChannel, query, {
         page: page || 1,
         limit: limit || 25,
-        sort: { createdAt: -1 }
+        sort: { createdAt: -1 },
+        populate: WAREHOUSE_POPULATE,
       });
       res.json(result);
     } else {
-      const salesChannels = await SalesChannel.find(query).sort({ name: 1 });
+      const salesChannels = await SalesChannel.find(query)
+        .populate(WAREHOUSE_POPULATE)
+        .sort({ name: 1 });
       res.json(salesChannels);
     }
   } catch (error) {
@@ -164,7 +185,7 @@ router.post('/import', requirePermission('salesChannels.create'), upload.single(
 // GET single sales channel
 router.get('/:id', requirePermission('salesChannels.view'), async (req, res) => {
   try {
-    const salesChannel = await SalesChannel.findById(req.params.id);
+    const salesChannel = await SalesChannel.findById(req.params.id).populate(WAREHOUSE_POPULATE);
     if (!salesChannel) {
       return res.status(404).json({ error: 'Sales channel not found' });
     }
@@ -177,9 +198,11 @@ router.get('/:id', requirePermission('salesChannels.view'), async (req, res) => 
 // POST create sales channel
 router.post('/', requirePermission('salesChannels.create'), async (req, res) => {
   try {
-    const salesChannel = new SalesChannel(req.body);
+    const body = prepareChannelBody(req.body);
+    const salesChannel = new SalesChannel(body);
     await salesChannel.save();
-    res.status(201).json(salesChannel);
+    await syncChannelWarehouseLinks(salesChannel, salesChannel.warehouses);
+    res.status(201).json(await respondWithChannel(salesChannel));
   } catch (error) {
     console.error('Error creating sales channel:', error);
     console.error('Error details:', {
@@ -193,13 +216,16 @@ router.post('/', requirePermission('salesChannels.create'), async (req, res) => 
         const existing = await SalesChannel.findOne({ code });
         if (existing) {
           // If channel already exists but is inactive (common for Amazon UAE), activate it.
-          const update = { isActive: true };
+          const update = prepareChannelBody({
+            ...req.body,
+            isActive: true,
+          });
 
-          if (req.body?.country) {
-            update.country = String(req.body.country).trim().toUpperCase().slice(0, 2);
+          if (update.country) {
+            update.country = String(update.country).trim().toUpperCase().slice(0, 2);
           }
-          if (req.body?.defaultCurrency) {
-            update.defaultCurrency = String(req.body.defaultCurrency).trim().toUpperCase().slice(0, 3);
+          if (update.defaultCurrency) {
+            update.defaultCurrency = String(update.defaultCurrency).trim().toUpperCase().slice(0, 3);
           }
           if (!update.defaultCurrency && update.country) {
             update.defaultCurrency = currencyForCountry(update.country);
@@ -209,7 +235,10 @@ router.post('/', requirePermission('salesChannels.create'), async (req, res) => 
             new: true,
             runValidators: true,
           });
-          return res.status(201).json(updated);
+          if (update.warehouses !== undefined) {
+            await syncChannelWarehouseLinks(updated, update.warehouses);
+          }
+          return res.status(201).json(await respondWithChannel(updated));
         }
       }
 
@@ -223,15 +252,19 @@ router.post('/', requirePermission('salesChannels.create'), async (req, res) => 
 // PUT update sales channel
 router.put('/:id', requirePermission('salesChannels.update'), async (req, res) => {
   try {
+    const body = prepareChannelBody(req.body);
     const salesChannel = await SalesChannel.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      body,
       { new: true, runValidators: true }
     );
     if (!salesChannel) {
       return res.status(404).json({ error: 'Sales channel not found' });
     }
-    res.json(salesChannel);
+    if (body.warehouses !== undefined) {
+      await syncChannelWarehouseLinks(salesChannel, body.warehouses);
+    }
+    res.json(await respondWithChannel(salesChannel));
   } catch (error) {
     console.error('Error updating sales channel:', error);
     console.error('Error details:', {

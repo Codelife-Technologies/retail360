@@ -50,12 +50,29 @@ const salesChannelSchema = new mongoose.Schema({
     trim: true,
     uppercase: true,
     maxlength: 3
-  }
+  },
+  /** Warehouses (stock locations) linked to this sales channel */
+  warehouses: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Location',
+  }],
 }, {
   timestamps: true
 });
 
 salesChannelSchema.pre('validate', function(next) {
+  if (Array.isArray(this.warehouses)) {
+    const seen = new Set();
+    this.warehouses = this.warehouses
+      .filter(Boolean)
+      .filter((id) => {
+        const key = String(id);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }
+
   if (this.country) {
     this.country = String(this.country).trim().toUpperCase().slice(0, 2);
     if (!this.defaultCurrency) {

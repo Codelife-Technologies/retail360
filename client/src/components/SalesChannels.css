@@ -256,3 +256,44 @@
   background: #d1d5db;
 }
 
+.sc-warehouses-cell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.warehouse-checkbox-list {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.75rem;
+  max-height: 200px;
+  overflow-y: auto;
+  background: #fafafa;
+}
+
+.warehouse-checkbox-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.warehouse-checkbox-item input {
+  margin-top: 0.2rem;
+  width: auto;
+}
+
+.warehouse-checkbox-empty {
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.sc-field-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+

@@ -411,6 +411,31 @@ function AiGeneratedImages() {
     }
   };
 
+  const handleSetDefaultImage = async (doc) => {
+    try {
+      if (doc.kind === 'product') {
+        if (!doc.productId && doc.imageIndex == null) {
+          showToast('Cannot set default for this catalog image');
+          return;
+        }
+        await documentsAPI.setProductCatalogDefault(doc.productId, {
+          index: doc.imageIndex,
+        });
+      } else {
+        const sku = doc.sku || selectedFolderMeta?.linkedSku || '';
+        if (!sku && !doc.productId) {
+          showToast('Open a SKU folder (or use an image with SKU) to set the default product image');
+          return;
+        }
+        await documentsAPI.setProductDefault(doc._id, { sku });
+      }
+      showToast('Default product image updated');
+      await Promise.all([load(), loadFolders()]);
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to set default image');
+    }
+  };
+
   const selectBrowseFolder = (key) => {
     const id = String(key);
     setMoveDocId(null);
@@ -730,9 +755,12 @@ function AiGeneratedImages() {
                   {showFolderGrid ? <h3 className="dm-drive-section-title">Files</h3> : null}
                   <div className="dm-grid">
                     {allImages.map((doc) => (
-                      <div key={doc._id} className="dm-image-card">
+                      <div key={doc._id} className={`dm-image-card${doc.isDefault ? ' is-default' : ''}`}>
                         <div className="dm-image-preview">
                           <img src={documentsAPI.fileUrl(doc.thumbnailUrl || doc.fileUrl)} alt={doc.title || doc.sku} />
+                          {doc.isDefault ? (
+                            <span className="dm-default-badge">Default</span>
+                          ) : null}
                         </div>
                         <div className="dm-image-body">
                           <strong>{doc.sku || 'No SKU'}</strong>
@@ -758,6 +786,15 @@ function AiGeneratedImages() {
                         </div>
                         <div className="dm-image-actions">
                           <button type="button" className="dm-btn" onClick={() => setPreview(doc)}>Preview</button>
+                          <button
+                            type="button"
+                            className={`dm-btn${doc.isDefault ? ' dm-btn-default-active' : ''}`}
+                            onClick={() => handleSetDefaultImage(doc)}
+                            disabled={Boolean(doc.isDefault)}
+                            title={doc.isDefault ? 'Already the default product image' : 'Show this image in Product Master'}
+                          >
+                            {doc.isDefault ? 'Default' : 'Set as default'}
+                          </button>
                           <button type="button" className="dm-btn" onClick={() => handleDownload(doc)}>
                             {doc.kind === 'product' ? 'Open' : 'Download'}
                           </button>

@@ -196,12 +196,38 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  position: relative;
 }
 
 .dm-image-preview img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.dm-default-badge {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  background: #166534;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+}
+
+.dm-image-card.is-default {
+  outline: 2px solid #16a34a;
+  outline-offset: -2px;
+}
+
+.dm-btn-default-active {
+  background: #dcfce7 !important;
+  color: #166534 !important;
+  border-color: #86efac !important;
 }
 
 .dm-image-body {
@@ -277,6 +303,11 @@
   color: #9a3412;
   margin-left: 0.35rem;
   vertical-align: middle;
+}
+
+.dm-badge.personal.visible {
+  background: #e0f2fe;
+  color: #075985;
 }
 
 .dm-folder-personal-opt {

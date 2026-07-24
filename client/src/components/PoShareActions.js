@@ -11,11 +11,6 @@ import {
 } from '../utils/productDisplayUtils';
 import './PoShareActions.css';
 
-const UPLOADS_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:5000/api').replace(
-  '/api',
-  ''
-);
-
 async function resolvePoForShare(po) {
   if (!po?._id) return po;
   const needsFetch =
@@ -49,7 +44,6 @@ function PoShareActions({ po, products = [], compact = false, onPrint }) {
     const html = generatePurchaseOrderPrintHtml(fullPo, products, {
       getProductThumbnail,
       productImagePlaceholder: PRODUCT_IMAGE_PLACEHOLDER,
-      uploadsBase: UPLOADS_BASE,
     });
     downloadPurchaseOrderHtml(html, fullPo.poNumber);
   };

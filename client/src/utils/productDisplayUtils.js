@@ -13,18 +13,25 @@ export const PRODUCT_IMAGE_PLACEHOLDER =
 
 export function resolveProductImageUrl(image) {
   if (!image) return null;
-  if (image.startsWith('http://') || image.startsWith('https://')) {
-    return image;
+  const raw = String(image).trim();
+  if (!raw) return null;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw;
   }
-  if (image.startsWith('products/')) {
-    return `${UPLOADS_BASE}/uploads/${image}`;
+  if (raw.startsWith('/uploads/')) {
+    return `${UPLOADS_BASE}${raw}`;
   }
-  return image;
+  if (raw.startsWith('uploads/')) {
+    return `${UPLOADS_BASE}/${raw}`;
+  }
+  // Product catalog paths and other uploads-relative paths
+  return `${UPLOADS_BASE}/uploads/${raw.replace(/^\/+/, '')}`;
 }
 
+/** First image is the default shown in product master and list thumbnails. */
 export function getProductThumbnail(product) {
   const images = product?.images || [];
-  const first = images.find((img) => img && img.trim() !== '');
+  const first = images.find((img) => img && String(img).trim() !== '');
   return first ? resolveProductImageUrl(first) : null;
 }
 

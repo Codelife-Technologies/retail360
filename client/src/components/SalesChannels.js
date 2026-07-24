@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { salesChannelsAPI } from '../services/api';
+import { salesChannelsAPI, locationsAPI } from '../services/api';
 import DetailModal from './DetailModal';
 import ExcelUpload from './ExcelUpload';
 import './SalesChannels.css';
@@ -18,29 +18,61 @@ const COUNTRY_PRESETS = [
   { country: 'SG', defaultCurrency: 'SGD', label: 'Singapore (SG / SGD)' },
 ];
 
+const emptyForm = () => ({
+  code: '',
+  name: '',
+  description: '',
+  type: 'other',
+  commissionRate: 0,
+  paymentTerms: '',
+  isActive: true,
+  country: '',
+  defaultCurrency: '',
+  warehouses: [],
+});
+
+function warehouseIdsFromChannel(channel) {
+  return (channel?.warehouses || [])
+    .map((w) => w?._id || w)
+    .filter(Boolean)
+    .map(String);
+}
+
+function warehouseNames(channel) {
+  const list = channel?.warehouses || [];
+  if (!list.length) return '—';
+  return list
+    .map((w) => (w?.name ? `${w.name}${w.code ? ` (${w.code})` : ''}` : w))
+    .filter(Boolean)
+    .join(', ') || '—';
+}
+
 function SalesChannels() {
   const [salesChannels, setSalesChannels] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [editingChannel, setEditingChannel] = useState(null);
   const [viewingChannel, setViewingChannel] = useState(null);
-  const [formData, setFormData] = useState({
-    code: '',
-    name: '',
-    description: '',
-    type: 'other',
-    commissionRate: 0,
-    paymentTerms: '',
-    isActive: true,
-    country: '',
-    defaultCurrency: '',
-  });
+  const [formData, setFormData] = useState(emptyForm);
 
   useEffect(() => {
     fetchSalesChannels();
+    fetchWarehouses();
   }, []);
+
+  const fetchWarehouses = async () => {
+    try {
+      const response = await locationsAPI.getAll({ isActive: 'true' });
+      const list = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setWarehouses(list);
+    } catch (error) {
+      console.error('Error fetching warehouses:', error);
+      setWarehouses([]);
+    }
+  };
 
   const fetchSalesChannels = async () => {
     try {
@@ -51,12 +83,6 @@ function SalesChannels() {
       setSalesChannels(Array.isArray(response.data) ? response.data : response.data?.data || []);
     } catch (error) {
       console.error('Error fetching sales channels:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        stack: error.stack
-      });
       alert('Failed to fetch sales channels');
     } finally {
       setLoading(false);
@@ -105,10 +131,20 @@ function SalesChannels() {
     }));
   };
 
+  const handleWarehouseToggle = (warehouseId) => {
+    setFormData((prev) => {
+      const selected = new Set((prev.warehouses || []).map(String));
+      if (selected.has(warehouseId)) selected.delete(warehouseId);
+      else selected.add(warehouseId);
+      return { ...prev, warehouses: [...selected] };
+    });
+  };
+
   const buildPayload = () => {
     const payload = { ...formData };
     payload.country = String(payload.country || '').trim().toUpperCase();
     payload.defaultCurrency = String(payload.defaultCurrency || '').trim().toUpperCase();
+    payload.warehouses = (payload.warehouses || []).map(String).filter(Boolean);
     if (!payload.country) {
       delete payload.country;
       delete payload.defaultCurrency;
@@ -144,13 +180,6 @@ function SalesChannels() {
       fetchSalesChannels();
     } catch (error) {
       console.error('Error saving sales channel:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        stack: error.stack,
-        formData: formData
-      });
       alert(error.response?.data?.error || 'Failed to save sales channel');
     }
   };
@@ -167,6 +196,7 @@ function SalesChannels() {
       isActive: channel.isActive !== undefined ? channel.isActive : true,
       country: channel.country || '',
       defaultCurrency: channel.defaultCurrency || '',
+      warehouses: warehouseIdsFromChannel(channel),
     });
     setShowModal(true);
   };
@@ -180,29 +210,12 @@ function SalesChannels() {
       fetchSalesChannels();
     } catch (error) {
       console.error('Error deleting sales channel:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        stack: error.stack,
-        channelId: id
-      });
       alert('Failed to delete sales channel');
     }
   };
 
   const resetForm = () => {
-    setFormData({
-      code: '',
-      name: '',
-      description: '',
-      type: 'other',
-      commissionRate: 0,
-      paymentTerms: '',
-      isActive: true,
-      country: '',
-      defaultCurrency: '',
-    });
+    setFormData(emptyForm());
   };
 
   const openAddModal = () => {
@@ -246,6 +259,7 @@ function SalesChannels() {
                 <th>Type</th>
                 <th>Country</th>
                 <th>Currency</th>
+                <th>Warehouses</th>
                 <th>Commission Rate</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -254,7 +268,7 @@ function SalesChannels() {
             <tbody>
               {salesChannels.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="no-data">
+                  <td colSpan="9" className="no-data">
                     No sales channels found
                   </td>
                 </tr>
@@ -268,12 +282,15 @@ function SalesChannels() {
                     <td>{channel.code}</td>
                     <td>{channel.name}</td>
                     <td>
-                      <span className="type-badge type-{channel.type}">
+                      <span className={`type-badge type-${channel.type}`}>
                         {channel.type}
                       </span>
                     </td>
                     <td>{channel.country || '—'}</td>
                     <td>{channel.defaultCurrency || '—'}</td>
+                    <td className="sc-warehouses-cell" title={warehouseNames(channel)}>
+                      {warehouseNames(channel)}
+                    </td>
                     <td>{channel.commissionRate}%</td>
                     <td>
                       <span className={`status-badge ${channel.isActive ? 'active' : 'inactive'}`}>
@@ -322,6 +339,7 @@ function SalesChannels() {
             { label: 'Type', value: viewingChannel.type },
             { label: 'Country', value: viewingChannel.country || '—' },
             { label: 'Currency', value: viewingChannel.defaultCurrency || '—' },
+            { label: 'Warehouses', value: warehouseNames(viewingChannel), full: true },
             { label: 'Commission Rate', value: `${viewingChannel.commissionRate || 0}%` },
             { label: 'Payment Terms', value: viewingChannel.paymentTerms },
             { label: 'Status', value: viewingChannel.isActive ? 'Active' : 'Inactive' },
@@ -456,6 +474,37 @@ function SalesChannels() {
                 </div>
               </div>
               <div className="form-group">
+                <label>Linked Warehouses</label>
+                <div className="warehouse-checkbox-list">
+                  {warehouses.length === 0 ? (
+                    <div className="warehouse-checkbox-empty">
+                      No active warehouses found. Add locations under Masters → Locations.
+                    </div>
+                  ) : (
+                    warehouses.map((loc) => {
+                      const checked = (formData.warehouses || []).includes(String(loc._id));
+                      return (
+                        <label key={loc._id} className="warehouse-checkbox-item">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => handleWarehouseToggle(String(loc._id))}
+                          />
+                          <span>
+                            {loc.name} ({loc.code})
+                            {loc.city ? ` · ${loc.city}` : ''}
+                            {loc.country ? ` · ${loc.country}` : ''}
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+                <p className="sc-field-hint">
+                  Select warehouses that fulfill orders for this sales channel.
+                </p>
+              </div>
+              <div className="form-group">
                 <label>Payment Terms</label>
                 <input
                   type="text"
@@ -492,4 +541,3 @@ function SalesChannels() {
 }
 
 export default SalesChannels;
-

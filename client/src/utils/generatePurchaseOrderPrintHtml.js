@@ -28,7 +28,7 @@ function partyBlock(title, fields) {
  * Generate full GST-compliant Purchase Order print HTML.
  * @param {object} po - Purchase order document
  * @param {object[]} products - Product catalogue for image/SKU/HSN resolution
- * @param {object} helpers - { getProductThumbnail, productImagePlaceholder, uploadsBase }
+ * @param {object} helpers - { getProductThumbnail, productImagePlaceholder }
  */
 export function generatePurchaseOrderPrintHtml(po, products, helpers) {
   const { getProductThumbnail, productImagePlaceholder } = helpers;

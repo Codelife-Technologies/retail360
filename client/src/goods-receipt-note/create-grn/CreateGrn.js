@@ -18,6 +18,7 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
   const [lineItems, setLineItems] = useState([]);
   const [deliveryInfo, setDeliveryInfo] = useState(emptyDeliveryInfo());
   const [warehouse, setWarehouse] = useState('');
+  const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [receivingOfficer, setReceivingOfficer] = useState('');
   const [createdByName, setCreatedByName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -99,6 +100,9 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
 
   const updateDelivery = (field, value) => {
     setDeliveryInfo((prev) => ({ ...prev, [field]: value }));
+    if (field === 'receivedDate') {
+      setDeliveryDate(value || '');
+    }
   };
 
   const buildPayload = () => {
@@ -118,11 +122,17 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
       inspectionStatus: 'pending',
     }));
 
+    const delivery = {
+      ...deliveryInfo,
+      receivedDate: deliveryDate || deliveryInfo.receivedDate || '',
+    };
+
     return {
       warehouse: warehouse || undefined,
       receivingOfficer,
       createdByName,
-      deliveryInfo,
+      deliveryDate: deliveryDate || undefined,
+      deliveryInfo: delivery,
       items: payloadItems,
       costCenter: selectedPo?.costCenter,
     };
@@ -214,6 +224,18 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="form-group">
+              <label>Delivery Date</label>
+              <input
+                type="date"
+                value={deliveryDate}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setDeliveryDate(value);
+                  setDeliveryInfo((prev) => ({ ...prev, receivedDate: value }));
+                }}
+              />
             </div>
             <div className="form-group">
               <label>Receiving Officer</label>

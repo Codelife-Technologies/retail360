@@ -5,39 +5,12 @@ import logger from '../utils/logger';
 import DetailModal from './DetailModal';
 import ExcelUpload from './ExcelUpload';
 import ProductSearchPicker, { matchProductSearch } from './ProductSearchPicker';
+import {
+  PRODUCT_IMAGE_PLACEHOLDER,
+  getProductThumbnail,
+} from '../utils/productDisplayUtils';
 import './Stock.css';
 import './ProductSearchPicker.css';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-const UPLOADS_BASE = API_BASE_URL.replace('/api', '');
-
-const PRODUCT_IMAGE_PLACEHOLDER =
-  'data:image/svg+xml,' +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 50 50">
-      <rect width="50" height="50" fill="#e5e7eb" rx="8"/>
-      <path d="M16 32l6-8 5 6 4-5 9 11H16z" fill="#9ca3af"/>
-      <circle cx="20" cy="19" r="3" fill="#9ca3af"/>
-    </svg>`
-  );
-
-function resolveProductImageUrl(image) {
-  if (!image) return null;
-  if (image.startsWith('http://') || image.startsWith('https://')) {
-    return image;
-  }
-  if (image.startsWith('products/')) {
-    return `${UPLOADS_BASE}/uploads/${image}`;
-  }
-  return image;
-}
-
-function getProductThumbnail(product) {
-  if (!product) return null;
-  const images = product.images || [];
-  const first = images.find((img) => img && img.trim() !== '');
-  return first ? resolveProductImageUrl(first) : null;
-}
 
 function StockProductCell({ product }) {
   const displayName = product?.title || product?.name || 'Unknown';

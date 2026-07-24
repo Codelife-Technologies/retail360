@@ -91,7 +91,8 @@ function GrnDashboard({ onNavigate, onCreateFromPo }) {
             <thead>
               <tr>
                 <th>GRN Number</th>
-                <th>Date</th>
+                <th>GRN Date</th>
+                <th>Delivery Date</th>
                 <th>Status</th>
                 <th>PO Number</th>
                 <th>PR Number</th>
@@ -103,7 +104,7 @@ function GrnDashboard({ onNavigate, onCreateFromPo }) {
             </thead>
             <tbody>
               {listLoading && !showUpcomingOnly ? (
-                <tr><td colSpan="9" className="grn-empty">Loading…</td></tr>
+                <tr><td colSpan="10" className="grn-empty">Loading…</td></tr>
               ) : (
                 <>
                   {(showUpcomingOnly ? stats?.upcomingPos || [] : upcomingPos).map((po) => (
@@ -121,6 +122,7 @@ function GrnDashboard({ onNavigate, onCreateFromPo }) {
                             ? new Date(po.expectedDeliveryDate).toLocaleDateString('en-IN')
                             : '—'}
                       </td>
+                      <td>—</td>
                       <td><GrnStatusBadge status="upcoming" /></td>
                       <td className="mono">{po.poNumber}</td>
                       <td className="mono">{po.purchaseRequisitionNumber || '—'}</td>
@@ -131,12 +133,15 @@ function GrnDashboard({ onNavigate, onCreateFromPo }) {
                     </tr>
                   ))}
                   {visibleGrns.length === 0 && (showUpcomingOnly ? (stats?.upcomingPos || []).length === 0 : upcomingPos.length === 0) ? (
-                    <tr><td colSpan="9" className="grn-empty">No GRNs found</td></tr>
+                    <tr><td colSpan="10" className="grn-empty">No GRNs found</td></tr>
                   ) : (
-                    visibleGrns.map((g) => (
+                    visibleGrns.map((g) => {
+                      const deliveryDate = g.deliveryDate || g.deliveryInfo?.receivedDate;
+                      return (
                       <tr key={g._id} className="clickable-row" onClick={() => setViewingGrn(g)}>
                         <td className="mono">{g.grnNumber}</td>
                         <td>{g.grnDate ? new Date(g.grnDate).toLocaleDateString('en-IN') : '—'}</td>
+                        <td>{deliveryDate ? new Date(deliveryDate).toLocaleDateString('en-IN') : '—'}</td>
                         <td><GrnStatusBadge status={g.receiptStatus} /></td>
                         <td className="mono">{g.purchaseOrderNumber || '—'}</td>
                         <td className="mono">{g.purchaseRequisitionNumber || '—'}</td>
@@ -145,7 +150,8 @@ function GrnDashboard({ onNavigate, onCreateFromPo }) {
                         <td>{g.locationCode || g.warehouse?.code || '—'}</td>
                         <td>{formatINR(g.grandTotal)}</td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </>
               )}
@@ -160,9 +166,15 @@ function GrnDashboard({ onNavigate, onCreateFromPo }) {
           fields={[
             { label: 'GRN Number', value: viewingGrn.grnNumber },
             {
-              label: 'Date',
+              label: 'GRN Date',
               value: viewingGrn.grnDate
                 ? new Date(viewingGrn.grnDate).toLocaleDateString('en-IN')
+                : '',
+            },
+            {
+              label: 'Delivery Date',
+              value: (viewingGrn.deliveryDate || viewingGrn.deliveryInfo?.receivedDate)
+                ? new Date(viewingGrn.deliveryDate || viewingGrn.deliveryInfo.receivedDate).toLocaleDateString('en-IN')
                 : '',
             },
             {

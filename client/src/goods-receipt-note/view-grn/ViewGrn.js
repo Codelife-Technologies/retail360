@@ -52,7 +52,13 @@ function ViewGrn({ grnId, onBack, onNavigatePO }) {
   const handleSave = async () => {
     try {
       setSaving(true);
-      const res = await grnAPI.update(grnId, { items, deliveryInfo, followUp, receivingOfficer });
+      const res = await grnAPI.update(grnId, {
+        items,
+        deliveryInfo,
+        followUp,
+        receivingOfficer,
+        deliveryDate: deliveryInfo.receivedDate || null,
+      });
       setGrn(res.data);
       setItems(res.data.items);
       setReceivingOfficer(res.data.receivingOfficer || '');
@@ -133,6 +139,14 @@ function ViewGrn({ grnId, onBack, onNavigatePO }) {
           <h3>GRN Header</h3>
           <div className="grn-detail-grid">
             <div><label>GRN Date</label><span>{new Date(grn.grnDate).toLocaleDateString('en-IN')}</span></div>
+            <div>
+              <label>Delivery Date</label>
+              <span>
+                {(grn.deliveryDate || grn.deliveryInfo?.receivedDate)
+                  ? new Date(grn.deliveryDate || grn.deliveryInfo.receivedDate).toLocaleDateString('en-IN')
+                  : '—'}
+              </span>
+            </div>
             <div><label>Time</label><span>{grn.grnTime || '—'}</span></div>
             <div><label>Warehouse</label><span>{grn.warehouse?.name} ({grn.locationCode})</span></div>
             <div><label>Receiving Officer</label>
@@ -186,7 +200,7 @@ function ViewGrn({ grnId, onBack, onNavigatePO }) {
               ['LR Number', 'lrNumber', 'text'],
               ['E-Way Bill', 'ewayBillNumber', 'text'],
               ['Received By', 'receivedBy', 'text'],
-              ['Received Date', 'receivedDate', 'date'],
+              ['Delivery Date', 'receivedDate', 'date'],
             ].map(([label, field, type]) => (
               <div key={field}>
                 <label>{label}</label>

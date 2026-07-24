@@ -142,6 +142,10 @@ async function createGrnFromPO(poId, body = {}) {
     ...body,
     grnNumber: await generateGrnNumber(),
     grnDate: body.grnDate || new Date(),
+    deliveryDate: body.deliveryDate
+      || body.deliveryInfo?.receivedDate
+      || body.deliveryInfo?.deliveryDate
+      || null,
     grnTime: formatGrnTime(),
     receiptStatus: 'draft',
     warehouse: location._id,
@@ -158,6 +162,13 @@ async function createGrnFromPO(poId, body = {}) {
     freightCharges: body.freightCharges ?? po.freightCharges ?? 0,
     packingCharges: body.packingCharges ?? po.packingCharges ?? 0,
   };
+
+  if (draft.deliveryDate) {
+    draft.deliveryInfo = {
+      ...(draft.deliveryInfo || {}),
+      receivedDate: draft.deliveryDate,
+    };
+  }
 
   const errors = validateGrnPayload(draft);
   if (errors.length) throw new Error(errors.join('; '));
@@ -190,13 +201,20 @@ async function updateGrn(id, body, performedBy = 'System') {
 
   const prevStatus = grn.receiptStatus;
   const allowed = [
-    'grnDate', 'receivingOfficer', 'deliveryInfo', 'followUp', 'notes',
+    'grnDate', 'deliveryDate', 'receivingOfficer', 'deliveryInfo', 'followUp', 'notes',
     'allowExcessReceipt', 'freightCharges', 'packingCharges', 'otherCharges',
     'contractNumber', 'projectCode', 'costCenter', 'items', 'receiptStatus',
   ];
   allowed.forEach((key) => {
     if (body[key] !== undefined) grn[key] = body[key];
   });
+
+  if (body.deliveryDate !== undefined) {
+    grn.deliveryInfo = grn.deliveryInfo || {};
+    grn.deliveryInfo.receivedDate = body.deliveryDate || null;
+  } else if (body.deliveryInfo?.receivedDate !== undefined && body.deliveryDate === undefined) {
+    grn.deliveryDate = body.deliveryInfo.receivedDate || null;
+  }
 
   if (body.items) {
     grn.items = await enrichItemsWithStock(body.items, grn.warehouse);

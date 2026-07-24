@@ -1,8 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { documentsAPI } from '../services/documentsApi';
 import { documentIcon, extractList, formatBytes, formatDate } from '../utils/documentsUtils';
+import { useAuth } from '../../context/AuthContext';
 
 function EmployeeDocuments() {
+  const { user: authUser, hasPermission } = useAuth();
+  const currentUserId = String(authUser?.id || authUser?._id || '');
+  const canManageAnyFolder = Boolean(
+    hasPermission?.('admin.all') ||
+      hasPermission?.('documents.full') ||
+      hasPermission?.('documents.manage')
+  );
+
   const [docs, setDocs] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -26,6 +35,7 @@ function EmployeeDocuments() {
   const [selectedFolder, setSelectedFolder] = useState('all'); // 'all' | 'unfiled' | folderId
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderPersonal, setNewFolderPersonal] = useState(false);
+  const [newFolderEmployeeVisible, setNewFolderEmployeeVisible] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
@@ -73,14 +83,20 @@ function EmployeeDocuments() {
     documentsAPI.getSettings().then((r) => setSettings(r.data)).catch(() => {});
   }, []);
 
-  // Keep upload target folder in sync with the selected browse folder
+  // Keep upload target folder in sync with the selected browse folder (writable only)
   useEffect(() => {
     if (selectedFolder === 'all' || selectedFolder === 'unfiled') {
       setMeta((m) => ({ ...m, folderId: '' }));
-    } else {
-      setMeta((m) => ({ ...m, folderId: selectedFolder }));
+      return;
     }
-  }, [selectedFolder]);
+    const selected = folders.find((f) => String(f._id) === String(selectedFolder));
+    if (selected && folderCanManage(selected)) {
+      setMeta((m) => ({ ...m, folderId: selectedFolder }));
+    } else {
+      setMeta((m) => ({ ...m, folderId: '' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFolder, folders]);
 
   const folderNameById = useMemo(() => {
     const map = {};
@@ -168,10 +184,17 @@ function EmployeeDocuments() {
         name,
         sourceScope: 'Manual Upload',
         visibility: newFolderPersonal ? 'Personal' : 'Shared',
+        employeeVisible: newFolderPersonal ? newFolderEmployeeVisible : false,
       });
       setNewFolderName('');
       setNewFolderPersonal(false);
-      setToast(`Folder "${name}" created${newFolderPersonal ? ' (personal)' : ''}`);
+      setNewFolderEmployeeVisible(false);
+      const visibilityLabel = !newFolderPersonal
+        ? ''
+        : newFolderEmployeeVisible
+          ? ' (personal · others can view)'
+          : ' (personal)';
+      setToast(`Folder "${name}" created${visibilityLabel}`);
       await loadFolders();
       if (res.data?._id) {
         setSelectedFolder(String(res.data._id));
@@ -223,6 +246,32 @@ function EmployeeDocuments() {
       setToast(err.response?.data?.error || 'Failed to delete folder');
     }
   };
+
+  const toggleEmployeeVisible = async (folder) => {
+    try {
+      const next = !folder.employeeVisible;
+      await documentsAPI.updateFolder(folder._id, { employeeVisible: next });
+      setToast(next ? 'Other employees can now view this folder' : 'Folder is private again');
+      await loadFolders();
+    } catch (err) {
+      setToast(err.response?.data?.error || 'Failed to update folder visibility');
+    }
+  };
+
+  const folderCanManage = (folder) => {
+    if (folder.canManage !== undefined) return Boolean(folder.canManage);
+    return (
+      canManageAnyFolder ||
+      !folder.createdByUserId ||
+      String(folder.createdByUserId) === currentUserId
+    );
+  };
+
+  const writableFolders = useMemo(
+    () => folders.filter((f) => folderCanManage(f)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [folders, currentUserId, canManageAnyFolder]
+  );
 
   const moveFolderUp = async (index) => {
     if (index <= 0) return;
@@ -303,10 +352,24 @@ function EmployeeDocuments() {
               <input
                 type="checkbox"
                 checked={newFolderPersonal}
-                onChange={(e) => setNewFolderPersonal(e.target.checked)}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setNewFolderPersonal(checked);
+                  if (!checked) setNewFolderEmployeeVisible(false);
+                }}
               />
-              Personal (only you + admin)
+              Personal folder
             </label>
+            {newFolderPersonal ? (
+              <label className="dm-folder-personal-opt">
+                <input
+                  type="checkbox"
+                  checked={newFolderEmployeeVisible}
+                  onChange={(e) => setNewFolderEmployeeVisible(e.target.checked)}
+                />
+                Allow other employees to view
+              </label>
+            ) : null}
           </form>
 
           <nav className="dm-folder-list" aria-label="Document folders">
@@ -333,6 +396,8 @@ function EmployeeDocuments() {
               const isActive = selectedFolder === id;
               const isRenaming = renamingId === id;
               const isPersonal = (folder.visibility || 'Shared') === 'Personal';
+              const employeeVisible = Boolean(folder.employeeVisible);
+              const canManage = folderCanManage(folder);
               return (
                 <div key={id} className={`dm-folder-row${isActive ? ' active' : ''}`}>
                   {isRenaming ? (
@@ -358,19 +423,35 @@ function EmployeeDocuments() {
                         className={`dm-folder-item${isActive ? ' active' : ''}`}
                         onClick={() => selectBrowseFolder(id)}
                       >
-                        <span className="dm-folder-icon">{isPersonal ? '🔒' : '📂'}</span>
+                        <span className="dm-folder-icon">{isPersonal ? (employeeVisible ? '👁' : '🔒') : '📂'}</span>
                         <span className="dm-folder-name" title={folder.description || folder.name}>
                           {folder.name}
-                          {isPersonal ? <span className="dm-badge personal">Personal</span> : null}
+                          {isPersonal ? (
+                            <span className={`dm-badge personal${employeeVisible ? ' visible' : ''}`}>
+                              {employeeVisible ? 'Personal · Viewable' : 'Personal'}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="dm-folder-count">{folder.documentCount || 0}</span>
                       </button>
-                      <div className="dm-folder-actions">
-                        <button type="button" className="dm-folder-action" title="Move up" disabled={index === 0} onClick={() => moveFolderUp(index)}>↑</button>
-                        <button type="button" className="dm-folder-action" title="Move down" disabled={index === folders.length - 1} onClick={() => moveFolderDown(index)}>↓</button>
-                        <button type="button" className="dm-folder-action" title="Rename" onClick={() => startRename(folder)}>✎</button>
-                        <button type="button" className="dm-folder-action-btn danger" title="Delete folder" onClick={() => handleDeleteFolder(folder)}>Delete</button>
-                      </div>
+                      {canManage ? (
+                        <div className="dm-folder-actions">
+                          <button type="button" className="dm-folder-action" title="Move up" disabled={index === 0} onClick={() => moveFolderUp(index)}>↑</button>
+                          <button type="button" className="dm-folder-action" title="Move down" disabled={index === folders.length - 1} onClick={() => moveFolderDown(index)}>↓</button>
+                          <button type="button" className="dm-folder-action" title="Rename" onClick={() => startRename(folder)}>✎</button>
+                          {isPersonal ? (
+                            <button
+                              type="button"
+                              className="dm-folder-action"
+                              title={employeeVisible ? 'Hide from other employees' : 'Allow other employees to view'}
+                              onClick={() => toggleEmployeeVisible(folder)}
+                            >
+                              {employeeVisible ? 'Hide' : 'Share view'}
+                            </button>
+                          ) : null}
+                          <button type="button" className="dm-folder-action-btn danger" title="Delete folder" onClick={() => handleDeleteFolder(folder)}>Delete</button>
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </div>
@@ -379,7 +460,9 @@ function EmployeeDocuments() {
           </nav>
 
           {!folders.length ? (
-            <p className="dm-folder-hint">Create shared or personal folders to sort documents. Personal folders are visible only to you and admins.</p>
+            <p className="dm-folder-hint">
+              Create shared or personal folders. Personal folders can stay private, or allow other employees to view them.
+            </p>
           ) : null}
         </aside>
 
@@ -403,9 +486,14 @@ function EmployeeDocuments() {
                   onChange={(e) => setMeta({ ...meta, folderId: e.target.value })}
                 >
                   <option value="">Unfiled</option>
-                  {folders.map((f) => (
+                  {writableFolders.map((f) => (
                     <option key={f._id} value={f._id}>
-                      {f.name}{(f.visibility || 'Shared') === 'Personal' ? ' (Personal)' : ''}
+                      {f.name}
+                      {(f.visibility || 'Shared') === 'Personal'
+                        ? f.employeeVisible
+                          ? ' (Personal · Viewable)'
+                          : ' (Personal)'
+                        : ''}
                     </option>
                   ))}
                 </select>
@@ -519,7 +607,7 @@ function EmployeeDocuments() {
                           {moveDocId === doc._id ? (
                             <div className="dm-move-menu">
                               <button type="button" className="dm-btn" onClick={() => handleMoveDocument(doc._id, null)}>Unfiled</button>
-                              {folders.map((f) => (
+                              {writableFolders.map((f) => (
                                 <button
                                   key={f._id}
                                   type="button"
@@ -527,7 +615,12 @@ function EmployeeDocuments() {
                                   disabled={String(doc.folderId || '') === String(f._id)}
                                   onClick={() => handleMoveDocument(doc._id, f._id)}
                                 >
-                                  {f.name}{(f.visibility || 'Shared') === 'Personal' ? ' (Personal)' : ''}
+                                  {f.name}
+                                  {(f.visibility || 'Shared') === 'Personal'
+                                    ? f.employeeVisible
+                                      ? ' (Personal · Viewable)'
+                                      : ' (Personal)'
+                                    : ''}
                                 </button>
                               ))}
                             </div>

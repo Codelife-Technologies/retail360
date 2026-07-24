@@ -3,7 +3,6 @@ import { purchaseOrdersAPI } from '../services/api';
 import DetailModal from './DetailModal';
 import { formatINR } from '../utils/purchaseOrderCalculations';
 import { getCurrentMonthDateRange } from '../utils/monthDateRange';
-import { normalizePoStatus, PO_STATUS_OPTIONS } from '../types/purchaseOrderTypes';
 import './PurchaseOrderRecord.css';
 
 function resolvePoLineSku(item) {
@@ -21,11 +20,17 @@ function getPurchaseRequisitionNumber(po) {
   return po.purchaseRequisite?.prNumber || po.purchaseRequisitionNumber || '—';
 }
 
+function resolveVendorName(po) {
+  if (!po) return '—';
+  if (po.needsVendorAssignment) return 'Assign vendor';
+  return po.supplier?.name || '—';
+}
+
 function PurchaseOrderRecord() {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [vendorFilter, setVendorFilter] = useState('');
   const [dateFrom, setDateFrom] = useState(() => getCurrentMonthDateRange().fromDate);
   const [dateTo, setDateTo] = useState(() => getCurrentMonthDateRange().toDate);
   const [viewingPO, setViewingPO] = useState(null);
@@ -40,6 +45,7 @@ function PurchaseOrderRecord() {
       const params = {};
       if (dateFrom) params.fromDate = dateFrom;
       if (dateTo) params.toDate = dateTo;
+      params.includeFullyReceived = true;
       const response = await purchaseOrdersAPI.getAll(params);
       const data = Array.isArray(response.data)
         ? response.data
@@ -66,11 +72,9 @@ function PurchaseOrderRecord() {
           po,
           poNumber: po.poNumber || '—',
           prNumber: getPurchaseRequisitionNumber(po),
-          vendor: po.needsVendorAssignment
-            ? 'Assign vendor'
-            : po.supplier?.name || '—',
+          vendor: resolveVendorName(po),
+          vendorId: po.supplier?._id || po.supplier || '',
           orderDate: po.orderDate,
-          status: normalizePoStatus(po.status),
           sku: resolvePoLineSku(item) || '—',
           title: resolvePoLineTitle(item) || '—',
           quantity: qty,
@@ -91,11 +95,27 @@ function PurchaseOrderRecord() {
     });
   }, [purchaseOrders]);
 
+  const vendorOptions = useMemo(() => {
+    const byKey = new Map();
+    purchaseOrders.forEach((po) => {
+      const name = resolveVendorName(po);
+      const id = String(po.supplier?._id || po.supplier || name);
+      if (!name || name === '—') return;
+      if (!byKey.has(id)) byKey.set(id, name);
+    });
+    return [...byKey.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [purchaseOrders]);
+
   const filteredItems = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return orderedItems.filter((row) => {
-      if (statusFilter && String(row.status).toLowerCase() !== statusFilter.toLowerCase()) {
-        return false;
+      if (vendorFilter) {
+        const rowVendorKey = String(row.vendorId || row.vendor);
+        if (rowVendorKey !== vendorFilter && row.vendor !== vendorFilter) {
+          return false;
+        }
       }
       if (!q) return true;
       return (
@@ -106,7 +126,7 @@ function PurchaseOrderRecord() {
         String(row.vendor).toLowerCase().includes(q)
       );
     });
-  }, [orderedItems, searchTerm, statusFilter]);
+  }, [orderedItems, searchTerm, vendorFilter]);
 
   const summary = useMemo(
     () => ({
@@ -116,8 +136,6 @@ function PurchaseOrderRecord() {
     }),
     [filteredItems]
   );
-
-  const statusOptions = PO_STATUS_OPTIONS.map((opt) => opt.value);
 
   return (
     <div className="purchase-order-record">
@@ -141,14 +159,15 @@ function PurchaseOrderRecord() {
           autoComplete="off"
         />
         <select
-          className="por-status-filter"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          className="por-vendor-filter"
+          value={vendorFilter}
+          onChange={(e) => setVendorFilter(e.target.value)}
+          aria-label="Filter by vendor"
         >
-          <option value="">All statuses</option>
-          {statusOptions.map((status) => (
-            <option key={status} value={status}>
-              {status}
+          <option value="">All vendors</option>
+          {vendorOptions.map((vendor) => (
+            <option key={vendor.id} value={vendor.id}>
+              {vendor.name}
             </option>
           ))}
         </select>
@@ -196,7 +215,6 @@ function PurchaseOrderRecord() {
                 <th>PR Number</th>
                 <th>Vendor</th>
                 <th>Order Date</th>
-                <th>Status</th>
                 <th>SKU</th>
                 <th>Title</th>
                 <th>UOM</th>
@@ -210,7 +228,7 @@ function PurchaseOrderRecord() {
             <tbody>
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan="13" className="por-empty">
+                  <td colSpan="12" className="por-empty">
                     No ordered items found
                   </td>
                 </tr>
@@ -228,11 +246,6 @@ function PurchaseOrderRecord() {
                       {row.orderDate
                         ? new Date(row.orderDate).toLocaleDateString()
                         : '—'}
-                    </td>
-                    <td>
-                      <span className={`status-badge status-${row.status}`}>
-                        {row.status}
-                      </span>
                     </td>
                     <td className="por-sku">{row.sku}</td>
                     <td className="por-title" title={row.title}>
@@ -260,9 +273,7 @@ function PurchaseOrderRecord() {
             { label: 'PR Number', value: getPurchaseRequisitionNumber(viewingPO) },
             {
               label: 'Vendor',
-              value: viewingPO.needsVendorAssignment
-                ? 'Assign vendor'
-                : viewingPO.supplier?.name,
+              value: resolveVendorName(viewingPO),
             },
             {
               label: 'Order Date',
@@ -276,7 +287,6 @@ function PurchaseOrderRecord() {
                 ? new Date(viewingPO.expectedDeliveryDate).toLocaleDateString()
                 : '',
             },
-            { label: 'Status', value: normalizePoStatus(viewingPO.status) },
             { label: 'Grand Total', value: formatINR(viewingPO.total) },
             { label: 'Notes', value: viewingPO.notes, full: true },
           ]}

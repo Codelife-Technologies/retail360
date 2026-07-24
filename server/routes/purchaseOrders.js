@@ -220,10 +220,45 @@ function expandPoStatusFilter(status) {
   };
 }
 
+/** Exclude POs where every line is fully received (GRN completed). */
+function applyExcludeFullyReceivedFilter(query) {
+  const clause = {
+    $expr: {
+      $not: {
+        $and: [
+          { $gt: [{ $size: { $ifNull: ['$items', []] } }, 0] },
+          {
+            $allElementsTrue: {
+              $map: {
+                input: { $ifNull: ['$items', []] },
+                as: 'i',
+                in: {
+                  $gte: [
+                    { $ifNull: ['$$i.receivedQuantity', 0] },
+                    '$$i.quantity',
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      },
+    },
+  };
+  if (query.$and) {
+    query.$and.push(clause);
+  } else if (query.$or) {
+    query.$and = [{ $or: query.$or }, clause];
+    delete query.$or;
+  } else {
+    Object.assign(query, clause);
+  }
+}
+
 // GET all purchase orders (with pagination)
 router.get('/', async (req, res) => {
   try {
-    const { status, supplier, search, fromDate, toDate, page, limit } = req.query;
+    const { status, supplier, search, fromDate, toDate, page, limit, includeFullyReceived } = req.query;
     const query = {};
     
     if (status) {
@@ -239,6 +274,12 @@ router.get('/', async (req, res) => {
     }
 
     applyDateRangeFilter(query, 'orderDate', fromDate, toDate);
+
+    const includeAll = String(includeFullyReceived || '').toLowerCase() === 'true'
+      || includeFullyReceived === '1';
+    if (!includeAll) {
+      applyExcludeFullyReceivedFilter(query);
+    }
     
     if (page || limit) {
       const result = await paginate(PurchaseOrder, query, {

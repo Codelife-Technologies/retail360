@@ -35,41 +35,10 @@ import { isPoEligibleForGrn } from '../goods-receipt-note/types/grn.types';
 import PoProductVendorAssign from './PoProductVendorAssign';
 import PoShareActions from './PoShareActions';
 import ProductSearchPicker from './ProductSearchPicker';
-import { truncateProductName } from '../utils/productDisplayUtils';
+import { truncateProductName, PRODUCT_IMAGE_PLACEHOLDER, getProductThumbnail } from '../utils/productDisplayUtils';
 import { getCurrentMonthDateRange } from '../utils/monthDateRange';
 import './PurchaseOrders.css';
 import './PoShareActions.css';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-const UPLOADS_BASE = API_BASE_URL.replace('/api', '');
-
-const PRODUCT_IMAGE_PLACEHOLDER =
-  'data:image/svg+xml,' +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 50 50">
-      <rect width="50" height="50" fill="#e5e7eb" rx="8"/>
-      <path d="M16 32l6-8 5 6 4-5 9 11H16z" fill="#9ca3af"/>
-      <circle cx="20" cy="19" r="3" fill="#9ca3af"/>
-    </svg>`
-  );
-
-function resolveProductImageUrl(image) {
-  if (!image) return null;
-  if (image.startsWith('http://') || image.startsWith('https://')) {
-    return image;
-  }
-  if (image.startsWith('products/')) {
-    return `${UPLOADS_BASE}/uploads/${image}`;
-  }
-  return image;
-}
-
-function getProductThumbnail(product) {
-  if (!product) return null;
-  const images = product.images || [];
-  const first = images.find((img) => img && img.trim() !== '');
-  return first ? resolveProductImageUrl(first) : null;
-}
 
 function getPurchaseRequisitionNumber(po) {
   if (!po) return '—';
@@ -928,7 +897,6 @@ function PurchaseOrders({ onNavigate }) {
     const html = generatePurchaseOrderPrintHtml(po, products, {
       getProductThumbnail,
       productImagePlaceholder: PRODUCT_IMAGE_PLACEHOLDER,
-      uploadsBase: UPLOADS_BASE,
     });
     openPurchaseOrderPrintWindow(html);
   };

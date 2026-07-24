@@ -18,6 +18,9 @@ export const documentsAPI = {
   reorderFolders: (orderedIds, sourceScope) =>
     api.put('/documents/folders/reorder', { orderedIds, sourceScope }),
   moveToFolder: (id, folderId) => api.post(`/documents/${id}/move`, { folderId }),
+  setProductDefault: (id, data) => api.post(`/documents/${id}/set-product-default`, data || {}),
+  setProductCatalogDefault: (productId, payload) =>
+    api.post(`/products/${productId}/images/default`, payload),
   upload: (formData) =>
     api.post('/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

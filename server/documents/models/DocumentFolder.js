@@ -27,12 +27,19 @@ const folderSchema = new mongoose.Schema(
     },
     /**
      * Shared = visible to everyone with document access.
-     * Personal = visible only to the owning employee and documents admins.
+     * Personal = owned by one employee (unique name per owner).
+     * When Personal + employeeVisible, other employees can view the folder
+     * and its documents; only the owner (and admins) can modify or file into it.
      */
     visibility: {
       type: String,
       enum: FOLDER_VISIBILITIES,
       default: 'Shared',
+    },
+    /** When true on a Personal folder, all employees with docs access can view it. */
+    employeeVisible: {
+      type: Boolean,
+      default: false,
     },
     /**
      * custom = user-created

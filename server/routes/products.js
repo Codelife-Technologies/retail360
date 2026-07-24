@@ -944,6 +944,51 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST upload images for a product
+// POST set default product image (first image used in product master / thumbnails)
+router.post('/:id/images/default', productEditAccess, async (req, res) => {
+  try {
+    const {
+      setProductDefaultImageByIndex,
+      setProductDefaultImagePath,
+      setProductDefaultFromDocument,
+    } = require('../utils/productDefaultImage');
+    const Document = require('../documents/models/Document');
+
+    const { index, imagePath, documentId } = req.body || {};
+    let product;
+
+    if (documentId) {
+      const doc = await Document.findById(documentId);
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+      product = await setProductDefaultFromDocument(doc);
+    } else if (index !== undefined && index !== null && index !== '') {
+      product = await setProductDefaultImageByIndex(req.params.id, index);
+    } else if (imagePath) {
+      product = await setProductDefaultImagePath(req.params.id, imagePath);
+    } else {
+      return res.status(400).json({ error: 'Provide index, imagePath, or documentId' });
+    }
+
+    if (String(product._id) !== String(req.params.id) && !documentId) {
+      return res.status(400).json({ error: 'Product mismatch' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Default product image updated',
+      productId: product._id,
+      images: product.images,
+      defaultImage: product.images?.[0] || null,
+    });
+  } catch (error) {
+    logger.backend.error('Error setting default product image', {
+      error: error.message,
+      stack: error.stack,
+    });
+    res.status(400).json({ error: error.message });
+  }
+});
+
 router.post('/:id/images', productEditAccess, async (req, res) => {
   try {
     const productId = req.params.id;
