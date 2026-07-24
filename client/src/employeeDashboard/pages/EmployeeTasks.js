@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { employeeTasksAPI } from '../services/employeeDashboardApi';
 import EmployeeContextGate, { EmployeeWelcome } from '../components/EmployeeContextGate';
 import HrStatusBadge from '../../hr/components/HrStatusBadge';
-import { formatDate, toInputDate, taskRowClass, groupTasksByIssueDate, groupTasksForTodayView } from '../../hr/utils/hrUtils';
+import { formatDate, toInputDate, groupTasksByIssueDate, groupTasksForTodayView } from '../../hr/utils/hrUtils';
 
 const STATUS_OPTIONS = ['Pending', 'In Progress', 'On Hold', 'Backlog', 'Completed', 'Cancelled'];
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'];
@@ -375,10 +375,7 @@ function EmployeeTasksContent() {
               ) : (
                 taskGroups.flatMap((group) =>
                   group.tasks.map((task, index) => (
-                    <tr
-                      key={task._id}
-                      className={taskRowClass(task.status)}
-                    >
+                    <tr key={task._id}>
                       {index === 0 ? (
                         <td
                           className={`hr-task-issue-date${group.dateKey === 'backlog' ? ' hr-task-issue-backlog' : ''}`}

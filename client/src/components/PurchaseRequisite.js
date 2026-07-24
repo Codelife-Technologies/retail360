@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { purchaseRequisitesAPI, productsAPI, locationsAPI, suppliersAPI } from '../services/api';
+import { purchaseRequisitesAPI, productsAPI, suppliersAPI } from '../services/api';
 import { getDesignatedSupplierName } from '../utils/purchaseOrderVendorSplit';
 import DetailModal from './DetailModal';
 import PoProductVendorAssign from './PoProductVendorAssign';
 import PoShareActions from './PoShareActions';
-import ProductSearchPicker from './ProductSearchPicker';
 import { truncateProductName } from '../utils/productDisplayUtils';
 import { getCurrentMonthDateRange } from '../utils/monthDateRange';
 import './PurchaseRequisite.css';
@@ -23,35 +22,25 @@ const isEditablePR = (pr) => ['draft', 'pending'].includes(pr?.status);
 const isReadOnlyPR = (pr) => ['po_created', 'closed'].includes(pr?.status);
 const canApprovePR = (pr) => isEditablePR(pr);
 
-const emptyAddItemForm = () => ({
-  product: '',
-  location: '',
-  requestedQty: 1,
-});
-
 function PurchaseRequisite({ onNavigate }) {
   const [requisites, setRequisites] = useState([]);
   const [products, setProducts] = useState([]);
-  const [locations, setLocations] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('draft,pending');
   const [dateFrom, setDateFrom] = useState(() => getCurrentMonthDateRange().fromDate);
   const [dateTo, setDateTo] = useState(() => getCurrentMonthDateRange().toDate);
   const [viewingPR, setViewingPR] = useState(null);
   const [editingPR, setEditingPR] = useState(null);
   const [editItems, setEditItems] = useState([]);
-  const [addingToPR, setAddingToPR] = useState(null);
-  const [addItemForm, setAddItemForm] = useState(emptyAddItemForm());
-  const [addingItems, setAddingItems] = useState(false);
   const [poGeneratedModal, setPoGeneratedModal] = useState(null);
   const [assigningVendorForPo, setAssigningVendorForPo] = useState(null);
   const [showLinkedPos, setShowLinkedPos] = useState(false);
 
   useEffect(() => {
     fetchRequisites();
-    fetchProductsAndLocations();
+    fetchProducts();
     fetchSuppliers();
   }, []);
 
@@ -91,20 +80,14 @@ function PurchaseRequisite({ onNavigate }) {
     }
   };
 
-  const fetchProductsAndLocations = async () => {
+  const fetchProducts = async () => {
     try {
-      const [productsRes, locationsRes] = await Promise.all([
-        productsAPI.getAll(),
-        locationsAPI.getAll({ isActive: 'true' }),
-      ]);
+      const productsRes = await productsAPI.getAll();
       setProducts(productsRes.data?.data || productsRes.data || []);
-      setLocations(locationsRes.data || []);
     } catch (error) {
-      console.error('Error loading products/locations:', error);
+      console.error('Error loading products:', error);
     }
   };
-
-  const isPendingPR = (pr) => pr?.status === 'pending';
 
   const refreshViewingPR = (updated) => {
     if (viewingPR?._id === updated._id) {
@@ -133,52 +116,6 @@ function PurchaseRequisite({ onNavigate }) {
     return [...new Set(names)];
   };
 
-  const openAddItemsModal = (pr) => {
-    setAddingToPR(pr);
-    setAddItemForm(emptyAddItemForm());
-  };
-
-  const handleAddProductToPR = async (e) => {
-    e.preventDefault();
-    if (!addingToPR) return;
-    if (!addItemForm.product || !addItemForm.location) {
-      alert('Select both product and location');
-      return;
-    }
-
-    try {
-      setAddingItems(true);
-      const response = await purchaseRequisitesAPI.addItems(addingToPR._id, {
-        manualItems: [
-          {
-            productId: addItemForm.product,
-            locationId: addItemForm.location,
-            requestedQty: addItemForm.requestedQty,
-          },
-        ],
-      });
-      setAddingToPR(null);
-      setAddItemForm(emptyAddItemForm());
-      fetchRequisites();
-      refreshViewingPR(response.data);
-      alert(`Product added to ${response.data.prNumber}`);
-    } catch (error) {
-      alert(error.response?.data?.error || 'Failed to add product');
-    } finally {
-      setAddingItems(false);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this purchase requisition?')) return;
-    try {
-      await purchaseRequisitesAPI.delete(id);
-      fetchRequisites();
-    } catch (error) {
-      alert(error.response?.data?.error || 'Failed to delete purchase requisition');
-    }
-  };
-
   const handleApprove = async (pr) => {
     const pendingVendorNote =
       (pr.items || []).some((line) => !getLineVendorName(line) || getLineVendorName(line) === '—')
@@ -187,7 +124,7 @@ function PurchaseRequisite({ onNavigate }) {
 
     if (
       !window.confirm(
-        `Confirm and approve ${pr.prNumber}?\n\nVendor-wise purchase orders will be created automatically.${pendingVendorNote}\n\nEditing and deleting will be locked after approval.`
+        `Confirm and approve ${pr.prNumber}?\n\nVendor-wise purchase orders will be created automatically.${pendingVendorNote}\n\nEditing will be locked after approval.`
       )
     ) {
       return;
@@ -333,9 +270,6 @@ function PurchaseRequisite({ onNavigate }) {
       <div className="pr-header">
         <div>
           <h1>Purchase Requisition</h1>
-          <p className="pr-subtitle">
-            Internal stock requests — on approval, purchase orders are created automatically per vendor.
-          </p>
         </div>
         <div className="page-header-actions">
           <button className="btn-secondary" onClick={fetchRequisites} disabled={loading}>
@@ -352,13 +286,9 @@ function PurchaseRequisite({ onNavigate }) {
           onChange={(e) => setSearchTerm(e.target.value)}
         />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All statuses</option>
+          <option value="draft,pending">Active (Draft &amp; Pending)</option>
           <option value="draft">Draft</option>
           <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="po_created">PO Created</option>
-          <option value="closed">Closed</option>
-          <option value="cancelled">Cancelled</option>
         </select>
         <label className="pr-date-filter">
           <span>From</span>
@@ -403,7 +333,7 @@ function PurchaseRequisite({ onNavigate }) {
               {requisites.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="pr-no-data">
-                    No purchase requisitions yet. Create one from the Replenish Report when stock needs reordering.
+                    No active purchase requisitions. Create one from the Replenish Report when stock needs reordering.
                   </td>
                 </tr>
               ) : (
@@ -432,11 +362,6 @@ function PurchaseRequisite({ onNavigate }) {
                     <td className="text-center font-semibold">{totalRequestedQty(pr)}</td>
                     <td>{pr.createdAt ? new Date(pr.createdAt).toLocaleDateString() : '—'}</td>
                     <td onClick={(e) => e.stopPropagation()} className="pr-actions-cell">
-                      {isPendingPR(pr) && (
-                        <button className="btn-add" onClick={() => openAddItemsModal(pr)}>
-                          + Add
-                        </button>
-                      )}
                       {canApprovePR(pr) && (
                         <>
                           <button className="btn-edit" onClick={() => openEditModal(pr)}>
@@ -444,9 +369,6 @@ function PurchaseRequisite({ onNavigate }) {
                           </button>
                           <button className="btn-approve" onClick={() => handleApprove(pr)}>
                             Approve &amp; Create POs
-                          </button>
-                          <button className="btn-delete" onClick={() => handleDelete(pr._id)}>
-                            Delete
                           </button>
                         </>
                       )}
@@ -482,15 +404,6 @@ function PurchaseRequisite({ onNavigate }) {
                   const pr = viewingPR;
                   setViewingPR(null);
                   openEditModal(pr);
-                }
-              : undefined
-          }
-          onDelete={
-            isEditablePR(viewingPR)
-              ? () => {
-                  const id = viewingPR._id;
-                  setViewingPR(null);
-                  handleDelete(id);
                 }
               : undefined
           }
@@ -542,25 +455,11 @@ function PurchaseRequisite({ onNavigate }) {
                 )}
               </div>
             )}
-            {isEditablePR(viewingPR) && (
+            {isEditablePR(viewingPR) && canApprovePR(viewingPR) && (
               <div className="pr-detail-actions">
-                {isPendingPR(viewingPR) && (
-                  <button
-                    className="btn-add"
-                    onClick={() => {
-                      const pr = viewingPR;
-                      setViewingPR(null);
-                      openAddItemsModal(pr);
-                    }}
-                  >
-                    + Add Products
-                  </button>
-                )}
-                {canApprovePR(viewingPR) && (
-                  <button className="btn-approve" onClick={() => handleApprove(viewingPR)}>
-                    Approve &amp; Create POs
-                  </button>
-                )}
+                <button className="btn-approve" onClick={() => handleApprove(viewingPR)}>
+                  Approve &amp; Create POs
+                </button>
               </div>
             )}
             {isReadOnlyPR(viewingPR) && viewingPR.purchaseOrderNumber && (
@@ -578,11 +477,6 @@ function PurchaseRequisite({ onNavigate }) {
         <div className="modal-overlay" onClick={() => setEditingPR(null)}>
           <div className="modal-content pr-edit-modal" onClick={(e) => e.stopPropagation()}>
             <h2>Edit {editingPR.prNumber}</h2>
-            {isPendingPR(editingPR) && (
-              <p className="pr-edit-hint">
-                This request is pending — use <strong>+ Add</strong> to add more products to the same PR.
-              </p>
-            )}
             <table className="pr-items-table">
               <thead>
                 <tr>
@@ -622,19 +516,6 @@ function PurchaseRequisite({ onNavigate }) {
               </tbody>
             </table>
             <div className="form-actions">
-              {isPendingPR(editingPR) && (
-                <button
-                  type="button"
-                  className="btn-add"
-                  onClick={() => {
-                    const pr = editingPR;
-                    setEditingPR(null);
-                    openAddItemsModal(pr);
-                  }}
-                >
-                  + Add Products
-                </button>
-              )}
               <button type="button" onClick={() => setEditingPR(null)}>
                 Cancel
               </button>
@@ -646,70 +527,6 @@ function PurchaseRequisite({ onNavigate }) {
         </div>
       )}
 
-      {addingToPR && (
-        <div className="modal-overlay" onClick={() => setAddingToPR(null)}>
-          <div className="modal-content pr-add-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Add Product to {addingToPR.prNumber}</h2>
-            <p className="pr-edit-hint">
-              Same product + location already on this PR will have quantities combined.
-            </p>
-            <form onSubmit={handleAddProductToPR}>
-              <div className="form-group">
-                <label>Product *</label>
-                <ProductSearchPicker
-                  products={products}
-                  value={addItemForm.product}
-                  onChange={(productId) =>
-                    setAddItemForm((prev) => ({ ...prev, product: productId }))
-                  }
-                  placeholder="Type title or SKU…"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Location *</label>
-                <select
-                  value={addItemForm.location}
-                  onChange={(e) =>
-                    setAddItemForm((prev) => ({ ...prev, location: e.target.value }))
-                  }
-                  required
-                >
-                  <option value="">Select location</option>
-                  {locations.map((location) => (
-                    <option key={location._id} value={location._id}>
-                      {location.name} ({location.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Requested Quantity *</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={addItemForm.requestedQty}
-                  onChange={(e) =>
-                    setAddItemForm((prev) => ({
-                      ...prev,
-                      requestedQty: parseInt(e.target.value, 10) || 1,
-                    }))
-                  }
-                  required
-                />
-              </div>
-              <div className="form-actions">
-                <button type="button" onClick={() => setAddingToPR(null)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary" disabled={addingItems}>
-                  {addingItems ? 'Adding…' : 'Add to Request'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {poGeneratedModal && (
         <div className="modal-overlay" onClick={() => setPoGeneratedModal(null)}>
           <div className="modal-content pr-po-generated-modal" onClick={(e) => e.stopPropagation()}>

@@ -249,6 +249,32 @@
   color: #065f46;
 }
 
+.status-partially_received {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.status-fully_received {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-defective {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-upcoming,
+.status-draft {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.status-pending_inspection {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .status-partial {
   background: #f3e8ff;
   color: #6B3894;

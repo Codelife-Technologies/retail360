@@ -5,6 +5,7 @@ const GRN_STATUSES = [
   'pending_inspection',
   'partially_received',
   'fully_received',
+  'defective',
   'approved',
   'closed',
   'cancelled',
@@ -47,6 +48,9 @@ function getPoLinePendingQty(line) {
 
 function isPoEligibleForGrn(po) {
   if (!po) return false;
+  if (po.needsVendorAssignment) return false;
+  const supplierId = po.supplier?._id || po.supplier;
+  if (!supplierId) return false;
   const status = normalizePoStatus(po.status);
   if (PO_BLOCKED_FOR_GRN.includes(status)) return false;
   if (!GRN_ELIGIBLE_PO_STATUSES.includes(status)) return false;
@@ -150,7 +154,10 @@ function deriveReceiptStatus(items) {
   const totalOrdered = items.reduce((s, i) => s + (i.orderedQty || 0), 0);
   const totalAccepted = items.reduce((s, i) => s + (i.acceptedQty || 0), 0);
   const totalReceived = items.reduce((s, i) => s + (i.receivedQty || 0), 0);
+  const totalRejected = items.reduce((s, i) => s + (i.rejectedQty || 0), 0);
 
+  // Any defective / rejected quantity marks the GRN as defective
+  if (totalRejected > 0) return 'defective';
   if (totalAccepted >= totalOrdered && totalOrdered > 0) return 'fully_received';
   if (totalReceived > 0 || totalAccepted > 0) return 'partially_received';
   return 'draft';

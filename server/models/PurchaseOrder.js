@@ -99,6 +99,16 @@ const purchaseOrderSchema = new mongoose.Schema({
       return 'pending';
     },
   },
+  paymentStatus: {
+    type: String,
+    enum: ['paid', 'unpaid'],
+    default: 'unpaid',
+    set: function normalizePurchaseOrderPaymentStatus(value) {
+      const raw = String(value || 'unpaid').trim().toLowerCase();
+      if (raw === 'paid') return 'paid';
+      return 'unpaid';
+    },
+  },
   revisionNumber: { type: String, trim: true, default: '0' },
   currency: { type: String, trim: true, default: 'INR' },
   purchaseRequisitionNumber: { type: String, trim: true },
@@ -140,6 +150,7 @@ const purchaseOrderSchema = new mongoose.Schema({
 purchaseOrderSchema.pre('validate', function validateSupplier(next) {
   // Coerce legacy statuses (completed, received, etc.) before enum validation
   this.set('status', this.get('status') || 'pending');
+  this.set('paymentStatus', this.get('paymentStatus') || 'unpaid');
   if (!this.supplier && !this.needsVendorAssignment) {
     this.invalidate('supplier', 'Supplier is required unless vendor assignment is pending');
   }
@@ -188,6 +199,7 @@ purchaseOrderSchema.pre('save', function(next) {
 purchaseOrderSchema.index({ poNumber: 1 });
 purchaseOrderSchema.index({ supplier: 1 });
 purchaseOrderSchema.index({ status: 1 });
+purchaseOrderSchema.index({ paymentStatus: 1 });
 purchaseOrderSchema.index({ orderDate: -1 });
 
 module.exports = mongoose.model('PurchaseOrder', purchaseOrderSchema);

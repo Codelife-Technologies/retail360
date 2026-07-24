@@ -563,6 +563,7 @@ function SalesDashboard({ onSelectReport }) {
                 ? 'Loading…'
                 : `${overview.today.totalSales} unique orders · ${overview.today.totalOrderItems || overview.today.totalSales} rows · ${overview.today.totalItemsSold} units`
             }
+            highlight
             onClick={() => handlePeriodChange('day')}
             title="View today’s sales"
           />
@@ -574,6 +575,7 @@ function SalesDashboard({ onSelectReport }) {
                 ? 'Loading…'
                 : `${overview.thisWeek.totalSales} unique orders · ${overview.thisWeek.totalOrderItems || overview.thisWeek.totalSales} rows · ${overview.thisWeek.totalItemsSold} units`
             }
+            highlight
             onClick={() => handlePeriodChange('week')}
             title="View this week’s sales"
           />
@@ -585,6 +587,7 @@ function SalesDashboard({ onSelectReport }) {
                 ? 'Loading…'
                 : `${overview.thisMonth.totalSales} unique orders · ${overview.thisMonth.totalOrderItems || overview.thisMonth.totalSales} rows · ${overview.thisMonth.totalItemsSold} units`
             }
+            highlight
             onClick={() => handlePeriodChange('month')}
             title="View this month’s sales"
           />

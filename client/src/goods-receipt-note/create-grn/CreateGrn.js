@@ -4,12 +4,6 @@ import { purchaseOrdersAPI, locationsAPI } from '../../services/api';
 import { isPoEligibleForGrn, emptyDeliveryInfo } from '../types/grn.types';
 import GrnPoDetailPanel, { buildDraftLinesFromPo } from '../components/GrnPoDetailPanel';
 
-function normalizePoList(responseData) {
-  if (Array.isArray(responseData)) return responseData;
-  if (Array.isArray(responseData?.data)) return responseData.data;
-  return [];
-}
-
 function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -19,8 +13,6 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
   const [deliveryInfo, setDeliveryInfo] = useState(emptyDeliveryInfo());
   const [warehouse, setWarehouse] = useState('');
   const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [receivingOfficer, setReceivingOfficer] = useState('');
-  const [createdByName, setCreatedByName] = useState('');
   const [loading, setLoading] = useState(false);
   const [poLoading, setPoLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -46,18 +38,26 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
   const loadPoList = async () => {
     try {
       setLoadError('');
-      const [poRes, locRes] = await Promise.all([
-        purchaseOrdersAPI.getAll(),
+      const [dashRes, locRes] = await Promise.all([
+        grnAPI.getDashboard(),
         locationsAPI.getAll({ isActive: 'true' }),
       ]);
-      const allPos = normalizePoList(poRes.data);
-      let eligible = allPos.filter(isPoEligibleForGrn);
+      let eligible = dashRes.data?.upcomingPos || [];
 
-      if (preselectedPoId && !eligible.some((p) => p._id === preselectedPoId)) {
+      if (preselectedPoId && !eligible.some((p) => String(p._id) === String(preselectedPoId))) {
         try {
           const single = await purchaseOrdersAPI.getById(preselectedPoId);
           if (single.data && isPoEligibleForGrn(single.data)) {
-            eligible = [single.data, ...eligible];
+            eligible = [
+              {
+                _id: single.data._id,
+                poNumber: single.data.poNumber,
+                supplier: single.data.supplier,
+                supplierName: single.data.supplier?.name,
+                status: single.data.status,
+              },
+              ...eligible,
+            ];
           }
         } catch {
           /* ignore */
@@ -93,16 +93,31 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
   const updateLineItem = (index, field, value) => {
     setLineItems((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], [field]: parseFloat(value) || 0 };
+      const current = { ...next[index] };
+      const numeric = Math.max(0, parseFloat(value) || 0);
+
+      if (field === 'receivedQty') {
+        current.receivedQty = numeric;
+        const defective = Math.min(Number(current.rejectedQty) || 0, numeric);
+        current.rejectedQty = defective;
+        current.acceptedQty = Math.max(0, numeric - defective);
+      } else if (field === 'rejectedQty') {
+        const received = Number(current.receivedQty) || 0;
+        const defective = Math.min(numeric, received);
+        current.rejectedQty = defective;
+        current.acceptedQty = Math.max(0, received - defective);
+      } else if (field === 'acceptedQty') {
+        const received = Number(current.receivedQty) || 0;
+        const accepted = Math.min(numeric, received);
+        current.acceptedQty = accepted;
+        current.rejectedQty = Math.max(0, received - accepted);
+      } else {
+        current[field] = numeric;
+      }
+
+      next[index] = current;
       return next;
     });
-  };
-
-  const updateDelivery = (field, value) => {
-    setDeliveryInfo((prev) => ({ ...prev, [field]: value }));
-    if (field === 'receivedDate') {
-      setDeliveryDate(value || '');
-    }
   };
 
   const buildPayload = () => {
@@ -119,7 +134,8 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
       rejectedQty: line.rejectedQty,
       unitCost: line.unitCost,
       taxPercent: line.taxPercent,
-      inspectionStatus: 'pending',
+      inspectionStatus: (Number(line.rejectedQty) || 0) > 0 ? 'fail' : 'pass',
+      defects: (Number(line.rejectedQty) || 0) > 0 ? 'Defective product' : '',
     }));
 
     const delivery = {
@@ -129,8 +145,6 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
 
     return {
       warehouse: warehouse || undefined,
-      receivingOfficer,
-      createdByName,
       deliveryDate: deliveryDate || undefined,
       deliveryInfo: delivery,
       items: payloadItems,
@@ -173,7 +187,7 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
       const grn = await createGrn();
       if (!grn?._id) return;
       await grnAPI.submitInspection(grn._id, {
-        performedBy: receivingOfficer || createdByName || 'User',
+        performedBy: 'User',
       });
       onCreated(grn._id, { confirmed: true });
     } catch (err) {
@@ -188,7 +202,6 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
       <div className="grn-page-header">
         <div>
           <h2>Create Goods Receipt Note</h2>
-          <p>Select a PO to load full order details — edit receipt quantities, then save as draft or confirm receipt</p>
         </div>
         <button type="button" className="btn-secondary" onClick={onCancel}>Back</button>
       </div>
@@ -204,13 +217,18 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
                 <option value="">Select PO</option>
                 {purchaseOrders.map((po) => (
                   <option key={po._id} value={po._id}>
-                    {po.poNumber} — {po.supplier?.name || 'Supplier'} ({po.status})
+                    {po.poNumber} — {po.supplierName || po.supplier?.name || 'Supplier'}
+                    {po.receiptStage === 'partially_received'
+                      ? ' (Partially received)'
+                      : po.receiptStage === 'defective'
+                        ? ' (Defective)'
+                        : ''}
                   </option>
                 ))}
               </select>
               {purchaseOrders.length === 0 && !loadError && (
                 <p className="grn-field-hint">
-                  No eligible POs found. Create a PO with pending items (draft, pending, or approved).
+                  No open POs found. Upcoming and partially received POs with pending items are listed here.
                 </p>
               )}
             </div>
@@ -237,14 +255,6 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
                 }}
               />
             </div>
-            <div className="form-group">
-              <label>Receiving Officer</label>
-              <input value={receivingOfficer} onChange={(e) => setReceivingOfficer(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Created By</label>
-              <input value={createdByName} onChange={(e) => setCreatedByName(e.target.value)} />
-            </div>
           </div>
         </div>
 
@@ -255,8 +265,6 @@ function CreateGrn({ onCreated, onCancel, preselectedPoId }) {
             po={selectedPo}
             lineItems={lineItems}
             onLineChange={updateLineItem}
-            deliveryInfo={deliveryInfo}
-            onDeliveryChange={updateDelivery}
             editable
           />
         )}

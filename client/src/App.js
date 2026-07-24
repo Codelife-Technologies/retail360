@@ -1,4 +1,4 @@
-import React, { useState, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useAuth } from './context/AuthContext';
 import Dashboard from './components/Dashboard';
 import MIS from './components/MIS';
@@ -65,9 +65,22 @@ import {
   isEmployeeDashboardTab,
   resolveEmployeeDashboardSubTab,
 } from './employeeDashboard/employeeDashboardTabs';
-import PageZoomShell from './components/PageZoomShell';
 import BirthdayCelebration from './components/BirthdayCelebration';
 import './App.css';
+
+/** Split multi-word nav labels onto two lines (first word on top). */
+function NavHeadingLabel({ label }) {
+  const parts = String(label || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return <span className="nav-item-label">{parts[0] || label}</span>;
+  }
+  return (
+    <span className="nav-item-label is-stacked">
+      <span className="nav-item-line">{parts[0]}</span>
+      <span className="nav-item-line">{parts.slice(1).join(' ')}</span>
+    </span>
+  );
+}
 
 const HrModule = lazy(() => import('./hr/HrModule'));
 const ComplianceModule = lazy(() => import('./compliance/ComplianceModule'));
@@ -145,7 +158,152 @@ function App() {
   const visibleInventoryTabs = visibleInventoryGroups.flatMap((group) => group.tabs);
   const showEmployeeDashboardNav = !hasPermission('admin.all');
 
-  /** Secondary sub-header: only when an active folder has multiple pages. */
+  const mainNavItems = useMemo(() => {
+    const items = [];
+    if (canViewReports) {
+      items.push({
+        id: 'dashboard',
+        icon: '📊',
+        label: 'Dashboard',
+        active: activeTab === 'dashboard',
+        target: 'dashboard',
+      });
+      items.push({
+        id: 'mis',
+        icon: '📈',
+        label: 'Business Reports',
+        active: activeTab === 'mis',
+        target: 'mis',
+      });
+    }
+    if (showMasterNav) {
+      items.push({
+        id: 'master',
+        icon: '🗂️',
+        label: 'Master',
+        active: isMasterActive,
+        target: 'master',
+      });
+    }
+    if (showInventoryNav) {
+      items.push({
+        id: 'inventory',
+        icon: '📦',
+        label: 'Inventory',
+        active: isInventoryActive,
+        target: 'inventory',
+      });
+    }
+    if (visibleProcurementTabs.length > 0) {
+      items.push({
+        id: 'procurement',
+        icon: '📑',
+        label: 'Procurement',
+        active: isProcurementActive,
+        target: 'procurement',
+      });
+    }
+    if (visibleSalesTabs.length > 0) {
+      items.push({
+        id: 'sales-module',
+        icon: '🚚',
+        label: 'Shipments',
+        active: isSalesActive,
+        target: 'sales-module',
+      });
+    }
+    if (visibleHrTabs.length > 0) {
+      items.push({
+        id: 'hr',
+        icon: '👔',
+        label: 'HR',
+        active: isHrActive,
+        target: 'hr',
+      });
+    }
+    if (visibleComplianceTabs.length > 0) {
+      items.push({
+        id: 'compliance',
+        icon: '✅',
+        label: 'Compliance',
+        active: isComplianceActive,
+        target: 'compliance',
+      });
+    }
+    if (visibleFinanceTabs.length > 0) {
+      items.push({
+        id: 'finance',
+        icon: '💼',
+        label: 'Finance',
+        active: isFinanceActive,
+        target: 'finance',
+      });
+    }
+    if (visibleDocumentsTabs.length > 0) {
+      items.push({
+        id: 'documents',
+        icon: '📂',
+        label: 'Document Management',
+        active: isDocumentsActive,
+        target: 'documents',
+      });
+    }
+    if (visibleUtilitiesTabs.length > 0) {
+      items.push({
+        id: 'utilities',
+        icon: '🛠️',
+        label: 'Utilities',
+        active: isUtilitiesActive,
+        target: 'utilities',
+      });
+    }
+    if (showEmployeeDashboardNav) {
+      items.push({
+        id: 'employee-dashboard',
+        icon: '👤',
+        label: 'Employee Dashboard',
+        active: isEmployeeDashboardActive,
+        target: 'employee-dashboard',
+      });
+    }
+    if (visibleUserManagementTabs.length > 0) {
+      items.push({
+        id: 'user-management',
+        icon: '🔐',
+        label: 'User Management',
+        active: isUserManagementActive,
+        target: 'user-management',
+      });
+    }
+    return items;
+  }, [
+    canViewReports,
+    showMasterNav,
+    showInventoryNav,
+    visibleProcurementTabs.length,
+    visibleSalesTabs.length,
+    visibleHrTabs.length,
+    visibleComplianceTabs.length,
+    visibleFinanceTabs.length,
+    visibleDocumentsTabs.length,
+    visibleUtilitiesTabs.length,
+    showEmployeeDashboardNav,
+    visibleUserManagementTabs.length,
+    activeTab,
+    isMasterActive,
+    isInventoryActive,
+    isProcurementActive,
+    isSalesActive,
+    isHrActive,
+    isComplianceActive,
+    isFinanceActive,
+    isDocumentsActive,
+    isUtilitiesActive,
+    isEmployeeDashboardActive,
+    isUserManagementActive,
+  ]);
+
+  /** Module page list — shown in the left sidebar (main folders stay in the top header). */
   let moduleSubNav = null;
   if (isMasterActive && showMasterNav) {
     if (visibleMasterTabs.length > 1) {
@@ -201,13 +359,6 @@ function App() {
       items: visibleFinanceTabs,
       activeId: activeFinanceSubTab,
       prefix: 'finance',
-    };
-  } else if (isDocumentsActive && visibleDocumentsTabs.length > 1) {
-    moduleSubNav = {
-      label: 'Document Management',
-      items: visibleDocumentsTabs,
-      activeId: activeDocumentsSubTab,
-      prefix: 'documents',
     };
   } else if (isUtilitiesActive && visibleUtilitiesTabs.length > 1) {
     moduleSubNav = {
@@ -477,11 +628,49 @@ function App() {
   return (
     <div className="App">
       <div className="app-header-shell">
-      <header className="app-topbar">
+      <header className="app-topbar app-topbar-unified" aria-label="Main navigation">
         <div className="app-topbar-brand">
-          <h1>RetailOSA</h1>
-          <p className="app-brand-powered-by">Powered by CodeLife Technologies Pvt. Ltd.</p>
+          <div className="app-brand-logo" aria-hidden="true">
+            <span>R</span>
+          </div>
+          <div className="app-brand-text">
+            <h1>RetailOSA</h1>
+          </div>
         </div>
+
+        <nav
+          className="app-navbar-dual"
+          aria-label="Modules"
+          style={{ '--nav-count': String(Math.max(mainNavItems.length, 1)) }}
+        >
+          <div className="app-nav-logo-bar" role="presentation">
+            {mainNavItems.map((item) => (
+              <button
+                key={`logo-${item.id}`}
+                type="button"
+                className={`nav-logo-cell${item.active ? ' active' : ''}`}
+                onClick={() => handleNavigate(item.target)}
+                aria-label={item.label}
+                title={item.label}
+              >
+                <span className="nav-item-logo" aria-hidden="true">{item.icon}</span>
+              </button>
+            ))}
+          </div>
+          <div className="app-nav-label-bar" role="presentation">
+            {mainNavItems.map((item) => (
+              <button
+                key={`label-${item.id}`}
+                type="button"
+                className={`nav-label-cell${item.active ? ' active' : ''}`}
+                onClick={() => handleNavigate(item.target)}
+              >
+                <NavHeadingLabel label={item.label} />
+              </button>
+            ))}
+          </div>
+        </nav>
+
         <div className="app-topbar-user">
           <span>{user?.username || user?.email}</span>
           <button type="button" className="btn-logout" onClick={logout}>
@@ -489,144 +678,26 @@ function App() {
           </button>
         </div>
       </header>
+      </div>
 
-      <nav className="app-navbar" aria-label="Main navigation">
-          {canViewReports && (
-            <>
-              <button
-                type="button"
-                className={activeTab === 'dashboard' ? 'nav-item active' : 'nav-item'}
-                onClick={() => handleNavigate('dashboard')}
-              >
-                📊 Dashboard
-              </button>
-              <button
-                type="button"
-                className={activeTab === 'mis' ? 'nav-item active' : 'nav-item'}
-                onClick={() => handleNavigate('mis')}
-              >
-                📊 Business Reports
-              </button>
-            </>
-          )}
-          {showMasterNav && (
-            <button
-              type="button"
-              className={`nav-item${isMasterActive ? ' active' : ''}`}
-              onClick={() => handleNavigate('master')}
-            >
-              🗂️ Master
-            </button>
-          )}
-          {showInventoryNav && (
-            <button
-              type="button"
-              className={`nav-item${isInventoryActive ? ' active' : ''}`}
-              onClick={() => handleNavigate('inventory')}
-            >
-              📦 Inventory
-            </button>
-          )}
-          {visibleProcurementTabs.length > 0 && (
-            <button
-              type="button"
-              className={`nav-item${isProcurementActive ? ' active' : ''}`}
-              onClick={() => handleNavigate('procurement')}
-            >
-              📑 Procurement
-            </button>
-          )}
-          {visibleSalesTabs.length > 0 && (
-            <button
-              type="button"
-              className={`nav-item${isSalesActive ? ' active' : ''}`}
-              onClick={() => handleNavigate('sales-module')}
-            >
-              📦 Shipments
-            </button>
-          )}
-          {visibleHrTabs.length > 0 && (
-            <button
-              type="button"
-              className={`nav-item${isHrActive ? ' active' : ''}`}
-              onClick={() => handleNavigate('hr')}
-            >
-              👔 HR
-            </button>
-          )}
-          {visibleComplianceTabs.length > 0 && (
-            <button
-              type="button"
-              className={`nav-item${isComplianceActive ? ' active' : ''}`}
-              onClick={() => handleNavigate('compliance')}
-            >
-              ✅ Compliance
-            </button>
-          )}
-          {visibleFinanceTabs.length > 0 && (
-            <button
-              type="button"
-              className={`nav-item${isFinanceActive ? ' active' : ''}`}
-              onClick={() => handleNavigate('finance')}
-            >
-              💼 Finance
-            </button>
-          )}
-          {visibleDocumentsTabs.length > 0 && (
-            <button
-              type="button"
-              className={`nav-item${isDocumentsActive ? ' active' : ''}`}
-              onClick={() => handleNavigate('documents')}
-            >
-              📂 Document Management
-            </button>
-          )}
-          {visibleUtilitiesTabs.length > 0 && (
-            <button
-              type="button"
-              className={`nav-item${isUtilitiesActive ? ' active' : ''}`}
-              onClick={() => handleNavigate('utilities')}
-            >
-              🛠️ Utilities
-            </button>
-          )}
-          {showEmployeeDashboardNav && (
-            <button
-              type="button"
-              className={`nav-item${isEmployeeDashboardActive ? ' active' : ''}`}
-              onClick={() => handleNavigate('employee-dashboard')}
-            >
-              👤 Employee Dashboard
-            </button>
-          )}
-          {visibleUserManagementTabs.length > 0 && (
-            <button
-              type="button"
-              className={`nav-item${isUserManagementActive ? ' active' : ''}`}
-              onClick={() => handleNavigate('user-management')}
-            >
-              🔐 User Management
-            </button>
-          )}
-        </nav>
-
+      <div className={`app-body${moduleSubNav ? ' has-module-sidebar' : ''}`}>
         {moduleSubNav && (
-          <nav className="app-subnav" aria-label={`${moduleSubNav.label} sub navigation`}>
-            <span className="app-subnav-module">{moduleSubNav.label}</span>
-            <div className="app-subnav-items">
+          <aside className="app-module-sidebar" aria-label={`${moduleSubNav.label} pages`}>
+            <div className="app-module-sidebar-title">{moduleSubNav.label}</div>
+            <nav className="app-module-sidebar-nav">
               {moduleSubNav.grouped
                 ? (moduleSubNav.groups || []).map((group) => (
-                    <div key={group.label} className="app-subnav-group">
-                      <span className="app-subnav-group-label">{group.label}</span>
+                    <div key={group.label} className="app-module-sidebar-group">
+                      <div className="app-module-sidebar-group-label">{group.label}</div>
                       {group.tabs.map((tab) => (
                         <button
                           key={tab.id}
                           type="button"
-                          className={`app-subnav-item${moduleSubNav.activeId === tab.id ? ' active' : ''}`}
+                          className={`app-module-sidebar-item${moduleSubNav.activeId === tab.id ? ' active' : ''}`}
                           onClick={() => handleNavigate(`${moduleSubNav.prefix}:${tab.id}`)}
                         >
-                          {tab.icon ? <span className="app-subnav-icon">{tab.icon}</span> : null}
-                          {tab.label}
+                          {tab.icon ? <span className="app-module-sidebar-icon">{tab.icon}</span> : null}
+                          <span>{tab.label}</span>
                         </button>
                       ))}
                     </div>
@@ -635,21 +706,21 @@ function App() {
                     <button
                       key={tab.id}
                       type="button"
-                      className={`app-subnav-item${moduleSubNav.activeId === tab.id ? ' active' : ''}`}
+                      className={`app-module-sidebar-item${moduleSubNav.activeId === tab.id ? ' active' : ''}`}
                       onClick={() => handleNavigate(`${moduleSubNav.prefix}:${tab.id}`)}
                     >
-                      {tab.icon ? <span className="app-subnav-icon">{tab.icon}</span> : null}
-                      {tab.label}
+                      {tab.icon ? <span className="app-module-sidebar-icon">{tab.icon}</span> : null}
+                      <span>{tab.label}</span>
                     </button>
                   ))}
-            </div>
-          </nav>
+            </nav>
+          </aside>
         )}
-      </div>
 
-      <main className="main-content">
-        <PageZoomShell contentKey={activeTab}>{renderContent()}</PageZoomShell>
-      </main>
+        <main className="main-content">
+          {renderContent()}
+        </main>
+      </div>
       <Suspense fallback={null}>
         <EmployeeChatNotifications />
       </Suspense>

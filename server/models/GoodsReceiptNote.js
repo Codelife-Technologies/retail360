@@ -118,6 +118,7 @@ const goodsReceiptNoteSchema = new mongoose.Schema(
         'pending_inspection',
         'partially_received',
         'fully_received',
+        'defective',
         'approved',
         'closed',
         'cancelled',
@@ -133,6 +134,16 @@ const goodsReceiptNoteSchema = new mongoose.Schema(
     purchaseRequisitionNumber: { type: String, trim: true },
     purchaseOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', required: true },
     purchaseOrderNumber: { type: String, trim: true },
+    paymentStatus: {
+      type: String,
+      enum: ['paid', 'unpaid'],
+      default: 'unpaid',
+      set: function normalizeGrnPaymentStatus(value) {
+        const raw = String(value || 'unpaid').trim().toLowerCase();
+        if (raw === 'paid') return 'paid';
+        return 'unpaid';
+      },
+    },
     goodsInspectionSheet: { type: mongoose.Schema.Types.ObjectId, ref: 'GoodsInspectionSheet' },
     gisNumber: { type: String, trim: true },
     contractNumber: { type: String, trim: true },

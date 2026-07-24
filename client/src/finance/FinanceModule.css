@@ -705,6 +705,6 @@
 }
 
 @media print {
-  .fin-toolbar, .fin-actions, .app-navbar, .app-subnav, .app-topbar { display: none !important; }
+  .fin-toolbar, .fin-actions, .app-navbar, .app-module-sidebar, .app-topbar { display: none !important; }
   .fin-page { padding: 0; overflow: visible; }
 }

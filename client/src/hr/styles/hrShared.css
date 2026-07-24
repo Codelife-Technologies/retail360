@@ -473,39 +473,6 @@
   color: #fff;
 }
 
-.hr-table tbody tr.hr-task-row-pending {
-  background: #fde68a;
-  box-shadow: inset 4px 0 0 #b45309;
-}
-
-.hr-table tbody tr.hr-task-row-pending:hover {
-  background: #fcd34d;
-}
-
-.hr-table tbody tr.hr-task-row-backlog {
-  background: #fecaca;
-  box-shadow: inset 4px 0 0 #991b1b;
-}
-
-.hr-table tbody tr.hr-task-row-backlog:hover {
-  background: #fca5a5;
-}
-
-.hr-table tbody tr.hr-task-row-backlog td {
-  font-weight: 600;
-}
-
-.hr-table tbody tr.hr-task-row-on-hold,
-.hr-table tbody tr.hr-task-row-cancelled {
-  background: #f3f4f6;
-  box-shadow: inset 4px 0 0 #9ca3af;
-}
-
-.hr-table tbody tr.hr-task-row-on-hold:hover,
-.hr-table tbody tr.hr-task-row-cancelled:hover {
-  background: #e5e7eb;
-}
-
 .hr-worklog-filters {
   margin-bottom: 1rem;
 }

@@ -1,29 +1,71 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { formatINR, GRN_STATUS_LABELS } from '../types/grn.types';
 import GrnStatusBadge from '../components/GrnStatusBadge';
-import { useGrnDashboard, useGrnList } from '../hooks/useGrnDashboard';
-import { getCurrentMonthDateRange } from '../../utils/monthDateRange';
-import DetailModal from '../../components/DetailModal';
+import { useGrnDashboard } from '../hooks/useGrnDashboard';
+import { purchaseOrdersAPI } from '../../services/api';
 
 function GrnDashboard({ onNavigate, onCreateFromPo }) {
-  const { stats, refresh } = useGrnDashboard();
-  const { grns, loading: listLoading, filters, setFilters, refresh: refreshList } = useGrnList();
-  const [viewingGrn, setViewingGrn] = useState(null);
+  const { stats, loading, refresh, setStats } = useGrnDashboard();
+  const [search, setSearch] = useState('');
+  const [updatingPaymentId, setUpdatingPaymentId] = useState('');
 
-  const upcomingPos = !filters.status ? (stats?.upcomingPos || []) : [];
-  const showUpcomingOnly = filters.status === 'upcoming';
-  const visibleGrns = showUpcomingOnly ? [] : grns;
+  const upcomingPos = stats?.upcomingPos || [];
+
+  const filteredPos = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return upcomingPos;
+    return upcomingPos.filter((po) => {
+      const haystack = [
+        po.poNumber,
+        po.purchaseRequisitionNumber,
+        po.supplierName,
+        po.warehouseCode,
+        po.paymentStatus,
+        po.receiptStage,
+        GRN_STATUS_LABELS[po.receiptStage],
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [upcomingPos, search]);
+
+  const handlePaymentStatusChange = async (po, paymentStatus) => {
+    const next = paymentStatus === 'paid' ? 'paid' : 'unpaid';
+    if ((po.paymentStatus === 'paid' ? 'paid' : 'unpaid') === next) return;
+    try {
+      setUpdatingPaymentId(String(po._id));
+      await purchaseOrdersAPI.update(po._id, { paymentStatus: next });
+      if (typeof setStats === 'function') {
+        setStats((prev) => {
+          if (!prev?.upcomingPos) return prev;
+          return {
+            ...prev,
+            upcomingPos: prev.upcomingPos.map((row) =>
+              String(row._id) === String(po._id) ? { ...row, paymentStatus: next } : row
+            ),
+          };
+        });
+      } else {
+        refresh();
+      }
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update payment status');
+    } finally {
+      setUpdatingPaymentId('');
+    }
+  };
 
   return (
     <div className="grn-dashboard">
       <div className="grn-page-header">
         <div>
           <h2>Goods Receipt Notes</h2>
-          <p>Official receipt confirmation & inventory updates</p>
         </div>
         <div className="grn-header-actions">
-          <button type="button" className="btn-secondary" onClick={() => { refresh(); refreshList(); }}>
-            Refresh
+          <button type="button" className="btn-secondary" onClick={refresh} disabled={loading}>
+            {loading ? 'Refreshing…' : 'Refresh'}
           </button>
           <button type="button" className="btn-primary" onClick={() => onNavigate('create')}>
             + Create GRN
@@ -34,87 +76,58 @@ function GrnDashboard({ onNavigate, onCreateFromPo }) {
       <div className="grn-list-section">
         <div className="grn-filters">
           <input
-            placeholder="Search GRN, PO, supplier, SKU, invoice…"
-            value={filters.search || ''}
-            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+            placeholder="Search PO, PR, supplier, warehouse…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
-          <select
-            value={filters.status || ''}
-            onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-          >
-            <option value="">All statuses</option>
-            <option value="upcoming">Upcoming</option>
-            <option value="draft">Draft</option>
-            <option value="partially_received">Partially Received</option>
-            <option value="fully_received">Fully Received</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          <label className="grn-date-filter">
-            <span>From</span>
-            <input
-              type="date"
-              value={filters.fromDate || ''}
-              onChange={(e) => setFilters((f) => ({ ...f, fromDate: e.target.value }))}
-            />
-          </label>
-          <label className="grn-date-filter">
-            <span>To</span>
-            <input
-              type="date"
-              value={filters.toDate || ''}
-              onChange={(e) => setFilters((f) => ({ ...f, toDate: e.target.value }))}
-            />
-          </label>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => {
-              const { fromDate, toDate } = getCurrentMonthDateRange();
-              setFilters((f) => ({ ...f, fromDate, toDate }));
-            }}
-          >
-            This month
-          </button>
-          {(filters.fromDate || filters.toDate) ? (
-            <button
-              type="button"
-              className="btn-clear-sku-search"
-              onClick={() => setFilters((f) => ({ ...f, fromDate: '', toDate: '' }))}
-            >
-              All dates
-            </button>
-          ) : null}
         </div>
 
         <div className="grn-table-wrap">
           <table className="grn-table">
             <thead>
               <tr>
-                <th>GRN Number</th>
-                <th>GRN Date</th>
-                <th>Delivery Date</th>
-                <th>Status</th>
+                <th>Order Date</th>
+                <th>Receipt Status</th>
+                <th>Payment</th>
                 <th>PO Number</th>
                 <th>PR Number</th>
-                <th>GIS</th>
                 <th>Supplier</th>
                 <th>Warehouse</th>
+                <th>Items</th>
                 <th>Grand Total</th>
               </tr>
             </thead>
             <tbody>
-              {listLoading && !showUpcomingOnly ? (
-                <tr><td colSpan="10" className="grn-empty">Loading…</td></tr>
+              {loading ? (
+                <tr><td colSpan="9" className="grn-empty">Loading…</td></tr>
+              ) : filteredPos.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className="grn-empty">
+                    No purchase orders ready for receipt
+                  </td>
+                </tr>
               ) : (
-                <>
-                  {(showUpcomingOnly ? stats?.upcomingPos || [] : upcomingPos).map((po) => (
+                filteredPos.map((po) => {
+                  const paymentStatus = po.paymentStatus === 'paid' ? 'paid' : 'unpaid';
+                  const receiptStage = ['partially_received', 'defective'].includes(po.receiptStage)
+                    ? po.receiptStage
+                    : 'upcoming';
+                  const itemsDisplay = receiptStage === 'defective'
+                    ? (po.defectiveQty ?? po.itemCount ?? 0)
+                    : (po.itemCount ?? '—');
+                  return (
                     <tr
                       key={`upcoming-${po._id}`}
                       className="clickable-row grn-row-upcoming"
                       onClick={() => onCreateFromPo?.(po._id)}
-                      title="Create GRN from this PO"
+                      title={
+                        receiptStage === 'defective'
+                          ? `${itemsDisplay} defective item(s) — continue receipt for remaining qty`
+                          : receiptStage === 'partially_received'
+                            ? 'Continue receipt — receive remaining items'
+                            : 'Create GRN from this PO'
+                      }
                     >
-                      <td className="mono muted">—</td>
                       <td>
                         {po.orderDate
                           ? new Date(po.orderDate).toLocaleDateString('en-IN')
@@ -122,124 +135,33 @@ function GrnDashboard({ onNavigate, onCreateFromPo }) {
                             ? new Date(po.expectedDeliveryDate).toLocaleDateString('en-IN')
                             : '—'}
                       </td>
-                      <td>—</td>
-                      <td><GrnStatusBadge status="upcoming" /></td>
+                      <td><GrnStatusBadge status={receiptStage} /></td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <select
+                          className={`grn-payment-select status-${paymentStatus}`}
+                          value={paymentStatus}
+                          disabled={updatingPaymentId === String(po._id)}
+                          onChange={(e) => handlePaymentStatusChange(po, e.target.value)}
+                          aria-label={`Payment status for ${po.poNumber}`}
+                        >
+                          <option value="unpaid">Unpaid</option>
+                          <option value="paid">Paid</option>
+                        </select>
+                      </td>
                       <td className="mono">{po.poNumber}</td>
                       <td className="mono">{po.purchaseRequisitionNumber || '—'}</td>
-                      <td className="mono">—</td>
                       <td>{po.supplierName || '—'}</td>
                       <td>{po.warehouseCode || '—'}</td>
+                      <td className="text-center">{itemsDisplay}</td>
                       <td>{formatINR(po.total)}</td>
                     </tr>
-                  ))}
-                  {visibleGrns.length === 0 && (showUpcomingOnly ? (stats?.upcomingPos || []).length === 0 : upcomingPos.length === 0) ? (
-                    <tr><td colSpan="10" className="grn-empty">No GRNs found</td></tr>
-                  ) : (
-                    visibleGrns.map((g) => {
-                      const deliveryDate = g.deliveryDate || g.deliveryInfo?.receivedDate;
-                      return (
-                      <tr key={g._id} className="clickable-row" onClick={() => setViewingGrn(g)}>
-                        <td className="mono">{g.grnNumber}</td>
-                        <td>{g.grnDate ? new Date(g.grnDate).toLocaleDateString('en-IN') : '—'}</td>
-                        <td>{deliveryDate ? new Date(deliveryDate).toLocaleDateString('en-IN') : '—'}</td>
-                        <td><GrnStatusBadge status={g.receiptStatus} /></td>
-                        <td className="mono">{g.purchaseOrderNumber || '—'}</td>
-                        <td className="mono">{g.purchaseRequisitionNumber || '—'}</td>
-                        <td className="mono">{g.gisNumber || '—'}</td>
-                        <td>{g.supplierDetails?.name || g.supplier?.name || '—'}</td>
-                        <td>{g.locationCode || g.warehouse?.code || '—'}</td>
-                        <td>{formatINR(g.grandTotal)}</td>
-                      </tr>
-                      );
-                    })
-                  )}
-                </>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
-
-      {viewingGrn && (
-        <DetailModal
-          title={`GRN ${viewingGrn.grnNumber || ''}`}
-          fields={[
-            { label: 'GRN Number', value: viewingGrn.grnNumber },
-            {
-              label: 'GRN Date',
-              value: viewingGrn.grnDate
-                ? new Date(viewingGrn.grnDate).toLocaleDateString('en-IN')
-                : '',
-            },
-            {
-              label: 'Delivery Date',
-              value: (viewingGrn.deliveryDate || viewingGrn.deliveryInfo?.receivedDate)
-                ? new Date(viewingGrn.deliveryDate || viewingGrn.deliveryInfo.receivedDate).toLocaleDateString('en-IN')
-                : '',
-            },
-            {
-              label: 'Status',
-              value: GRN_STATUS_LABELS[viewingGrn.receiptStatus] || viewingGrn.receiptStatus,
-            },
-            { label: 'PO Number', value: viewingGrn.purchaseOrderNumber },
-            { label: 'PR Number', value: viewingGrn.purchaseRequisitionNumber },
-            { label: 'GIS', value: viewingGrn.gisNumber },
-            {
-              label: 'Supplier',
-              value: viewingGrn.supplierDetails?.name || viewingGrn.supplier?.name,
-            },
-            {
-              label: 'Warehouse',
-              value: viewingGrn.warehouse?.name
-                || viewingGrn.locationCode
-                || viewingGrn.warehouse?.code,
-            },
-            { label: 'Grand Total', value: formatINR(viewingGrn.grandTotal) },
-          ]}
-          onClose={() => setViewingGrn(null)}
-        >
-          {viewingGrn.items?.length > 0 && (
-            <div className="detail-view-section">
-              <h3>Products</h3>
-              <div className="grn-detail-items-wrap">
-                <table className="detail-view-items-table">
-                  <thead>
-                    <tr>
-                      <th>SKU</th>
-                      <th>Product</th>
-                      <th>Ordered</th>
-                      <th>Received</th>
-                      <th>Accepted</th>
-                      <th>Rejected</th>
-                      <th>Unit Cost</th>
-                      <th>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {viewingGrn.items.map((item, idx) => (
-                      <tr key={item._id || idx}>
-                        <td>{item.sku || item.product?.sku || '—'}</td>
-                        <td>
-                          {item.productName
-                            || item.product?.title
-                            || item.product?.name
-                            || '—'}
-                        </td>
-                        <td>{item.orderedQty ?? 0}</td>
-                        <td>{item.receivedQty ?? 0}</td>
-                        <td>{item.acceptedQty ?? 0}</td>
-                        <td>{item.rejectedQty ?? 0}</td>
-                        <td>{formatINR(item.unitCost)}</td>
-                        <td>{formatINR(item.lineAmount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </DetailModal>
-      )}
     </div>
   );
 }

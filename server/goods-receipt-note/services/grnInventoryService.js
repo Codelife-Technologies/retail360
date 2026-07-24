@@ -142,7 +142,36 @@ async function updatePurchaseOrderReceipt(grn) {
   }
 
   await po.save();
+
+  // When the PO is fully received, promote earlier partial GRNs to fully received.
+  if (allReceived) {
+    await promotePartialGrnsToFullyReceived(po._id);
+  }
+
   await tryCloseLinkedPurchaseRequisition(po._id);
+}
+
+/**
+ * Once all PO lines are received, mark prior partially_received GRNs for that PO
+ * as fully_received so the receipt history reflects a completed order.
+ */
+async function promotePartialGrnsToFullyReceived(poId) {
+  if (!poId) return;
+
+  const partialGrns = await GoodsReceiptNote.find({
+    purchaseOrder: poId,
+    receiptStatus: 'partially_received',
+    inventoryUpdated: true,
+  }).select('_id grnNumber receiptStatus');
+
+  if (!partialGrns.length) return;
+
+  await GoodsReceiptNote.updateMany(
+    {
+      _id: { $in: partialGrns.map((g) => g._id) },
+    },
+    { $set: { receiptStatus: 'fully_received' } }
+  );
 }
 
 module.exports = {
@@ -150,6 +179,7 @@ module.exports = {
   enrichItemsWithStock,
   applyInventoryUpdate,
   updatePurchaseOrderReceipt,
+  promotePartialGrnsToFullyReceived,
   tryCloseLinkedPurchaseRequisition,
   isPoFullyReceived,
   areAllGrnsCompleteForPo,

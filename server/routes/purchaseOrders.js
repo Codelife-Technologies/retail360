@@ -14,6 +14,10 @@ const {
   generatePONumber,
   createPoNumberAllocator,
 } = require('../utils/generatePoNumber');
+const {
+  normalizePaymentStatus,
+  syncLinkedPaymentStatus,
+} = require('../utils/paymentStatusSync');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -26,6 +30,7 @@ const PURCHASE_ORDER_HEADERS = [
   { key: 'orderDate', label: 'Order Date (YYYY-MM-DD)' },
   { key: 'expectedDeliveryDate', label: 'Expected Delivery Date (YYYY-MM-DD)' },
   { key: 'status', label: 'Status (pending/approved)' },
+  { key: 'paymentStatus', label: 'Payment Status (paid/unpaid)' },
   { key: 'sku', label: 'Product SKU' },
   { key: 'productName', label: 'Product Name' },
   { key: 'quantity', label: 'Quantity *' },
@@ -688,6 +693,7 @@ router.post('/', async (req, res) => {
     const poData = {
       ...req.body,
       items,
+      paymentStatus: normalizePaymentStatus(req.body.paymentStatus),
       poNumber: await generatePONumber()
     };
 
@@ -717,6 +723,15 @@ router.put('/:id', async (req, res) => {
       req.body.needsVendorAssignment = false;
     }
 
+    if (req.body.paymentStatus != null) {
+      req.body.paymentStatus = normalizePaymentStatus(req.body.paymentStatus);
+    }
+
+    const previous = await PurchaseOrder.findById(req.params.id).select('paymentStatus');
+    if (!previous) {
+      return res.status(404).json({ error: 'Purchase order not found' });
+    }
+
     const purchaseOrder = await PurchaseOrder.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -726,6 +741,17 @@ router.put('/:id', async (req, res) => {
 
     if (!purchaseOrder) {
       return res.status(404).json({ error: 'Purchase order not found' });
+    }
+
+    if (
+      req.body.paymentStatus != null
+      && normalizePaymentStatus(previous.paymentStatus) !== purchaseOrder.paymentStatus
+    ) {
+      await syncLinkedPaymentStatus({
+        purchaseOrderId: purchaseOrder._id,
+        paymentStatus: purchaseOrder.paymentStatus,
+        source: 'po',
+      });
     }
 
     if (purchaseOrder.supplier) {

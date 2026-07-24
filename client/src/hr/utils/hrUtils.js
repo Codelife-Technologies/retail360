@@ -42,15 +42,6 @@ export function statusClass(status) {
   return `hr-status-${String(status).toLowerCase().replace(/\s+/g, '-')}`;
 }
 
-/** Row highlight class for task status (Pending / Backlog / On Hold / Cancelled). */
-export function taskRowClass(status) {
-  if (status === 'Pending') return 'hr-task-row-pending';
-  if (status === 'Backlog') return 'hr-task-row-backlog';
-  if (status === 'On Hold') return 'hr-task-row-on-hold';
-  if (status === 'Cancelled') return 'hr-task-row-cancelled';
-  return undefined;
-}
-
 /** Sort order: Backlog & Pending first, then by due date. */
 const TASK_STATUS_SORT_ORDER = {
   Backlog: 0,

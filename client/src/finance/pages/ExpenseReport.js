@@ -317,7 +317,6 @@ function ExpenseReport() {
       <div className="fin-page-header fin-sticky">
         <div>
           <h1>Expense</h1>
-          <p className="fin-subtitle">Add and view expense entries.</p>
         </div>
         <div className="fin-actions">
           {canWrite ? (

@@ -67,7 +67,7 @@ async function resolveScope(req) {
   const permissions = await userPermissionSet(req.user.id);
   const admin = isDocumentsAdmin(permissions);
   const manager = isDocumentsManager(permissions);
-  return {
+  const base = {
     permissions,
     admin,
     manager,
@@ -75,12 +75,14 @@ async function resolveScope(req) {
     ownOnly: !admin && !manager,
     department: req.query.scopeDepartment || '',
   };
+  const { enrichScopeWithShares } = require('../services/shareService');
+  return enrichScopeWithShares(base);
 }
 
 function canMutateDoc(doc, scope) {
   if (scope.admin) return true;
-  if (scope.manager) return true;
-  return String(doc.uploadedByUserId || '') === String(scope.userId);
+  if (documentService.canWriteDocument(doc, scope)) return true;
+  return false;
 }
 
 // GET /documents/analytics — before /:id
@@ -281,6 +283,113 @@ router.delete('/folders/:id', requireDocuments('documents.delete', 'documents.up
   }
 });
 
+// ─── Sharing (Google Drive–style view / edit) ───────────────────────────────
+const shareService = require('../services/shareService');
+
+router.get(
+  '/share-recipients',
+  requireDocuments('documents.view', 'documents.update'),
+  async (req, res) => {
+    try {
+      const users = await shareService.listShareRecipients({
+        search: req.query.search,
+        limit: req.query.limit,
+      });
+      res.json({ users });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+router.get(
+  '/shares/with-me',
+  requireDocuments('documents.view'),
+  async (req, res) => {
+    try {
+      const scope = await resolveScope(req);
+      const data = await shareService.listSharesWithMe(scope);
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+router.get(
+  '/shares',
+  requireDocuments('documents.view', 'documents.update'),
+  async (req, res) => {
+    try {
+      const { resourceType, resourceId } = req.query;
+      if (!resourceType || !resourceId) {
+        return res.status(400).json({ error: 'resourceType and resourceId are required' });
+      }
+      const scope = await resolveScope(req);
+      await shareService.assertCanManageShares({ resourceType, resourceId, scope });
+      const shares = await shareService.listSharesForResource(resourceType, resourceId);
+      res.json({ shares });
+    } catch (error) {
+      const status = /owner|not found/i.test(error.message) ? 403 : 400;
+      res.status(status).json({ error: error.message });
+    }
+  }
+);
+
+router.post(
+  '/shares',
+  requireDocuments('documents.update', 'documents.create'),
+  async (req, res) => {
+    try {
+      const scope = await resolveScope(req);
+      const share = await shareService.createShare({
+        resourceType: req.body?.resourceType,
+        resourceId: req.body?.resourceId,
+        sharedWithUserId: req.body?.userId || req.body?.sharedWithUserId,
+        role: req.body?.role || 'viewer',
+        message: req.body?.message,
+        expiresAt: req.body?.expiresAt,
+        scope,
+        user: req.user,
+      });
+      res.status(201).json(share);
+    } catch (error) {
+      const status = /owner|not found/i.test(error.message) ? 403 : 400;
+      res.status(status).json({ error: error.message });
+    }
+  }
+);
+
+router.put(
+  '/shares/:shareId',
+  requireDocuments('documents.update'),
+  async (req, res) => {
+    try {
+      const scope = await resolveScope(req);
+      const share = await shareService.updateShare(req.params.shareId, req.body || {}, scope);
+      res.json(share);
+    } catch (error) {
+      const status = /owner|not found/i.test(error.message) ? 403 : 400;
+      res.status(status).json({ error: error.message });
+    }
+  }
+);
+
+router.delete(
+  '/shares/:shareId',
+  requireDocuments('documents.update', 'documents.delete'),
+  async (req, res) => {
+    try {
+      const scope = await resolveScope(req);
+      const result = await shareService.revokeShare(req.params.shareId, scope);
+      res.json(result);
+    } catch (error) {
+      const status = /owner|not found/i.test(error.message) ? 403 : 400;
+      res.status(status).json({ error: error.message });
+    }
+  }
+);
+
 // POST /documents/:id/move — move document into a folder
 router.post('/:id/move', requireDocuments('documents.update'), async (req, res) => {
   try {
@@ -348,7 +457,7 @@ router.get('/:id', requireDocuments('documents.view'), async (req, res) => {
     const scope = await resolveScope(req);
     const doc = await Document.findById(req.params.id).lean();
     if (!doc) return res.status(404).json({ error: 'Document not found' });
-    if (scope.ownOnly && String(doc.uploadedByUserId || '') !== String(scope.userId) && doc.source !== 'AI Generator') {
+    if (doc.source !== 'AI Generator' && !documentService.canAccessDocument(doc, scope)) {
       return res.status(403).json({ error: 'Access denied' });
     }
     res.json(doc);
@@ -360,8 +469,12 @@ router.get('/:id', requireDocuments('documents.view'), async (req, res) => {
 // GET /documents/:id/download
 router.get('/:id/download', requireDocuments('documents.view', 'documents.download'), async (req, res) => {
   try {
+    const scope = await resolveScope(req);
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: 'Document not found' });
+    if (doc.source !== 'AI Generator' && !documentService.canAccessDocument(doc, scope)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
     const abs = path.join(require('../utils/storage').UPLOADS_ROOT, doc.storagePath);
     if (!fs.existsSync(abs)) return res.status(404).json({ error: 'File missing on server' });
     res.download(abs, doc.fileName || path.basename(abs));

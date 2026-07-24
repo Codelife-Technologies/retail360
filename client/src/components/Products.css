@@ -56,6 +56,51 @@
   min-width: 0;
 }
 
+.products-header-actions .btn-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid #6B3894;
+  border-radius: 8px;
+  font-size: 0.975rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: #ffffff;
+  color: #6B3894;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.products-header-actions .btn-filters:hover {
+  background: #f5f3ff;
+}
+
+.products-header-actions .btn-filters.active {
+  background: #6B3894;
+  color: #ffffff;
+  border-color: #6B3894;
+}
+
+.products-filter-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #f97316;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.products-header-actions .btn-filters.active .products-filter-count-badge {
+  background: rgba(255, 255, 255, 0.28);
+}
+
 .products-header-actions .btn-export {
   padding: 0.55rem 1rem;
   border: none;

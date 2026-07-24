@@ -1,5 +1,5 @@
 /**
- * @typedef {'draft'|'pending_inspection'|'partially_received'|'fully_received'|'approved'|'cancelled'} GrnReceiptStatus
+ * @typedef {'draft'|'pending_inspection'|'partially_received'|'fully_received'|'defective'|'approved'|'cancelled'} GrnReceiptStatus
  */
 
 export const GRN_STATUS_LABELS = {
@@ -8,6 +8,7 @@ export const GRN_STATUS_LABELS = {
   pending_inspection: 'Pending Inspection',
   partially_received: 'Partially Received',
   fully_received: 'Fully Received',
+  defective: 'Defective',
   approved: 'Approved',
   cancelled: 'Cancelled',
 };
@@ -59,6 +60,9 @@ export function getPoLinePendingQty(line) {
 /** @param {object} po Purchase order document */
 export function isPoEligibleForGrn(po) {
   if (!po) return false;
+  if (po.needsVendorAssignment) return false;
+  const supplierId = po.supplier?._id || po.supplier;
+  if (!supplierId) return false;
   const status = normalizePoStatusForGrn(po.status);
   if (PO_BLOCKED_FOR_GRN.includes(status)) return false;
   if (!GRN_ELIGIBLE_PO_STATUSES.includes(status)) return false;

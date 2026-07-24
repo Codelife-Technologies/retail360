@@ -86,7 +86,7 @@ export function generatePurchaseOrderPrintHtml(po, products, helpers) {
   <style>
     * { box-sizing: border-box; }
     @page { margin: 18mm; }
-    body { font-family: "Amazon Ember", "Helvetica Neue", Helvetica, Arial, sans-serif; color: #0f1111; padding: 24px; font-size: 17px; }
+    body { font-family: "Poppins", "Helvetica Neue", Helvetica, Arial, sans-serif; color: #0f1111; padding: 24px; font-size: 17px; }
     h1 { margin: 0 0 4px; color: #232f3e; font-size: 24px; font-weight: 700; }
     h3 { margin: 0 0 8px; color: #232f3e; font-size: 15px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
     .po-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #232f3e; padding-bottom: 12px; margin-bottom: 16px; }

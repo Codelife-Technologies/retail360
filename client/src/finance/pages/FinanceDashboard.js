@@ -173,9 +173,6 @@ function FinanceDashboard({ onNavigate }) {
       <div className="fin-page-header fin-sticky">
         <div>
           <h1>Finance Dashboard</h1>
-          <p className="fin-subtitle">
-            KPIs and charts follow display currency ({displayCurrency}). Country rows stay in local currency. Period: {range.label}.
-          </p>
         </div>
         <div className="fin-actions fin-dashboard-period">
           <CurrencySelector />
@@ -233,7 +230,7 @@ function FinanceDashboard({ onNavigate }) {
         <FinanceKpiCard loading={loading} label="Net Profit" value={<DualKpiValue amountInInr={kpis.netProfit} loading={loading} />} tone="success" onClick={() => go('profit-loss')} />
         <FinanceKpiCard loading={loading} label="Gross Margin %" value={formatPct(kpis.grossMarginPct)} tone="info" onClick={() => go('profit-loss')} />
         <FinanceKpiCard loading={loading} label="Net Margin %" value={formatPct(kpis.netMarginPct)} tone="warning" onClick={() => go('profit-loss')} />
-        <FinanceKpiCard loading={loading} label="Total Purchase Cost" value={<DualKpiValue amountInInr={kpis.totalPurchaseCost} loading={loading} />} tone="warning" onClick={() => go('purchase-report')} />
+        <FinanceKpiCard loading={loading} label="Total Purchase Cost" value={<DualKpiValue amountInInr={kpis.totalPurchaseCost} loading={loading} />} tone="warning" />
       </div>
 
       <FinanceInsights insights={data?.insights} include={DASHBOARD_INSIGHTS} />

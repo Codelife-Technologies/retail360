@@ -342,9 +342,51 @@
 .grn-status-badge.status-pending_inspection { background: #fef3c7; color: #92400e; }
 .grn-status-badge.status-partially_received { background: #dbeafe; color: #1d4ed8; }
 .grn-status-badge.status-fully_received { background: #d1fae5; color: #065f46; }
+.grn-status-badge.status-defective { background: #fee2e2; color: #991b1b; }
 .grn-status-badge.status-approved { background: #6B3894; color: white; }
 .grn-status-badge.status-closed { background: #374151; color: white; }
 .grn-status-badge.status-cancelled { background: #fee2e2; color: #991b1b; }
+
+.grn-lines-table tr.grn-line-defective td {
+  background: #fef2f2;
+}
+
+.grn-payment-badge {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.grn-payment-badge.status-unpaid { background: #fef3c7; color: #92400e; }
+.grn-payment-badge.status-paid { background: #d1fae5; color: #065f46; }
+
+.grn-payment-select {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-transform: capitalize;
+  cursor: pointer;
+  background: #fff;
+  min-width: 6.5rem;
+}
+.grn-payment-select:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+.grn-payment-select.status-paid {
+  background: #d1fae5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+.grn-payment-select.status-unpaid {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
 
 .grn-form-card,
 .grn-section {

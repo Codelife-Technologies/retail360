@@ -6,7 +6,6 @@ import {
   formatDate,
   employeeName,
   toInputDate,
-  taskRowClass,
   getCurrentWeekRange,
   groupTasksByIssueDate,
   HR_PERIOD_OPTIONS,
@@ -307,10 +306,7 @@ function EmployeeTasks() {
               ) : (
                 taskGroups.flatMap((group) =>
                   group.tasks.map((task, index) => (
-                    <tr
-                      key={task._id}
-                      className={taskRowClass(task.status)}
-                    >
+                    <tr key={task._id}>
                       {index === 0 ? (
                         <td
                           className="hr-task-issue-date"

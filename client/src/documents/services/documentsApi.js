@@ -21,15 +21,23 @@ export const documentsAPI = {
   setProductDefault: (id, data) => api.post(`/documents/${id}/set-product-default`, data || {}),
   setProductCatalogDefault: (productId, payload) =>
     api.post(`/products/${productId}/images/default`, payload),
-  upload: (formData) =>
+  listShareRecipients: (params) => api.get('/documents/share-recipients', { params }),
+  listShares: (params) => api.get('/documents/shares', { params }),
+  listSharesWithMe: () => api.get('/documents/shares/with-me'),
+  createShare: (data) => api.post('/documents/shares', data),
+  updateShare: (id, data) => api.put(`/documents/shares/${id}`, data),
+  revokeShare: (id) => api.delete(`/documents/shares/${id}`),
+  upload: (formData, config = {}) =>
     api.post('/documents/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 300000,
+      ...config,
     }),
-  uploadAi: (formData) =>
+  uploadAi: (formData, config = {}) =>
     api.post('/documents/upload-ai', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 300000,
+      ...config,
     }),
   aiSave: (data) => api.post('/documents/ai-save', data),
   update: (id, data) => api.put(`/documents/${id}`, data),

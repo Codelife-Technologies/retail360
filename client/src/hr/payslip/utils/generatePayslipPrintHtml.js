@@ -76,7 +76,7 @@ export function generatePayslipPrintHtml(payslipData) {
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Amazon Ember", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-family: "Poppins", "Helvetica Neue", Helvetica, Arial, sans-serif;
       color: #0f1111;
       background: #fff;
       font-size: 17px;

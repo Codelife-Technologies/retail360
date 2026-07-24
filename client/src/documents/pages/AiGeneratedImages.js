@@ -381,7 +381,7 @@ function AiGeneratedImages() {
         `Delete catalog folder "${folder.name}"? Images stay in Document Management but leave this folder.`
       )) return;
     } else {
-      const count = folder.documentCount || 0;
+      const count = (folder.documentCount || 0) + (folder.productImageCount || 0);
       const msg = count
         ? `Delete folder "${folder.name}"? ${count} image(s) will be moved to Unfiled.`
         : `Delete folder "${folder.name}"? This cannot be undone.`;
@@ -548,7 +548,9 @@ function AiGeneratedImages() {
                 <span className="dm-folder-name" title={folder.description || folder.name}>
                   {folder.name}
                 </span>
-                <span className="dm-folder-count">{folder.documentCount || 0}</span>
+                <span className="dm-folder-count">
+                  {(folder.documentCount || 0) + (folder.productImageCount || 0)}
+                </span>
               </button>
               <div className="dm-folder-actions">
                 {kind === 'custom' ? (

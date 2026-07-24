@@ -12,6 +12,10 @@ const { applyDateRangeFilter } = require('../utils/dateRangeFilter');
 const { requirePermission } = require('../middleware/auth');
 const { generateTemplate, exportToExcel } = require('../utils/excelGenerator');
 const { parseExcel, buildImportErrorSummary } = require('../utils/excelParser');
+const {
+  normalizePaymentStatus,
+  syncLinkedPaymentStatus,
+} = require('../utils/paymentStatusSync');
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -60,6 +64,7 @@ router.get('/', requirePermission('purchases.view'), async (req, res) => {
           { path: 'supplier', select: 'name' },
           { path: 'location', select: 'name code' },
           { path: 'purchaseOrder', select: 'poNumber' },
+          { path: 'goodsReceiptNote', select: 'grnNumber receiptStatus' },
           { path: 'items.product', select: 'name title sku' }
         ]
       });
@@ -69,6 +74,7 @@ router.get('/', requirePermission('purchases.view'), async (req, res) => {
         .populate('supplier', 'name')
         .populate('location', 'name code')
         .populate('purchaseOrder', 'poNumber')
+        .populate('goodsReceiptNote', 'grnNumber receiptStatus')
         .populate('items.product', 'name title sku')
         .sort({ createdAt: -1 });
       res.json(purchases);
@@ -483,6 +489,15 @@ router.put('/:id', requirePermission('purchases.update'), async (req, res) => {
         total: item.quantity * item.unitPrice
       }));
     }
+
+    if (req.body.paymentStatus != null) {
+      req.body.paymentStatus = normalizePaymentStatus(req.body.paymentStatus);
+    }
+
+    const previous = await Purchase.findById(req.params.id).select('paymentStatus purchaseOrder');
+    if (!previous) {
+      return res.status(404).json({ error: 'Purchase not found' });
+    }
     
     const purchase = await Purchase.findByIdAndUpdate(
       req.params.id,
@@ -491,11 +506,23 @@ router.put('/:id', requirePermission('purchases.update'), async (req, res) => {
     )
       .populate('supplier')
       .populate('location', 'name code')
-      .populate('purchaseOrder', 'poNumber')
+      .populate('purchaseOrder', 'poNumber paymentStatus')
       .populate('items.product');
     
     if (!purchase) {
       return res.status(404).json({ error: 'Purchase not found' });
+    }
+
+    if (
+      req.body.paymentStatus != null
+      && purchase.purchaseOrder
+      && normalizePaymentStatus(previous.paymentStatus) !== purchase.paymentStatus
+    ) {
+      await syncLinkedPaymentStatus({
+        purchaseOrderId: purchase.purchaseOrder._id || purchase.purchaseOrder,
+        paymentStatus: purchase.paymentStatus,
+        source: 'purchase',
+      });
     }
     
     res.json(purchase);

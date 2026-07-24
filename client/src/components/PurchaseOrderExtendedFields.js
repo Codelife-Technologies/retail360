@@ -3,9 +3,8 @@ import { UOM_OPTIONS } from '../types/purchaseOrderTypes';
 import { validateGSTIN } from '../utils/indianGstValidation';
 
 /**
- * Company / supplier metadata for Purchase Order edit.
+ * Company / supplier metadata for Purchase Order create/edit.
  * Buyer Information and Status are intentionally not shown.
- * Ship To is handled separately after the products section.
  */
 function PurchaseOrderExtendedFields({
   formData,
@@ -133,6 +132,17 @@ function PurchaseOrderExtendedFields({
             />
           </div>
           <div className="form-group">
+            <label>Payment Status</label>
+            <select
+              name="paymentStatus"
+              value={formData.paymentStatus === 'paid' ? 'paid' : 'unpaid'}
+              onChange={onChange}
+            >
+              <option value="unpaid">Unpaid</option>
+              <option value="paid">Paid</option>
+            </select>
+          </div>
+          <div className="form-group">
             <label>Expected Delivery</label>
             <input
               type="date"
@@ -148,6 +158,18 @@ function PurchaseOrderExtendedFields({
               value={formData.deliveryMode || ''}
               onChange={onChange}
               placeholder="Road / Air / Courier"
+            />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group full-width">
+            <label>Delivery Address</label>
+            <textarea
+              name="shippingAddress.address"
+              value={formData.shippingAddress?.address || ''}
+              onChange={onNestedChange}
+              rows="3"
+              placeholder="Enter delivery address"
             />
           </div>
         </div>

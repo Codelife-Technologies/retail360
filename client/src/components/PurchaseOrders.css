@@ -239,6 +239,39 @@
   color: #991b1b;
 }
 
+.status-unpaid {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-paid {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.po-payment-status-select {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-transform: capitalize;
+  cursor: pointer;
+  background: #fff;
+}
+
+.po-payment-status-select.status-paid {
+  background: #d1fae5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+
+.po-payment-status-select.status-unpaid {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
 .btn-primary,
 .btn-edit,
 .btn-delete {
@@ -347,18 +380,26 @@
 .po-items-header-simplified,
 .po-item-row-simplified {
   display: grid;
-  grid-template-columns: minmax(120px, 1.1fr) 0.7fr 1.1fr 0.7fr 0.5fr 0.5fr 0.85fr auto;
+  grid-template-columns: minmax(120px, 1.3fr) 0.8fr 0.7fr 0.5fr 0.5fr 0.9fr auto;
   gap: 0.65rem;
   align-items: center;
 }
 
+.po-items-header-simplified.has-vendor-col,
+.po-items-header-simplified:not(.no-vendor-col):has(+ .items-list.has-vendor-col),
 .po-items-header-extended.has-vendor-col,
 .items-list.has-vendor-col .po-item-row-extended {
   grid-template-columns: minmax(120px, 0.95fr) 0.7fr 1.1fr 0.5fr 0.45fr 0.65fr 0.45fr 0.45fr 0.8fr auto;
 }
 
-.items-list.has-vendor-col .po-item-row-simplified {
+.items-list.has-vendor-col .po-item-row-simplified,
+.po-items-header-simplified:not(.no-vendor-col) {
   grid-template-columns: minmax(120px, 1.1fr) 0.7fr 1.1fr 0.7fr 0.5fr 0.5fr 0.85fr auto;
+}
+
+.po-items-header-simplified.no-vendor-col,
+.po-item-row-simplified.no-vendor-col {
+  grid-template-columns: minmax(120px, 1.3fr) 0.8fr 0.7fr 0.5fr 0.5fr 0.9fr auto;
 }
 
 .po-items-header-extended > span,

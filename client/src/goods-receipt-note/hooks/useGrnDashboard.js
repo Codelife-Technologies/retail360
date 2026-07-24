@@ -24,7 +24,7 @@ export function useGrnDashboard() {
     refresh();
   }, [refresh]);
 
-  return { stats, loading, error, refresh };
+  return { stats, setStats, loading, error, refresh };
 }
 
 export function useGrnList(initialFilters = {}) {

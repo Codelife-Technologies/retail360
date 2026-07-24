@@ -142,7 +142,6 @@ function PurchaseOrderRecord() {
       <div className="por-header">
         <div>
           <h1>Purchase Order Record</h1>
-          <p className="por-subtitle">All ordered items across purchase orders</p>
         </div>
         <button type="button" className="btn-secondary" onClick={fetchPurchaseOrders}>
           Refresh
@@ -286,6 +285,10 @@ function PurchaseOrderRecord() {
               value: viewingPO.expectedDeliveryDate
                 ? new Date(viewingPO.expectedDeliveryDate).toLocaleDateString()
                 : '',
+            },
+            {
+              label: 'Payment Status',
+              value: viewingPO.paymentStatus === 'paid' ? 'Paid' : 'Unpaid',
             },
             { label: 'Grand Total', value: formatINR(viewingPO.total) },
             { label: 'Notes', value: viewingPO.notes, full: true },

@@ -82,7 +82,6 @@ function ProfitLoss() {
       <div className="fin-page-header fin-sticky">
         <div>
           <h1>Profit &amp; Loss</h1>
-          <p className="fin-subtitle">Automated P&amp;L from sales, purchases, expenses and payroll.</p>
         </div>
         <div className="fin-actions">
           <button

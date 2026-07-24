@@ -35,9 +35,6 @@ function GoodsReceiptNoteModule({ onNavigate: appNavigate }) {
     <div className="grn-module">
       <div className="grn-module-title">
         <h1>Goods Receipt Note</h1>
-        <p className="grn-module-subtitle">
-          PR → PO → GIS → GRN → Invoice → 3-Way Match → Payment
-        </p>
       </div>
 
       <nav className="grn-module-nav">

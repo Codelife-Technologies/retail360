@@ -41,6 +41,35 @@ function Shipments() {
   });
   const [calculatedCharges, setCalculatedCharges] = useState({ cost: 0, totalWeight: 0 });
   const [availableStock, setAvailableStock] = useState({});
+  const [pickerStock, setPickerStock] = useState(null);
+  const [pickerStockLoading, setPickerStockLoading] = useState(false);
+
+  const getProductId = (productLike) => {
+    if (!productLike) return '';
+    if (typeof productLike === 'object') return String(productLike._id || '');
+    return String(productLike);
+  };
+
+  const resolveAvailableQty = (stockRecord) => {
+    if (!stockRecord) return 0;
+    if (stockRecord.availableQuantity != null) {
+      return Math.max(0, Number(stockRecord.availableQuantity) || 0);
+    }
+    const qty = Number(stockRecord.quantity) || 0;
+    const reserved = Number(stockRecord.reservedQuantity) || 0;
+    return Math.max(0, qty - reserved);
+  };
+
+  const fetchAvailableQty = async (productId, locationId) => {
+    if (!productId || !locationId) return 0;
+    try {
+      const response = await stockAPI.getSpecific(productId, locationId);
+      return resolveAvailableQty(response.data);
+    } catch (error) {
+      if (error.response?.status === 404) return 0;
+      throw error;
+    }
+  };
 
   useEffect(() => {
     fetchVendors();
@@ -62,8 +91,37 @@ function Shipments() {
   useEffect(() => {
     if (formData.fromLocation && formData.items.length > 0) {
       fetchStockForLocation();
+    } else if (!formData.fromLocation) {
+      setAvailableStock({});
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.fromLocation, formData.items]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPickerStock = async () => {
+      if (!formData.fromLocation || !newItem.product) {
+        setPickerStock(null);
+        setPickerStockLoading(false);
+        return;
+      }
+      try {
+        setPickerStockLoading(true);
+        const qty = await fetchAvailableQty(newItem.product, formData.fromLocation);
+        if (!cancelled) setPickerStock(qty);
+      } catch (error) {
+        console.error('Error fetching picker stock:', error);
+        if (!cancelled) setPickerStock(0);
+      } finally {
+        if (!cancelled) setPickerStockLoading(false);
+      }
+    };
+    loadPickerStock();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.fromLocation, newItem.product]);
 
   useEffect(() => {
     if (formData.shippingCharge && formData.items.length > 0) {
@@ -167,20 +225,24 @@ function Shipments() {
   };
 
   const fetchStockForLocation = async () => {
-    try {
-      const stockMap = {};
-      for (const item of formData.items) {
-        if (item.product) {
-          const response = await stockAPI.getSpecific(item.product, formData.fromLocation);
-          if (response.data) {
-            stockMap[item.product] = response.data.quantity || 0;
-          }
-        }
-      }
-      setAvailableStock(stockMap);
-    } catch (error) {
-      console.error('Error fetching stock:', error);
+    if (!formData.fromLocation) {
+      setAvailableStock({});
+      return;
     }
+    const stockMap = {};
+    await Promise.all(
+      formData.items.map(async (item) => {
+        const productId = getProductId(item.product);
+        if (!productId) return;
+        try {
+          stockMap[productId] = await fetchAvailableQty(productId, formData.fromLocation);
+        } catch (error) {
+          console.error('Error fetching stock:', error);
+          stockMap[productId] = 0;
+        }
+      })
+    );
+    setAvailableStock(stockMap);
   };
 
   const calculateCharges = async () => {
@@ -234,14 +296,39 @@ function Shipments() {
       return;
     }
 
+    if (!formData.fromLocation) {
+      alert('Please select the From warehouse first');
+      return;
+    }
+
     // Get product weight if not provided
     let weight = newItem.weight;
     if (!weight) {
-      const product = products.find(p => p._id === newItem.product);
+      const product = products.find((p) => p._id === newItem.product);
       if (product && product.weight) {
         weight = product.weight;
       } else {
         weight = 0;
+      }
+    }
+
+    let stockAtFrom = pickerStock;
+    if (stockAtFrom == null) {
+      try {
+        stockAtFrom = await fetchAvailableQty(newItem.product, formData.fromLocation);
+      } catch (error) {
+        console.error('Error fetching stock:', error);
+        stockAtFrom = 0;
+      }
+    }
+
+    if (newItem.quantity > stockAtFrom) {
+      const fromName = locations.find((l) => l._id === formData.fromLocation);
+      const warehouseLabel = fromName ? `${fromName.name} (${fromName.code})` : 'selected warehouse';
+      if (!window.confirm(
+        `Only ${stockAtFrom} available at ${warehouseLabel}. You are shipping ${newItem.quantity}. Continue anyway?`
+      )) {
+        return;
       }
     }
 
@@ -256,22 +343,13 @@ function Shipments() {
       items: [...prev.items, item]
     }));
 
-    // Fetch stock for this product
-    if (formData.fromLocation) {
-      try {
-        const response = await stockAPI.getSpecific(newItem.product, formData.fromLocation);
-        if (response.data) {
-          setAvailableStock(prev => ({
-            ...prev,
-            [newItem.product]: response.data.quantity || 0
-          }));
-        }
-      } catch (error) {
-        console.error('Error fetching stock:', error);
-      }
-    }
+    setAvailableStock((prev) => ({
+      ...prev,
+      [newItem.product]: stockAtFrom
+    }));
 
     setNewItem({ product: '', quantity: 1, weight: '' });
+    setPickerStock(null);
   };
 
   const handleRemoveItem = (index) => {
@@ -321,7 +399,11 @@ function Shipments() {
       toLocation: shipment.toLocation?._id || shipment.toLocation || '',
       shipmentDate: shipment.shipmentDate ? new Date(shipment.shipmentDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       expectedDeliveryDate: shipment.expectedDeliveryDate ? new Date(shipment.expectedDeliveryDate).toISOString().split('T')[0] : '',
-      items: shipment.items || [],
+      items: (shipment.items || []).map((item) => ({
+        product: getProductId(item.product),
+        quantity: item.quantity,
+        weight: item.weight,
+      })),
       status: shipment.status || 'pending',
       trackingNumber: shipment.trackingNumber || '',
       notes: shipment.notes || ''
@@ -365,6 +447,8 @@ function Shipments() {
     setNewItem({ product: '', quantity: 1, weight: '' });
     setCalculatedCharges({ cost: 0, totalWeight: 0 });
     setAvailableStock({});
+    setPickerStock(null);
+    setPickerStockLoading(false);
   };
 
   const openAddModal = () => {
@@ -373,10 +457,19 @@ function Shipments() {
     setShowModal(true);
   };
 
-  const getProductName = (productId) => {
-    const product = products.find(p => p._id === productId);
-    return product ? product.name : productId;
+  const getProductName = (productLike) => {
+    const productId = getProductId(productLike);
+    if (productLike && typeof productLike === 'object') {
+      return productLike.title || productLike.name || productId;
+    }
+    const product = products.find((p) => p._id === productId);
+    return product ? (product.title || product.name) : productId;
   };
+
+  const fromWarehouse = locations.find((l) => l._id === formData.fromLocation);
+  const fromWarehouseLabel = fromWarehouse
+    ? `${fromWarehouse.name} (${fromWarehouse.code})`
+    : '';
 
   const getSkuCount = (shipment) => new Set((shipment.items || []).map((item) => String(item.product?._id || item.product))).size;
   const getTotalQuantity = (shipment) => (shipment.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
@@ -541,8 +634,8 @@ function Shipments() {
           fields={[
             { label: 'Shipment Number', value: viewingShipment.shipmentNumber },
             { label: 'Vendor', value: viewingShipment.shipmentVendor?.name },
-            { label: 'From Location', value: viewingShipment.fromLocation?.name },
-            { label: 'To Location', value: viewingShipment.toLocation?.name },
+            { label: 'From Warehouse', value: viewingShipment.fromLocation?.name },
+            { label: 'To Warehouse', value: viewingShipment.toLocation?.name },
             { label: 'Shipment Date', value: viewingShipment.shipmentDate ? new Date(viewingShipment.shipmentDate).toLocaleDateString() : '' },
             { label: 'Expected Delivery', value: viewingShipment.expectedDeliveryDate ? new Date(viewingShipment.expectedDeliveryDate).toLocaleDateString() : '' },
             { label: 'Total Weight', value: `${viewingShipment.totalWeight?.toFixed(2) || 0} kg` },
@@ -660,14 +753,14 @@ function Shipments() {
               </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label>From Location *</label>
+                  <label>From Warehouse *</label>
                   <select
                     name="fromLocation"
                     value={formData.fromLocation}
                     onChange={handleInputChange}
                     required
                   >
-                    <option value="">Select Location</option>
+                    <option value="">Select Warehouse</option>
                     {locations.map((location) => (
                       <option key={location._id} value={location._id}>
                         {location.name} ({location.code})
@@ -676,14 +769,14 @@ function Shipments() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>To Location *</label>
+                  <label>To Warehouse *</label>
                   <select
                     name="toLocation"
                     value={formData.toLocation}
                     onChange={handleInputChange}
                     required
                   >
-                    <option value="">Select Location</option>
+                    <option value="">Select Warehouse</option>
                     {locations.map((location) => (
                       <option key={location._id} value={location._id}>
                         {location.name} ({location.code})
@@ -750,6 +843,19 @@ function Shipments() {
                       Add Item
                     </button>
                   </div>
+                  {newItem.product && (
+                    <div className="shipment-stock-hint">
+                      {!formData.fromLocation ? (
+                        <span className="stock-hint-muted">Select From warehouse to see available stock</span>
+                      ) : pickerStockLoading ? (
+                        <span className="stock-hint-muted">Checking stock at {fromWarehouseLabel}…</span>
+                      ) : (
+                        <span className={pickerStock >= newItem.quantity ? 'stock-ok' : 'stock-low'}>
+                          Available at {fromWarehouseLabel}: <strong>{pickerStock ?? 0}</strong>
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {formData.items.length > 0 && (
                     <div className="items-list">
                       <table className="items-table">
@@ -759,33 +865,49 @@ function Shipments() {
                             <th>Quantity</th>
                             <th>Weight/Unit</th>
                             <th>Total Weight</th>
-                            <th>Stock Available</th>
+                            <th>
+                              Available
+                              {fromWarehouseLabel ? (
+                                <span className="stock-col-sub"> at {fromWarehouseLabel}</span>
+                              ) : (
+                                <span className="stock-col-sub"> (From warehouse)</span>
+                              )}
+                            </th>
                             <th>Action</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {formData.items.map((item, idx) => (
-                            <tr key={idx}>
-                              <td>{getProductName(item.product)}</td>
-                              <td>{item.quantity}</td>
-                              <td>{item.weight || 0} kg</td>
-                              <td>{(item.weight * item.quantity).toFixed(2)} kg</td>
-                              <td>
-                                <span className={availableStock[item.product] >= item.quantity ? 'stock-ok' : 'stock-low'}>
-                                  {availableStock[item.product] !== undefined ? availableStock[item.product] : 'Checking...'}
-                                </span>
-                              </td>
-                              <td>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveItem(idx)}
-                                  className="btn-remove-item"
-                                >
-                                  Remove
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          {formData.items.map((item, idx) => {
+                            const productId = getProductId(item.product);
+                            const stockQty = availableStock[productId];
+                            const hasStock = stockQty !== undefined;
+                            return (
+                              <tr key={idx}>
+                                <td>{getProductName(item.product)}</td>
+                                <td>{item.quantity}</td>
+                                <td>{item.weight || 0} kg</td>
+                                <td>{((item.weight || 0) * item.quantity).toFixed(2)} kg</td>
+                                <td>
+                                  {!formData.fromLocation ? (
+                                    <span className="stock-hint-muted">Select warehouse</span>
+                                  ) : (
+                                    <span className={hasStock && stockQty >= item.quantity ? 'stock-ok' : 'stock-low'}>
+                                      {hasStock ? stockQty : 'Checking…'}
+                                    </span>
+                                  )}
+                                </td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveItem(idx)}
+                                    className="btn-remove-item"
+                                  >
+                                    Remove
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

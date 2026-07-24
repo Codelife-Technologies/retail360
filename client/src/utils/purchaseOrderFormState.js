@@ -44,6 +44,7 @@ export function createEmptyPurchaseOrderForm(companyProfile = null) {
     orderDate: new Date().toISOString().split('T')[0],
     expectedDeliveryDate: '',
     status: 'pending',
+    paymentStatus: 'unpaid',
     items: [],
     tax: 0,
     defaultTaxRate: 0,
@@ -104,6 +105,7 @@ export function purchaseOrderToFormData(po) {
     orderDate: dateStr(po.orderDate) || base.orderDate,
     expectedDeliveryDate: dateStr(po.expectedDeliveryDate),
     status: normalizePoStatus(po.status),
+    paymentStatus: po.paymentStatus === 'paid' ? 'paid' : 'unpaid',
     items: po.items || [],
     tax: po.tax || 0,
     defaultTaxRate: po.defaultTaxRate || 0,
@@ -151,6 +153,9 @@ export function sanitizePurchaseOrderPayload(data) {
   const payload = { ...data };
   if (payload.status != null) {
     payload.status = normalizePoStatus(payload.status);
+  }
+  if (payload.paymentStatus != null) {
+    payload.paymentStatus = payload.paymentStatus === 'paid' ? 'paid' : 'unpaid';
   }
   const dateFields = ['expectedDeliveryDate', 'paymentDueDate'];
   dateFields.forEach((f) => {

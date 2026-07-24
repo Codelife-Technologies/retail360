@@ -33,6 +33,24 @@ function formatINR(value) {
   })}`;
 }
 
+const GRN_RECEIPT_LABELS = {
+  upcoming: 'Upcoming',
+  draft: 'Draft',
+  pending_inspection: 'Pending Inspection',
+  partially_received: 'Partially Received',
+  fully_received: 'Fully Received',
+  defective: 'Defective',
+  approved: 'Approved',
+  closed: 'Closed',
+  cancelled: 'Cancelled',
+};
+
+function getPurchaseGrnStatus(purchase) {
+  const fromGrn = purchase?.goodsReceiptNote?.receiptStatus;
+  if (fromGrn) return fromGrn;
+  return '';
+}
+
 function Purchases() {
   const [purchases, setPurchases] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -47,6 +65,7 @@ function Purchases() {
     return {
       supplier: '',
       location: '',
+      paymentStatus: '',
       fromDate,
       toDate,
     };
@@ -83,7 +102,7 @@ function Purchases() {
 
   useEffect(() => {
     fetchPurchases();
-  }, [filters.supplier, filters.location, filters.fromDate, filters.toDate]);
+  }, [filters.supplier, filters.location, filters.paymentStatus, filters.fromDate, filters.toDate]);
 
   const skuQuery = skuSearch.trim().toLowerCase();
 
@@ -152,6 +171,7 @@ function Purchases() {
       const params = {};
       if (filters.supplier) params.supplier = filters.supplier;
       if (filters.location) params.location = filters.location;
+      if (filters.paymentStatus) params.paymentStatus = filters.paymentStatus;
       if (filters.fromDate) params.fromDate = filters.fromDate;
       if (filters.toDate) params.toDate = filters.toDate;
       const response = await purchasesAPI.getAll(params);
@@ -444,6 +464,7 @@ function Purchases() {
       const params = {};
       if (filters.supplier) params.supplier = filters.supplier;
       if (filters.location) params.location = filters.location;
+      if (filters.paymentStatus) params.paymentStatus = filters.paymentStatus;
       if (filters.fromDate) params.fromDate = filters.fromDate;
       if (filters.toDate) params.toDate = filters.toDate;
       const response = await purchasesAPI.exportExcel(params);
@@ -529,6 +550,18 @@ function Purchases() {
             </select>
           </div>
           <div className="purchases-filter-group">
+            <label htmlFor="purchases-payment-filter">Payment Status</label>
+            <select
+              id="purchases-payment-filter"
+              value={filters.paymentStatus}
+              onChange={(e) => setFilters((prev) => ({ ...prev, paymentStatus: e.target.value }))}
+            >
+              <option value="">All</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="paid">Paid</option>
+            </select>
+          </div>
+          <div className="purchases-filter-group">
             <label htmlFor="purchases-from-date">From</label>
             <input
               id="purchases-from-date"
@@ -556,11 +589,11 @@ function Purchases() {
           >
             This month
           </button>
-          {(filters.supplier || filters.location || filters.fromDate || filters.toDate) ? (
+          {(filters.supplier || filters.location || filters.paymentStatus || filters.fromDate || filters.toDate) ? (
             <button
               type="button"
               className="btn-clear-sku-search purchases-filters-clear"
-              onClick={() => setFilters({ supplier: '', location: '', fromDate: '', toDate: '' })}
+              onClick={() => setFilters({ supplier: '', location: '', paymentStatus: '', fromDate: '', toDate: '' })}
             >
               Clear filters
             </button>
@@ -639,6 +672,7 @@ function Purchases() {
                 <th>Location</th>
                 <th>Purchase Date</th>
                 <th>PO Number</th>
+                <th>GRN Status</th>
                 <th>Payment Status</th>
                 <th>Items</th>
                 <th>Total</th>
@@ -648,12 +682,14 @@ function Purchases() {
             <tbody>
               {filteredPurchases.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="no-data">
+                  <td colSpan="10" className="no-data">
                     {skuQuery ? 'No purchases found for this SKU' : 'No purchases found'}
                   </td>
                 </tr>
               ) : (
-                filteredPurchases.map((purchase) => (
+                filteredPurchases.map((purchase) => {
+                  const grnStatus = getPurchaseGrnStatus(purchase);
+                  return (
                   <tr
                     key={purchase._id}
                     className="clickable-row"
@@ -664,6 +700,15 @@ function Purchases() {
                     <td>{purchase.location?.name || '-'}</td>
                     <td>{new Date(purchase.purchaseDate).toLocaleDateString()}</td>
                     <td>{purchase.purchaseOrder?.poNumber || '-'}</td>
+                    <td>
+                      {grnStatus ? (
+                        <span className={`status-badge status-${grnStatus}`}>
+                          {GRN_RECEIPT_LABELS[grnStatus] || grnStatus}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td>
                       <span className={`status-badge status-${purchase.paymentStatus === 'paid' ? 'paid' : 'unpaid'}`}>
                         {purchase.paymentStatus === 'paid' ? 'paid' : 'unpaid'}
@@ -686,7 +731,8 @@ function Purchases() {
                       </button>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -712,6 +758,13 @@ function Purchases() {
             { label: 'Location', value: viewingPurchase.location?.name },
             { label: 'Purchase Date', value: viewingPurchase.purchaseDate ? new Date(viewingPurchase.purchaseDate).toLocaleDateString() : '' },
             { label: 'PO Number', value: viewingPurchase.purchaseOrder?.poNumber },
+            {
+              label: 'GRN Status',
+              value: getPurchaseGrnStatus(viewingPurchase)
+                ? (GRN_RECEIPT_LABELS[getPurchaseGrnStatus(viewingPurchase)]
+                  || getPurchaseGrnStatus(viewingPurchase))
+                : '—',
+            },
             { label: 'Payment Status', value: viewingPurchase.paymentStatus === 'paid' ? 'paid' : 'unpaid' },
             { label: 'Subtotal', value: `₹${(viewingPurchase.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
             { label: 'Tax', value: `₹${(viewingPurchase.tax || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },

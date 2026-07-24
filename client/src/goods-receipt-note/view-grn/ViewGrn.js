@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { grnAPI } from '../services/grnApi';
+import { purchaseOrdersAPI } from '../../services/api';
 import { formatINR } from '../types/grn.types';
 import GrnStatusBadge from '../components/GrnStatusBadge';
 import GrnVarianceTable from '../components/GrnVarianceTable';
@@ -10,6 +11,7 @@ function ViewGrn({ grnId, onBack, onNavigatePO }) {
   const [audit, setAudit] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [updatingPayment, setUpdatingPayment] = useState(false);
   const [items, setItems] = useState([]);
   const [deliveryInfo, setDeliveryInfo] = useState({});
   const [followUp, setFollowUp] = useState({});
@@ -43,10 +45,64 @@ function ViewGrn({ grnId, onBack, onNavigatePO }) {
 
   const canEdit = grn && !grn.inventoryUpdated && !['closed', 'cancelled'].includes(grn.receiptStatus);
 
+  const paymentStatus =
+    grn?.paymentStatus === 'paid' || grn?.purchaseOrder?.paymentStatus === 'paid'
+      ? 'paid'
+      : 'unpaid';
+
+  const handlePaymentStatusChange = async (nextStatus) => {
+    const next = nextStatus === 'paid' ? 'paid' : 'unpaid';
+    if (paymentStatus === next) return;
+    const poId = grn?.purchaseOrder?._id || grn?.purchaseOrder;
+    if (!poId) {
+      alert('No linked purchase order found for this GRN');
+      return;
+    }
+    try {
+      setUpdatingPayment(true);
+      await purchaseOrdersAPI.update(poId, { paymentStatus: next });
+      setGrn((prev) => ({
+        ...prev,
+        paymentStatus: next,
+        purchaseOrder: prev.purchaseOrder && typeof prev.purchaseOrder === 'object'
+          ? { ...prev.purchaseOrder, paymentStatus: next }
+          : prev.purchaseOrder,
+      }));
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update payment status');
+    } finally {
+      setUpdatingPayment(false);
+    }
+  };
+
   const updateItem = (index, field, value) => {
-    const next = [...items];
-    next[index] = { ...next[index], [field]: parseFloat(value) || 0 };
-    setItems(next);
+    setItems((prev) => {
+      const next = [...prev];
+      const current = { ...next[index] };
+      const numeric = Math.max(0, parseFloat(value) || 0);
+
+      if (field === 'receivedQty') {
+        current.receivedQty = numeric;
+        const defective = Math.min(Number(current.rejectedQty) || 0, numeric);
+        current.rejectedQty = defective;
+        current.acceptedQty = Math.max(0, numeric - defective);
+      } else if (field === 'rejectedQty') {
+        const received = Number(current.receivedQty) || 0;
+        const defective = Math.min(numeric, received);
+        current.rejectedQty = defective;
+        current.acceptedQty = Math.max(0, received - defective);
+      } else if (field === 'acceptedQty') {
+        const received = Number(current.receivedQty) || 0;
+        const accepted = Math.min(numeric, received);
+        current.acceptedQty = accepted;
+        current.rejectedQty = Math.max(0, received - accepted);
+      } else {
+        current[field] = numeric;
+      }
+
+      next[index] = current;
+      return next;
+    });
   };
 
   const handleSave = async () => {
@@ -149,6 +205,19 @@ function ViewGrn({ grnId, onBack, onNavigatePO }) {
             </div>
             <div><label>Time</label><span>{grn.grnTime || '—'}</span></div>
             <div><label>Warehouse</label><span>{grn.warehouse?.name} ({grn.locationCode})</span></div>
+            <div>
+              <label>Payment Status</label>
+              <select
+                className={`grn-payment-select status-${paymentStatus}`}
+                value={paymentStatus}
+                disabled={updatingPayment || !(grn?.purchaseOrder?._id || grn?.purchaseOrder)}
+                onChange={(e) => handlePaymentStatusChange(e.target.value)}
+                aria-label="Payment status"
+              >
+                <option value="unpaid">Unpaid</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>
             <div><label>Receiving Officer</label>
               {canEdit ? (
                 <input
@@ -248,7 +317,7 @@ function ViewGrn({ grnId, onBack, onNavigatePO }) {
                   <th>Ordered</th>
                   <th>Received</th>
                   <th>Accepted</th>
-                  <th>Rejected</th>
+                  <th>Defective</th>
                   <th>Pending</th>
                   <th>Unit Cost</th>
                   <th>Tax %</th>

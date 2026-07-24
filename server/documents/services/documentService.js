@@ -63,13 +63,20 @@ async function assertFolderExists(folderId) {
   return folder;
 }
 
+const {
+  hasFolderViewShare,
+  hasFolderEditShare,
+  hasDocViewShare,
+  hasDocEditShare,
+} = require('./shareService');
+
 function isFolderOwner(folder, scope = {}) {
   return String(folder?.createdByUserId || '') === String(scope.userId || '');
 }
 
 /**
  * Read access: Shared always; Personal for owner/admin;
- * Personal + employeeVisible for any employee with document access.
+ * Personal + employeeVisible; or explicit share (viewer/editor).
  */
 function canAccessFolder(folder, scope = {}) {
   if (!folder) return true;
@@ -77,16 +84,18 @@ function canAccessFolder(folder, scope = {}) {
   if (visibility !== 'Personal') return true;
   if (scope.admin) return true;
   if (folder.employeeVisible) return true;
+  if (hasFolderViewShare(folder, scope)) return true;
   return isFolderOwner(folder, scope);
 }
 
 /**
- * Write access (upload/move/rename/delete/create child):
- * Personal → owner or admin only (even when employeeVisible).
- * Shared → admins/managers always; regular employees only for folders they own.
+ * Write access:
+ * Personal → owner/admin, or editor share.
+ * Shared → admins/managers; ownOnly users for folders they own; editor share.
  */
 function canWriteToFolder(folder, scope = {}) {
   if (!folder) return true;
+  if (hasFolderEditShare(folder, scope)) return true;
   const visibility = folder.visibility || 'Shared';
   if (visibility === 'Personal') {
     if (scope.admin) return true;
@@ -95,6 +104,25 @@ function canWriteToFolder(folder, scope = {}) {
   if (scope.admin || !scope.ownOnly) return true;
   if (!folder.createdByUserId) return true;
   return isFolderOwner(folder, scope);
+}
+
+function canAccessDocument(doc, scope = {}) {
+  if (!doc) return true;
+  if (scope.admin || !scope.ownOnly) return true;
+  if (String(doc.uploadedByUserId || '') === String(scope.userId || '')) return true;
+  if (hasDocViewShare(doc, scope)) return true;
+  if (doc.folderId && hasFolderViewShare(doc.folderId, scope)) return true;
+  return false;
+}
+
+function canWriteDocument(doc, scope = {}) {
+  if (!doc) return true;
+  if (scope.admin) return true;
+  if (hasDocEditShare(doc, scope)) return true;
+  if (doc.folderId && hasFolderEditShare(doc.folderId, scope)) return true;
+  if (String(doc.uploadedByUserId || '') === String(scope.userId || '')) return true;
+  if (!scope.ownOnly) return true;
+  return false;
 }
 
 async function assertFolderAccess(folderId, scope = {}) {
@@ -605,6 +633,115 @@ async function getProductImagesForSku(sku) {
   });
 }
 
+/** Batch product-catalog image counts keyed by uppercase SKU. */
+async function getProductImageCountsBySku(skus = []) {
+  const unique = [...new Set((skus || []).map((s) => String(s || '').trim()).filter(Boolean))];
+  if (!unique.length) return { counts: {}, previewBySku: {} };
+  const products = await Product.find({ sku: { $in: unique } })
+    .select('sku images')
+    .collation({ locale: 'en', strength: 2 })
+    .lean();
+  const counts = {};
+  const previewBySku = {};
+  products.forEach((p) => {
+    const key = String(p.sku || '').trim().toUpperCase();
+    if (!key) return;
+    const images = (p.images || []).filter(Boolean);
+    counts[key] = images.length;
+    if (images[0]) previewBySku[key] = productImagePublicUrl(images[0]);
+  });
+  return { counts, previewBySku };
+}
+
+function skuCountKey(sku) {
+  return String(sku || '').trim().toUpperCase();
+}
+
+/**
+ * Count documents + catalog images under a folder, including nested SKU children.
+ * Category/subcategory cards need this — images live in descendant SKU folders.
+ */
+async function countFolderTreeContents(folder, {
+  sourceScope,
+  directDocCountMap = {},
+  productImageCountBySku = {},
+  previewBySku = {},
+  foldersByParent = null,
+  allFolders = null,
+} = {}) {
+  const folderId = String(folder._id);
+  const kind = folder.folderKind || 'custom';
+
+  if (kind === 'sku') {
+    const sku = skuCountKey(folder.linkedSku);
+    return {
+      documentCount: Number(directDocCountMap[folderId]) || 0,
+      productImageCount: Number(productImageCountBySku[sku]) || 0,
+      previewUrl: previewBySku[sku] || '',
+    };
+  }
+
+  let descendantIds = [folderId];
+  if (foldersByParent) {
+    const queue = [folderId];
+    while (queue.length) {
+      const id = queue.shift();
+      const kids = foldersByParent.get(id) || [];
+      kids.forEach((kid) => {
+        const kidId = String(kid._id);
+        descendantIds.push(kidId);
+        queue.push(kidId);
+      });
+    }
+  } else {
+    descendantIds = (await collectDescendantFolderIds(folder._id)).map(String);
+  }
+
+  let documentCount = descendantIds.reduce(
+    (sum, id) => sum + (Number(directDocCountMap[id]) || 0),
+    0
+  );
+
+  let productImageCount = 0;
+  let previewUrl = '';
+  const idSet = new Set(descendantIds);
+
+  if (allFolders && allFolders.length) {
+    allFolders.forEach((f) => {
+      if ((f.folderKind || 'custom') !== 'sku' || !f.linkedSku) return;
+      if (!idSet.has(String(f._id))) return;
+      const sku = skuCountKey(f.linkedSku);
+      productImageCount += Number(productImageCountBySku[sku]) || 0;
+      if (!previewUrl && previewBySku[sku]) previewUrl = previewBySku[sku];
+    });
+  } else if (kind === 'category' || kind === 'subcategory') {
+    const skuFolders = await DocumentFolder.find({
+      _id: { $in: descendantIds },
+      status: 'Active',
+      folderKind: 'sku',
+      linkedSku: { $nin: [null, ''] },
+    })
+      .select('linkedSku')
+      .lean();
+    const skus = skuFolders.map((f) => f.linkedSku).filter(Boolean);
+    const batch = await getProductImageCountsBySku(skus);
+    productImageCount = skus.reduce(
+      (sum, sku) => sum + (batch.counts[skuCountKey(sku)] || 0),
+      0
+    );
+    previewUrl =
+      skus.map((sku) => batch.previewBySku[skuCountKey(sku)]).find(Boolean) || '';
+    const scopeSource = sourceScope || folder.sourceScope || 'AI Generator';
+    documentCount = await Document.countDocuments({
+      status: { $ne: 'Deleted' },
+      source: scopeSource,
+      folderId: { $in: descendantIds },
+    });
+  }
+
+  return { documentCount, productImageCount, previewUrl };
+}
+
 /**
  * Browse a catalog folder: child folders + documents (+ product images for SKU folders).
  */
@@ -619,35 +756,88 @@ async function browseFolder(folderId, scope = {}, filters = {}, { page = 1, limi
   const children = allChildren.filter((child) => canAccessFolder(child, scope));
 
   const childIds = children.map((c) => c._id);
-  const childCounts = childIds.length
+
+  // Category/subcategory children need counts rolled up from nested SKU folders
+  const needsDeepCount = children.some(
+    (c) => c.folderKind === 'category' || c.folderKind === 'subcategory'
+  );
+  let countFolderIds = [...childIds];
+  let descendantFolders = [];
+  if (needsDeepCount) {
+    const deepIdSet = new Set(childIds.map(String));
+    const deepObjectIds = [...childIds];
+    await Promise.all(
+      children
+        .filter((c) => c.folderKind === 'category' || c.folderKind === 'subcategory')
+        .map(async (c) => {
+          const ids = await collectDescendantFolderIds(c._id);
+          ids.forEach((id) => {
+            const key = String(id);
+            if (deepIdSet.has(key)) return;
+            deepIdSet.add(key);
+            deepObjectIds.push(id);
+          });
+        })
+    );
+    countFolderIds = deepObjectIds;
+    descendantFolders = await DocumentFolder.find({
+      _id: { $in: countFolderIds },
+      status: 'Active',
+    })
+      .select('_id parentId folderKind linkedSku')
+      .lean();
+  }
+
+  const childCounts = countFolderIds.length
     ? await Document.aggregate([
         {
           $match: {
             status: { $ne: 'Deleted' },
             source: folder.sourceScope,
-            folderId: { $in: childIds },
+            folderId: { $in: countFolderIds },
           },
         },
         { $group: { _id: '$folderId', count: { $sum: 1 } } },
       ])
     : [];
-  const childCountMap = Object.fromEntries(childCounts.map((c) => [String(c._id), c.count]));
+  const childCountMap = Object.fromEntries(
+    childCounts.map((c) => [String(c._id), c.count])
+  );
 
-  // For subcategory children that are SKU folders, also count product catalog images
+  const skuList = [
+    ...children.filter((c) => c.folderKind === 'sku' && c.linkedSku).map((c) => c.linkedSku),
+    ...descendantFolders.filter((c) => c.folderKind === 'sku' && c.linkedSku).map((c) => c.linkedSku),
+  ];
+  const { counts: productImageCountBySku, previewBySku } = await getProductImageCountsBySku(skuList);
+
+  const allForRollup = [...descendantFolders];
+  children.forEach((c) => {
+    if (!allForRollup.some((f) => String(f._id) === String(c._id))) {
+      allForRollup.push(c);
+    }
+  });
+  const foldersByParent = new Map();
+  allForRollup.forEach((f) => {
+    const key = f.parentId ? String(f.parentId) : 'root';
+    if (!foldersByParent.has(key)) foldersByParent.set(key, []);
+    foldersByParent.get(key).push(f);
+  });
+
   const enrichedChildren = await Promise.all(
     children.map(async (child) => {
-      let productImageCount = 0;
-      let previewUrl = '';
-      if (child.folderKind === 'sku' && child.linkedSku) {
-        const productImages = await getProductImagesForSku(child.linkedSku);
-        productImageCount = productImages.length;
-        previewUrl = productImages[0]?.thumbnailUrl || '';
-      }
+      const tallies = await countFolderTreeContents(child, {
+        sourceScope: folder.sourceScope,
+        directDocCountMap: childCountMap,
+        productImageCountBySku,
+        previewBySku,
+        foldersByParent,
+        allFolders: allForRollup,
+      });
       return {
         ...child,
-        documentCount: childCountMap[String(child._id)] || 0,
-        productImageCount,
-        previewUrl,
+        documentCount: tallies.documentCount,
+        productImageCount: tallies.productImageCount,
+        previewUrl: tallies.previewUrl,
       };
     })
   );
@@ -727,7 +917,8 @@ async function getInaccessiblePersonalFolderIds(scope = {}) {
     query.createdByUserId = { $ne: scope.userId };
   }
   const folders = await DocumentFolder.find(query).select('_id').lean();
-  return folders.map((f) => f._id);
+  const shared = scope.sharedViewFolderIds || new Set();
+  return folders.map((f) => f._id).filter((id) => !shared.has(String(id)));
 }
 
 /** Personal folders marked employeeVisible — docs inside are viewable by all employees. */
@@ -757,10 +948,12 @@ async function listFolders(scope = {}, filters = {}) {
 
   const query = { status: 'Active', sourceScope };
   if (!scope.admin) {
+    const sharedIds = Array.from(scope.sharedViewFolderIds || []);
     query.$or = [
       { visibility: { $ne: 'Personal' } },
       { visibility: 'Personal', createdByUserId: scope.userId },
       { visibility: 'Personal', employeeVisible: true },
+      ...(sharedIds.length ? [{ _id: { $in: sharedIds } }] : []),
       { visibility: { $exists: false } },
     ];
   }
@@ -777,11 +970,12 @@ async function listFolders(scope = {}, filters = {}) {
   };
   if (scope.ownOnly && scope.userId) {
     const visiblePersonalIds = await getEmployeeVisiblePersonalFolderIds();
+    const sharedFolderIds = Array.from(scope.sharedViewFolderIds || []);
     countMatch.$or = [
       { uploadedByUserId: scope.userId },
       ...(visiblePersonalIds.length ? [{ folderId: { $in: visiblePersonalIds } }] : []),
+      ...(sharedFolderIds.length ? [{ folderId: { $in: sharedFolderIds } }] : []),
     ];
-    delete countMatch.uploadedByUserId;
   }
 
   const counts = folderIds.length
@@ -791,6 +985,25 @@ async function listFolders(scope = {}, filters = {}) {
       ])
     : [];
   const countMap = Object.fromEntries(counts.map((c) => [String(c._id), c.count]));
+
+  // Roll up catalog folder counts (category/subcategory) to include nested SKU contents
+  const catalogFolders = folders.filter(
+    (f) => f.folderKind === 'category' || f.folderKind === 'subcategory' || f.folderKind === 'sku'
+  );
+  let productImageCountBySku = {};
+  let previewBySku = {};
+  if (catalogFolders.length && sourceScope === 'AI Generator') {
+    const skuFolders = folders.filter((f) => f.folderKind === 'sku' && f.linkedSku);
+    const batch = await getProductImageCountsBySku(skuFolders.map((f) => f.linkedSku));
+    productImageCountBySku = batch.counts;
+    previewBySku = batch.previewBySku;
+  }
+  const foldersByParent = new Map();
+  folders.forEach((f) => {
+    const key = f.parentId ? String(f.parentId) : 'root';
+    if (!foldersByParent.has(key)) foldersByParent.set(key, []);
+    foldersByParent.get(key).push(f);
+  });
 
   const unfiledMatch = {
     status: { $ne: 'Deleted' },
@@ -802,15 +1015,44 @@ async function listFolders(scope = {}, filters = {}) {
   }
   const unfiledCount = await Document.countDocuments(unfiledMatch);
 
+  const enrichedFolders = await Promise.all(
+    folders.map(async (f) => {
+      const kind = f.folderKind || 'custom';
+      let documentCount = countMap[String(f._id)] || 0;
+      let productImageCount = 0;
+      let previewUrl = '';
+      if (kind === 'sku') {
+        const sku = skuCountKey(f.linkedSku);
+        productImageCount = Number(productImageCountBySku[sku]) || 0;
+        previewUrl = previewBySku[sku] || '';
+      } else if (kind === 'category' || kind === 'subcategory') {
+        const tallies = await countFolderTreeContents(f, {
+          sourceScope,
+          directDocCountMap: countMap,
+          productImageCountBySku,
+          previewBySku,
+          foldersByParent,
+          allFolders: folders,
+        });
+        documentCount = tallies.documentCount;
+        productImageCount = tallies.productImageCount;
+        previewUrl = tallies.previewUrl;
+      }
+      return {
+        ...f,
+        visibility: f.visibility || 'Shared',
+        employeeVisible: Boolean(f.employeeVisible),
+        folderKind: kind,
+        documentCount,
+        productImageCount,
+        previewUrl,
+        canManage: canWriteToFolder(f, scope),
+      };
+    })
+  );
+
   return {
-    folders: folders.map((f) => ({
-      ...f,
-      visibility: f.visibility || 'Shared',
-      employeeVisible: Boolean(f.employeeVisible),
-      folderKind: f.folderKind || 'custom',
-      documentCount: countMap[String(f._id)] || 0,
-      canManage: canWriteToFolder(f, scope),
-    })),
+    folders: enrichedFolders,
     unfiledCount,
     sourceScope,
   };
@@ -1010,7 +1252,7 @@ async function deleteFolder(id, scope = {}) {
 async function moveDocumentToFolder(documentId, folderId, scope = {}) {
   const doc = await Document.findById(documentId);
   if (!doc) throw new Error('Document not found');
-  if (scope.ownOnly && String(doc.uploadedByUserId || '') !== String(scope.userId)) {
+  if (!canWriteDocument(doc, scope)) {
     throw new Error('Access denied');
   }
 
@@ -1451,11 +1693,15 @@ async function buildListQuery(filters = {}, scope = {}) {
   }
 
   if (scope.ownOnly && scope.userId) {
-    // Own uploads always; plus anything in personal folders marked employee-visible
+    // Own uploads; employee-visible personal folders; folders/docs shared with me
     const visiblePersonalIds = await getEmployeeVisiblePersonalFolderIds();
+    const sharedFolderIds = Array.from(scope.sharedViewFolderIds || []);
+    const sharedDocIds = Array.from(scope.sharedViewDocIds || []);
     const ownOrVisible = [
       { uploadedByUserId: scope.userId },
       ...(visiblePersonalIds.length ? [{ folderId: { $in: visiblePersonalIds } }] : []),
+      ...(sharedFolderIds.length ? [{ folderId: { $in: sharedFolderIds } }] : []),
+      ...(sharedDocIds.length ? [{ _id: { $in: sharedDocIds } }] : []),
     ];
     query.$and = (query.$and || []).concat([{ $or: ownOrVisible }]);
   } else if (scope.department && !scope.admin) {
@@ -1630,6 +1876,8 @@ module.exports = {
   moveDocumentToFolder,
   canAccessFolder,
   canWriteToFolder,
+  canAccessDocument,
+  canWriteDocument,
   syncCatalogFolders,
   ensureCatalogFolderPath,
   browseFolder,

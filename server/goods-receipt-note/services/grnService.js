@@ -19,7 +19,7 @@ const { logGrnAudit } = require('./grnAuditService');
 const POPULATE = [
   { path: 'warehouse', select: 'name code city address' },
   { path: 'supplier', select: 'name supplierCode supplierId gstin pan address phone email contactPerson' },
-  { path: 'purchaseOrder', select: 'poNumber status total purchaseRequisitionNumber costCenter items' },
+  { path: 'purchaseOrder', select: 'poNumber status paymentStatus total purchaseRequisitionNumber costCenter items' },
   { path: 'purchaseRequisite', select: 'prNumber status' },
   { path: 'goodsInspectionSheet', select: 'gisNumber status overallResult' },
   { path: 'items.product', select: 'name title sku hsnCode images category' },
@@ -88,6 +88,7 @@ async function buildItemsFromPO(po, warehouseId) {
     const orderedQty = line.quantity || 0;
     const alreadyReceived = line.receivedQuantity || 0;
     const pendingFromPo = Math.max(0, orderedQty - alreadyReceived);
+    if (pendingFromPo <= 0) continue;
 
     items.push({
       product: productId,
@@ -96,9 +97,9 @@ async function buildItemsFromPO(po, warehouseId) {
       category: product.category?.name || '',
       hsnCode: line.hsnCode || product.hsnCode || '',
       unitOfMeasure: line.unitOfMeasure || 'PCS',
-      orderedQty: pendingFromPo || orderedQty,
-      receivedQty: pendingFromPo || orderedQty,
-      acceptedQty: pendingFromPo || orderedQty,
+      orderedQty: pendingFromPo,
+      receivedQty: pendingFromPo,
+      acceptedQty: pendingFromPo,
       rejectedQty: 0,
       pendingQty: 0,
       unitCost: line.unitPrice || 0,
@@ -114,9 +115,12 @@ async function createGrnFromPO(poId, body = {}) {
     .populate('items.product', 'name title sku hsnCode category')
     .populate('supplier');
   if (!po) throw new Error('Purchase Order not found');
+  if (po.needsVendorAssignment || !(po.supplier?._id || po.supplier)) {
+    throw new Error('Assign a supplier on the Purchase Order before creating a GRN');
+  }
   if (!isPoEligibleForGrn(po)) {
     throw new Error(
-      'GRN can only be created for POs with pending items (not closed, cancelled, or fully received)'
+      'GRN can only be created for POs with a supplier and pending items (not closed, cancelled, or fully received)'
     );
   }
 
@@ -154,6 +158,7 @@ async function createGrnFromPO(poId, body = {}) {
     supplierDetails,
     purchaseOrder: po._id,
     purchaseOrderNumber: po.poNumber,
+    paymentStatus: po.paymentStatus === 'paid' ? 'paid' : 'unpaid',
     purchaseRequisitionNumber: po.purchaseRequisitionNumber || pr?.prNumber || '',
     purchaseRequisite: pr?._id,
     costCenter: body.costCenter || po.costCenter || '',
@@ -346,29 +351,66 @@ async function getUpcomingPos() {
 
   const activeGrns = await GoodsReceiptNote.find(
     { receiptStatus: { $ne: 'cancelled' } },
-    'purchaseOrder'
+    'purchaseOrder receiptStatus items.rejectedQty items.acceptedQty items.receivedQty'
   ).lean();
 
-  const poIdsWithGrn = new Set(
-    activeGrns
-      .map((g) => (g.purchaseOrder?._id || g.purchaseOrder)?.toString())
-      .filter(Boolean)
-  );
+  const grnByPoId = new Map();
+  activeGrns.forEach((g) => {
+    const poId = (g.purchaseOrder?._id || g.purchaseOrder)?.toString();
+    if (!poId) return;
+    const existing = grnByPoId.get(poId) || [];
+    existing.push(g);
+    grnByPoId.set(poId, existing);
+  });
 
   return pos
-    .filter((po) => isPoEligibleForGrn(po) && !poIdsWithGrn.has(po._id.toString()))
-    .map((po) => ({
-      _id: po._id,
-      poNumber: po.poNumber,
-      purchaseRequisitionNumber: po.purchaseRequisitionNumber || '',
-      supplierName: po.supplier?.name || po.supplierDetails?.companyName || '',
-      orderDate: po.orderDate,
-      expectedDeliveryDate: po.expectedDeliveryDate,
-      total: po.total,
-      poStatus: po.status,
-      itemCount: (po.items || []).length,
-      warehouseCode: po.shippingAddress?.warehouseCode || po.costCenter || '',
-    }));
+    .filter((po) => isPoEligibleForGrn(po))
+    .map((po) => {
+      const poId = po._id.toString();
+      const grns = grnByPoId.get(poId) || [];
+      const statuses = grns.map((g) => g.receiptStatus);
+      const hasDefective = statuses.includes('defective');
+      const hasPartial = statuses.includes('partially_received');
+      const hasAnyReceipt = grns.length > 0
+        || (po.items || []).some((line) => (Number(line.receivedQuantity) || 0) > 0);
+      const receiptStage = hasDefective
+        ? 'defective'
+        : (hasPartial || hasAnyReceipt ? 'partially_received' : 'upcoming');
+
+      const defectiveQty = grns.reduce(
+        (sum, grn) =>
+          sum +
+          (grn.items || []).reduce(
+            (lineSum, line) => lineSum + (Number(line.rejectedQty) || 0),
+            0
+          ),
+        0
+      );
+
+      const pendingItemCount = (po.items || []).filter((line) => {
+        const pending = line.pendingQuantity != null
+          ? Math.max(0, line.pendingQuantity)
+          : Math.max(0, (line.quantity || 0) - (line.receivedQuantity || 0));
+        return pending > 0;
+      }).length;
+
+      return {
+        _id: po._id,
+        poNumber: po.poNumber,
+        purchaseRequisitionNumber: po.purchaseRequisitionNumber || '',
+        supplierName: po.supplier?.name || po.supplierDetails?.companyName || '',
+        orderDate: po.orderDate,
+        expectedDeliveryDate: po.expectedDeliveryDate,
+        total: po.total,
+        poStatus: po.status,
+        paymentStatus: po.paymentStatus === 'paid' ? 'paid' : 'unpaid',
+        receiptStage,
+        itemCount: receiptStage === 'defective' ? defectiveQty : (po.items || []).length,
+        defectiveQty,
+        pendingItemCount,
+        warehouseCode: po.shippingAddress?.warehouseCode || po.costCenter || '',
+      };
+    });
 }
 
 async function getDashboardStats() {

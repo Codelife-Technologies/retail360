@@ -2,6 +2,8 @@ const Purchase = require('../models/Purchase');
 const Price = require('../models/Price');
 const GoodsReceiptNote = require('../models/GoodsReceiptNote');
 const { generatePurchaseNumber } = require('../utils/generatePurchaseNumber');
+const { normalizePaymentStatus } = require('../utils/paymentStatusSync');
+const PurchaseOrder = require('../models/PurchaseOrder');
 
 async function updatePricesFromPurchase(purchase) {
   for (const item of purchase.items) {
@@ -82,9 +84,18 @@ async function createPurchaseFromGrn(grnInput) {
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
   const tax = Number(grn.taxTotal) || 0;
 
+  const poId = grn.purchaseOrder?._id || grn.purchaseOrder || undefined;
+  let paymentStatus = normalizePaymentStatus(grn.paymentStatus);
+  if (poId) {
+    const po = await PurchaseOrder.findById(poId).select('paymentStatus').lean();
+    if (po?.paymentStatus) {
+      paymentStatus = normalizePaymentStatus(po.paymentStatus);
+    }
+  }
+
   const purchase = new Purchase({
     purchaseNumber: await generatePurchaseNumber(),
-    purchaseOrder: grn.purchaseOrder?._id || grn.purchaseOrder || undefined,
+    purchaseOrder: poId,
     goodsReceiptNote: grn._id,
     supplier: grn.supplier?._id || grn.supplier,
     location: grn.warehouse?._id || grn.warehouse,
@@ -94,7 +105,7 @@ async function createPurchaseFromGrn(grnInput) {
     tax,
     defaultTaxRate: 0,
     total: subtotal + tax,
-    paymentStatus: 'unpaid',
+    paymentStatus,
     notes: `Auto-created from GRN ${grn.grnNumber || grn._id}${
       grn.purchaseOrderNumber ? ` (PO ${grn.purchaseOrderNumber})` : ''
     }`,

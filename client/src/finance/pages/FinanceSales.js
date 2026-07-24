@@ -257,10 +257,6 @@ function FinanceSales() {
       <div className="fin-page-header fin-sticky">
         <div>
           <h1>Sales</h1>
-          <p className="fin-subtitle">
-            Sales records for the selected period — click a row to view full details.
-            {' '}Amounts follow display currency ({displayCurrency}).
-          </p>
         </div>
         <div className="fin-actions">
           <CurrencySelector />

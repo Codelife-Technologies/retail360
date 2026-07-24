@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { purchaseOrdersAPI, suppliersAPI, productsAPI, pricesAPI, purchaseRequisitesAPI, companyProfileAPI, locationsAPI, hsnMastersAPI } from '../services/api';
+import { purchaseOrdersAPI, suppliersAPI, productsAPI, pricesAPI, purchaseRequisitesAPI, companyProfileAPI, hsnMastersAPI } from '../services/api';
 import DetailModal from './DetailModal';
 import ExcelUpload from './ExcelUpload';
 import PurchaseOrderExtendedFields from './PurchaseOrderExtendedFields';
@@ -80,9 +80,7 @@ function PurchaseOrders({ onNavigate }) {
   const [loadingPrs, setLoadingPrs] = useState(false);
   const [createSource, setCreateSource] = useState('new');
   const [companyProfile, setCompanyProfile] = useState(null);
-  const [locations, setLocations] = useState([]);
   const [hsnMasters, setHsnMasters] = useState([]);
-  const [shipToLocationId, setShipToLocationId] = useState('');
   const [formData, setFormData] = useState(() => createEmptyPurchaseOrderForm());
   const [newItem, setNewItem] = useState({
     product: '',
@@ -100,7 +98,6 @@ function PurchaseOrders({ onNavigate }) {
     fetchSuppliers();
     fetchProducts();
     fetchCompanyProfile();
-    fetchLocations();
     fetchHsnMasters();
   }, []);
 
@@ -171,56 +168,6 @@ function PurchaseOrders({ onNavigate }) {
       setCompanyProfile(response.data);
     } catch (error) {
       console.error('Error fetching company profile:', error);
-    }
-  };
-
-  const applyShipToLocation = (locationId, locationList = locations) => {
-    const location = (locationList || []).find((l) => String(l._id) === String(locationId));
-    setShipToLocationId(locationId || '');
-    if (!location) {
-      setFormData((prev) => ({
-        ...prev,
-        deliveryLocation: '',
-      }));
-      return;
-    }
-    const addressParts = [
-      location.address,
-      location.city,
-      location.state,
-      location.pincode,
-      location.country,
-    ].filter(Boolean);
-    setFormData((prev) => ({
-      ...prev,
-      deliveryLocation: `${location.name}${location.code ? ` (${location.code})` : ''}`,
-      shippingAddress: {
-        ...(prev.shippingAddress || {}),
-        warehouseName: location.name || location.code || '',
-        address: addressParts.join(', '),
-        contactPerson: location.contactPerson || '',
-        contactNumber: location.phone || '',
-        companyName:
-          prev.buyer?.companyName ||
-          prev.billingAddress?.companyName ||
-          prev.shippingAddress?.companyName ||
-          '',
-        gstin: prev.billingAddress?.gstin || prev.buyer?.gstin || prev.shippingAddress?.gstin || '',
-      },
-    }));
-  };
-
-  const fetchLocations = async () => {
-    try {
-      const response = await locationsAPI.getAll({ isActive: 'true' });
-      const list = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      setLocations(list);
-      const home = list.find((l) => l.isHomeBranch) || list[0];
-      if (home?._id) {
-        applyShipToLocation(String(home._id), list);
-      }
-    } catch (error) {
-      console.error('Error fetching locations:', error);
     }
   };
 
@@ -371,10 +318,10 @@ function PurchaseOrders({ onNavigate }) {
     [formData, products, hsnMasters]
   );
 
-  const autoVendorSplit = !editingPO;
+  const autoVendorSplit = !editingPO && createSource === 'from_pr';
 
   const vendorDisplayGroups = useMemo(() => {
-    if (editingPO || formData.items.length === 0) return null;
+    if (!autoVendorSplit || formData.items.length === 0) return null;
     const { bySupplier, unassigned } = groupPoItemsBySupplier(
       formData.items,
       products,
@@ -402,7 +349,7 @@ function PurchaseOrders({ onNavigate }) {
       })),
       vendorCount: bySupplier.size,
     };
-  }, [formData.items, products, suppliers, editingPO]);
+  }, [formData.items, products, suppliers, autoVendorSplit]);
 
   const handleItemVendorChange = (index, supplierId) => {
     setFormData((prev) => {
@@ -646,10 +593,6 @@ function PurchaseOrders({ onNavigate }) {
       alert('Please add at least one item');
       return;
     }
-    if (!editingPO && !shipToLocationId) {
-      alert('Please select a Ship To location');
-      return;
-    }
     const buyerGst = validateGSTIN(formData.buyer?.gstin);
     const buyerPan = validatePAN(formData.buyer?.pan);
     if (!buyerGst.valid) {
@@ -680,7 +623,7 @@ function PurchaseOrders({ onNavigate }) {
           items: poTotals.items,
         });
         await purchaseOrdersAPI.update(editingPO._id, data);
-      } else {
+      } else if (autoVendorSplit) {
         const { bySupplier, unassigned } = groupPoItemsBySupplier(
           formData.items,
           products,
@@ -762,6 +705,30 @@ function PurchaseOrders({ onNavigate }) {
         fetchPurchaseOrders();
         setCreatedPosShareModal(createdPos);
         return;
+      } else {
+        if (!formData.supplier) {
+          alert('Please select a vendor');
+          return;
+        }
+        const data = sanitizePurchaseOrderPayload({
+          ...formData,
+          needsVendorAssignment: false,
+          subtotal: poTotals.subtotal,
+          discountTotal: poTotals.discountTotal,
+          taxableValue: poTotals.taxableValue,
+          cgst: poTotals.cgst,
+          sgst: poTotals.sgst,
+          igst: poTotals.igst,
+          tax: poTotals.tax,
+          roundOff: poTotals.roundOff,
+          total: poTotals.total,
+          items: poTotals.items,
+        });
+        const response = await purchaseOrdersAPI.create(data);
+        closePoModal();
+        fetchPurchaseOrders();
+        setCreatedPosShareModal([response.data]);
+        return;
       }
       closePoModal();
       fetchPurchaseOrders();
@@ -775,6 +742,22 @@ function PurchaseOrders({ onNavigate }) {
         formData: formData
       });
       alert(error.response?.data?.error || 'Failed to save purchase order');
+    }
+  };
+
+  const handlePaymentStatusChange = async (po, paymentStatus) => {
+    const next = paymentStatus === 'paid' ? 'paid' : 'unpaid';
+    if ((po.paymentStatus === 'paid' ? 'paid' : 'unpaid') === next) return;
+    try {
+      const response = await purchaseOrdersAPI.update(po._id, { paymentStatus: next });
+      setPurchaseOrders((prev) =>
+        prev.map((row) => (row._id === po._id ? { ...row, ...response.data } : row))
+      );
+      if (viewingPO?._id === po._id) {
+        setViewingPO((prev) => (prev ? { ...prev, ...response.data } : prev));
+      }
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to update payment status');
     }
   };
 
@@ -806,7 +789,6 @@ function PurchaseOrders({ onNavigate }) {
 
   const resetForm = () => {
     setFormData(createEmptyPurchaseOrderForm(companyProfile));
-    setShipToLocationId('');
     setNewItem({
       product: '',
       itemName: '',
@@ -816,11 +798,8 @@ function PurchaseOrders({ onNavigate }) {
       discountPercent: 0,
       unitOfMeasure: 'PCS',
       taxRate: '',
+      supplierId: '',
     });
-    const home = locations.find((l) => l.isHomeBranch) || locations[0];
-    if (home?._id) {
-      setTimeout(() => applyShipToLocation(String(home._id), locations), 0);
-    }
   };
 
   const closePoModal = () => {
@@ -848,35 +827,40 @@ function PurchaseOrders({ onNavigate }) {
     const productName =
       product?.title || product?.name || item.itemName || 'New item';
     return (
-      <div key={`${productId || item.itemName || 'item'}-${index}`} className="item-row po-item-row-simplified">
+      <div
+        key={`${productId || item.itemName || 'item'}-${index}`}
+        className={`item-row po-item-row-simplified${autoVendorSplit ? '' : ' no-vendor-col'}`}
+      >
         <span className="po-product-name" title={productName}>
           {truncateProductName(productName)}
         </span>
         <span>{enriched.sku || '—'}</span>
-        <span className="po-item-vendor-cell">
-          <select
-            value={item.supplierId || formData.supplier || ''}
-            onChange={(e) => handleItemVendorChange(index, e.target.value)}
-            aria-label={`Vendor for ${productName}`}
-            required={autoVendorSplit}
-          >
-            <option value="">Select vendor</option>
-            {(vendorOptions.length ? vendorOptions : suppliers).map((vendor) => (
-              <option key={vendor._id} value={vendor._id}>
-                {vendor.name}
-              </option>
-            ))}
-            {item.supplierId &&
-              !(vendorOptions.length ? vendorOptions : suppliers).some(
-                (v) => String(v._id) === String(item.supplierId)
-              ) && (
-                <option value={item.supplierId}>
-                  {suppliers.find((s) => String(s._id) === String(item.supplierId))?.name ||
-                    'Selected vendor'}
+        {autoVendorSplit ? (
+          <span className="po-item-vendor-cell">
+            <select
+              value={item.supplierId || formData.supplier || ''}
+              onChange={(e) => handleItemVendorChange(index, e.target.value)}
+              aria-label={`Vendor for ${productName}`}
+              required
+            >
+              <option value="">Select vendor</option>
+              {(vendorOptions.length ? vendorOptions : suppliers).map((vendor) => (
+                <option key={vendor._id} value={vendor._id}>
+                  {vendor.name}
                 </option>
-              )}
-          </select>
-        </span>
+              ))}
+              {item.supplierId &&
+                !(vendorOptions.length ? vendorOptions : suppliers).some(
+                  (v) => String(v._id) === String(item.supplierId)
+                ) && (
+                  <option value={item.supplierId}>
+                    {suppliers.find((s) => String(s._id) === String(item.supplierId))?.name ||
+                      'Selected vendor'}
+                  </option>
+                )}
+            </select>
+          </span>
+        ) : null}
         <span>{enriched.hsnCode || getProductHsn(product) || '—'}</span>
         <span>{item.quantity}</span>
         <span>{enriched.unitOfMeasure}</span>
@@ -1038,6 +1022,7 @@ function PurchaseOrders({ onNavigate }) {
                 <th>Supplier</th>
                 <th>Order Date</th>
                 <th>Status</th>
+                <th>Payment</th>
                 <th>Items</th>
                 <th>Total</th>
                 <th>Actions</th>
@@ -1046,13 +1031,14 @@ function PurchaseOrders({ onNavigate }) {
             <tbody>
               {filteredPurchaseOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="no-data">
+                  <td colSpan="9" className="no-data">
                     {skuQuery ? 'No purchase orders found for this SKU' : 'No purchase orders found'}
                   </td>
                 </tr>
               ) : (
                 filteredPurchaseOrders.map((po) => {
                   const itemCount = po.items?.length || 0;
+                  const paymentStatus = po.paymentStatus === 'paid' ? 'paid' : 'unpaid';
                   return (
                     <tr
                       key={po._id}
@@ -1073,6 +1059,17 @@ function PurchaseOrders({ onNavigate }) {
                         <span className={`status-badge status-${normalizePoStatus(po.status)}`}>
                           {normalizePoStatus(po.status)}
                         </span>
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <select
+                          className={`po-payment-status-select status-${paymentStatus}`}
+                          value={paymentStatus}
+                          onChange={(e) => handlePaymentStatusChange(po, e.target.value)}
+                          aria-label={`Payment status for ${po.poNumber}`}
+                        >
+                          <option value="unpaid">Unpaid</option>
+                          <option value="paid">Paid</option>
+                        </select>
                       </td>
                       <td>{itemCount}</td>
                       <td>
@@ -1157,8 +1154,12 @@ function PurchaseOrders({ onNavigate }) {
             { label: 'Order Date', value: viewingPO.orderDate ? new Date(viewingPO.orderDate).toLocaleDateString() : '' },
             { label: 'Expected Delivery', value: viewingPO.expectedDeliveryDate ? new Date(viewingPO.expectedDeliveryDate).toLocaleDateString() : '' },
             {
-              label: 'Ship To',
-              value: viewingPO.deliveryLocation || viewingPO.shippingAddress?.warehouseName,
+              label: 'Payment Status',
+              value: viewingPO.paymentStatus === 'paid' ? 'Paid' : 'Unpaid',
+            },
+            {
+              label: 'Delivery Address',
+              value: viewingPO.shippingAddress?.address || viewingPO.deliveryLocation,
             },
             { label: 'Subtotal', value: formatINR(viewingPO.subtotal) },
             { label: 'Taxable Value', value: formatINR(viewingPO.taxableValue) },
@@ -1267,10 +1268,6 @@ function PurchaseOrders({ onNavigate }) {
             {createStep === 'choice' ? (
               <>
                 <h2>Create Purchase Order</h2>
-                <p className="po-create-choice-subtitle">
-                  Choose how you want to create purchase orders. Assign a vendor after selecting each
-                  product — one PO is created per vendor on save.
-                </p>
                 <div className="po-create-choice-cards">
                   <button
                     type="button"
@@ -1292,7 +1289,7 @@ function PurchaseOrders({ onNavigate }) {
                   >
                     <strong>New Purchase Order</strong>
                     <span>
-                      Add products, then pick a vendor and HSN for each line.
+                      Select one vendor for the order, add products, and enter delivery address.
                     </span>
                   </button>
                 </div>
@@ -1390,7 +1387,7 @@ function PurchaseOrders({ onNavigate }) {
               )}
             </h2>
             <form onSubmit={handleSubmit}>
-              {editingPO ? (
+              {(!autoVendorSplit || editingPO) && (
                 <PurchaseOrderExtendedFields
                   formData={formData}
                   onChange={handleInputChange}
@@ -1399,10 +1396,10 @@ function PurchaseOrders({ onNavigate }) {
                   suppliers={suppliers}
                   autoVendorSplit={false}
                 />
-              ) : (
+              )}
+              {autoVendorSplit && !editingPO && (
                 <p className="po-create-hint">
-                  Company information comes from Company Master. Add products, then choose a vendor
-                  for each item. Tax is applied from HSN / Category master.
+                  Add products and choose a vendor for each item. One PO is created per vendor on save.
                 </p>
               )}
 
@@ -1439,7 +1436,9 @@ function PurchaseOrders({ onNavigate }) {
                           unitPrice: price ? (price.purchasePrice || price.salesPrice || 0) : 0,
                           unitOfMeasure: getProductUom(product, hsnMasters),
                           taxRate: getTaxRateForProduct(product, formData.defaultTaxRate, hsnMasters),
-                          supplierId: designated || newItem.supplierId || formData.supplier || '',
+                          supplierId: autoVendorSplit
+                            ? (designated || newItem.supplierId || formData.supplier || '')
+                            : (formData.supplier || ''),
                         });
                       }}
                       placeholder="Type title or SKU…"
@@ -1469,26 +1468,28 @@ function PurchaseOrders({ onNavigate }) {
                       onChange={(e) => setNewItem({ ...newItem, sku: e.target.value })}
                     />
                   </div>
-                  <div className="add-item-field add-item-field-sm">
-                    <label>Vendor *</label>
-                    <select
-                      value={newItem.supplierId}
-                      onChange={(e) => setNewItem({ ...newItem, supplierId: e.target.value })}
-                    >
-                      <option value="">Select vendor</option>
-                      {(() => {
-                        const product = products.find((p) => p._id === newItem.product);
-                        const options = product
-                          ? getVendorOptionsForProduct(product, suppliers)
-                          : suppliers;
-                        return (options.length ? options : suppliers).map((vendor) => (
-                          <option key={vendor._id} value={vendor._id}>
-                            {vendor.name}
-                          </option>
-                        ));
-                      })()}
-                    </select>
-                  </div>
+                  {autoVendorSplit ? (
+                    <div className="add-item-field add-item-field-sm">
+                      <label>Vendor *</label>
+                      <select
+                        value={newItem.supplierId}
+                        onChange={(e) => setNewItem({ ...newItem, supplierId: e.target.value })}
+                      >
+                        <option value="">Select vendor</option>
+                        {(() => {
+                          const product = products.find((p) => p._id === newItem.product);
+                          const options = product
+                            ? getVendorOptionsForProduct(product, suppliers)
+                            : suppliers;
+                          return (options.length ? options : suppliers).map((vendor) => (
+                            <option key={vendor._id} value={vendor._id}>
+                              {vendor.name}
+                            </option>
+                          ));
+                        })()}
+                      </select>
+                    </div>
+                  ) : null}
                   <div className="add-item-field add-item-field-sm">
                     <label>Quantity</label>
                     <input
@@ -1554,10 +1555,14 @@ function PurchaseOrders({ onNavigate }) {
                 </div>
 
                 {formData.items.length > 0 && (
-                  <div className="items-list-header po-items-header-simplified">
+                  <div
+                    className={`items-list-header po-items-header-simplified${
+                      autoVendorSplit ? ' has-vendor-col' : ' no-vendor-col'
+                    }`}
+                  >
                     <span>Product</span>
                     <span>SKU</span>
-                    <span>Vendor</span>
+                    {autoVendorSplit ? <span>Vendor</span> : null}
                     <span>HSN</span>
                     <span>Qty</span>
                     <span>UOM</span>
@@ -1565,7 +1570,7 @@ function PurchaseOrders({ onNavigate }) {
                     <span></span>
                   </div>
                 )}
-                <div className="items-list has-vendor-col">
+                <div className={`items-list${autoVendorSplit ? ' has-vendor-col' : ''}`}>
                   {autoVendorSplit && vendorDisplayGroups ? (
                     <>
                       {vendorDisplayGroups.groups.map((group) => (
@@ -1598,28 +1603,6 @@ function PurchaseOrders({ onNavigate }) {
                     formData.items.map((item, index) => renderItemRow(item, index))
                   )}
                 </div>
-              </div>
-
-              <div className="po-ship-to-row">
-                <label htmlFor="po-ship-to-location">Ship To *</label>
-                <select
-                  id="po-ship-to-location"
-                  value={shipToLocationId}
-                  onChange={(e) => applyShipToLocation(e.target.value)}
-                  required
-                >
-                  <option value="">Select Ship To location</option>
-                  {locations.map((loc) => (
-                    <option key={loc._id} value={String(loc._id)}>
-                      {loc.name}
-                      {loc.code ? ` (${loc.code})` : ''}
-                      {loc.isHomeBranch ? ' — Home' : ''}
-                    </option>
-                  ))}
-                </select>
-                {formData.shippingAddress?.address ? (
-                  <p className="po-ship-to-address">{formData.shippingAddress.address}</p>
-                ) : null}
               </div>
 
               <div className="form-row po-tax-summary-grid">

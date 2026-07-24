@@ -301,7 +301,6 @@ function IncomeReport() {
       <div className="fin-page-header fin-sticky">
         <div>
           <h1>Income</h1>
-          <p className="fin-subtitle">Add and view income entries.</p>
         </div>
         <div className="fin-actions">
           {canWrite ? (

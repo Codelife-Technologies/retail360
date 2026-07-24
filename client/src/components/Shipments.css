@@ -303,6 +303,23 @@
   font-weight: 500;
 }
 
+.shipment-stock-hint {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.stock-hint-muted {
+  color: #6b7280;
+}
+
+.stock-col-sub {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: none;
+}
+
 .btn-remove-item {
   padding: 0.25rem 0.75rem;
   background: #ef4444;

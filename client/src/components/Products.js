@@ -280,6 +280,7 @@ function Products() {
   const [filters, setFilters] = useState(defaultProductFilters);
   const [appliedFilters, setAppliedFilters] = useState(defaultProductFilters);
   const [filterSubcategories, setFilterSubcategories] = useState([]);
+  const [showFilters, setShowFilters] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showExcelUpload, setShowExcelUpload] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -1046,6 +1047,16 @@ function Products() {
         <h1>Products</h1>
         <div className="products-header-actions">
           <button
+            type="button"
+            className={`btn-filters${showFilters ? ' active' : ''}`}
+            onClick={() => setShowFilters((prev) => !prev)}
+          >
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="products-filter-count-badge">{activeFilterCount}</span>
+            )}
+          </button>
+          <button
             className="btn-export"
             onClick={handleExportExcel}
             disabled={exporting}
@@ -1066,6 +1077,7 @@ function Products() {
       </div>
 
       <div className="products-scroll-area">
+      {showFilters && (
       <div className="products-filters">
         <div className="products-filters-header">
           <h3 className="products-filters-title">Search &amp; Filters</h3>
@@ -1136,6 +1148,7 @@ function Products() {
           </button>
         </div>
       </div>
+      )}
 
       {loading ? (
         <div className="loading">Loading products...</div>
